@@ -8,6 +8,24 @@ func _ready():
     if not anim_player:
         print("PlayerAnimationComponent: No AnimationPlayer found")
         return
+        
+    # ИСПРАВЛЕНИЕ БАГА "ДЕРГАНЬЯ И СКОРОСТИ" (Root Motion):
+    # Обнуляем смещение корневой кости по X и Z во всех анимациях, 
+    # чтобы моделька физически не убегала из капсулы.
+    var lib = anim_player.get_animation_library("")
+    if lib:
+        for anim_name in lib.get_animation_list():
+            var anim = lib.get_animation(anim_name)
+            for i in range(anim.get_track_count()):
+                # Ищем треки изменения позиций костей
+                if anim.track_get_type(i) == Animation.TYPE_POSITION_3D:
+                    # Проходим по всем кадрам анимации и обнуляем оси X и Z
+                    for k in range(anim.track_get_key_count(i)):
+                        var pos = anim.track_get_key_value(i, k)
+                        pos.x = 0
+                        pos.z = 0
+                        anim.track_set_key_value(i, k, pos)
+
     var anims = anim_player.get_animation_list()
     if "Idle" in anims:
         anim_player.play("Idle")

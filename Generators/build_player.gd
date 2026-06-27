@@ -31,12 +31,37 @@ func _init():
     wrapper.add_child(mesh)
     mesh.owner = root
 
+    var spring_arm = SpringArm3D.new()
+    spring_arm.name = "SpringArm3D"
+    spring_arm.position = Vector3(0.7, 1.5, 0)
+    spring_arm.spring_length = 3.0
+    spring_arm.margin = 0.2
+    root.add_child(spring_arm)
+    spring_arm.owner = root
+
     var camera = Camera3D.new()
     camera.name = "Camera3D"
-    camera.position = Vector3(0, 2.5, 4)
-    camera.rotation.x = -0.35
-    root.add_child(camera)
+    camera.position = Vector3.ZERO
+    spring_arm.add_child(camera)
     camera.owner = root
+
+    var canvas_layer = CanvasLayer.new()
+    canvas_layer.name = "CrosshairUI"
+    root.add_child(canvas_layer)
+    canvas_layer.owner = root
+
+    var center_container = CenterContainer.new()
+    center_container.name = "CrosshairContainer"
+    center_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+    canvas_layer.add_child(center_container)
+    center_container.owner = root
+
+    var crosshair = ColorRect.new()
+    crosshair.name = "Crosshair"
+    crosshair.custom_minimum_size = Vector2(4, 4)
+    crosshair.color = Color(0.0, 1.0, 0.0)
+    center_container.add_child(crosshair)
+    crosshair.owner = root
 
     var controller_script = load("res://Logic/PlayerController.gd")
     root.set_script(controller_script)
