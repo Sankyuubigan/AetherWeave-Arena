@@ -1,0 +1,30 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Logic/PlayerController.gd" id="1_cvnsp"]
+[ext_resource type="Script" path="res://Logic/SpellCasterComponent.gd" id="2_6t5aa"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_vgqql"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fkybt"]
+albedo_color = Color(0, 0, 1, 1)
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_x3wgy"]
+material = SubResource("StandardMaterial3D_fkybt")
+
+[node name="Player" type="CharacterBody3D" unique_id=335928039]
+script = ExtResource("1_cvnsp")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=480649768]
+shape = SubResource("CapsuleShape3D_vgqql")
+
+[node name="GraphicsWrapper" type="Node3D" parent="." unique_id=1491335288]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="GraphicsWrapper" unique_id=1844026895]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+mesh = SubResource("CapsuleMesh_x3wgy")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=960539861]
+transform = Transform3D(1, 0, 0, 0, 0.9393727, 0.3428978, 0, -0.3428978, 0.9393727, 0, 2.5, 4)
+
+[node name="SpellCasterComponent" type="Node" parent="." unique_id=352194727]
+script = ExtResource("2_6t5aa")

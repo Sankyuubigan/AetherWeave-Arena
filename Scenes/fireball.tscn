@@ -1,0 +1,26 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Logic/ProjectileComponent.gd" id="1_xi7wk"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0mxqg"]
+albedo_color = Color(1, 0.5, 0, 1)
+emission_enabled = true
+emission = Color(1, 0.5, 0, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_ne4qj"]
+material = SubResource("StandardMaterial3D_0mxqg")
+radius = 0.3
+height = 0.6
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_hcgvv"]
+radius = 0.3
+
+[node name="Fireball" type="Area3D" unique_id=1441651369]
+script = ExtResource("1_xi7wk")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=794237126]
+mesh = SubResource("SphereMesh_ne4qj")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=932285106]
+shape = SubResource("SphereShape3D_hcgvv")

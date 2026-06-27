@@ -1,0 +1,21 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="1_x66xh"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5d6mj"]
+albedo_color = Color(1, 0, 0, 1)
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_s0uyp"]
+material = SubResource("StandardMaterial3D_5d6mj")
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_3clv1"]
+
+[node name="Dummy" type="StaticBody3D" unique_id=1967745289]
+script = ExtResource("1_x66xh")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1453795091]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+mesh = SubResource("CapsuleMesh_s0uyp")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1680698290]
+shape = SubResource("CapsuleShape3D_3clv1")
