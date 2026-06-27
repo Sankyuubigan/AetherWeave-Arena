@@ -1,1 +1,9 @@
-/test
+# Godot 4 specific
+.godot/
+*.translation
+export_presets.cfg
+
+# Project specific
+/test/
+/Graphics/PlayerModel/
+/Graphics/Animations

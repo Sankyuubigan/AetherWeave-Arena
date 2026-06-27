@@ -2,6 +2,9 @@ extends CharacterBody3D
 
 @export var speed: float = 5.0
 @export var mouse_sensitivity: float = 0.002
+@export var jump_velocity: float = 4.5
+
+const GRAVITY: float = 9.8
 
 var camera: Camera3D
 var spell_caster: Node
@@ -50,5 +53,13 @@ func _physics_process(delta):
     if direction.length() > 0.1:
         direction = direction.normalized()
 
-    velocity = direction * speed
+    velocity.x = direction.x * speed
+    velocity.z = direction.z * speed
+
+    if not is_on_floor():
+        velocity.y -= GRAVITY * delta
+
+    if Input.is_key_pressed(KEY_SPACE) and is_on_floor():
+        velocity.y = jump_velocity
+
     move_and_slide()
