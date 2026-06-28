@@ -4,12 +4,11 @@ func _init():
     var root = Node3D.new()
     root.name = "TeleportEffect"
 
-    # === АНИМЕ-ЭФФЕКТ ТЕЛЕПОРТА ===
     var burst = GPUParticles3D.new()
     burst.name = "Burst"
     burst.amount = 120
     burst.lifetime = 1.0
-    burst.explosiveness = 0.95 # Мгновенный взрыв всех частиц
+    burst.explosiveness = 0.95 
     burst.one_shot = true
 
     var p_mat = ParticleProcessMaterial.new()
@@ -19,11 +18,10 @@ func _init():
     p_mat.spread = 120.0
     p_mat.initial_velocity_min = 3.0
     p_mat.initial_velocity_max = 7.0
-    p_mat.gravity = Vector3(0, -3.0, 0) # Слегка осыпаются вниз
+    p_mat.gravity = Vector3(0, -3.0, 0)
     p_mat.scale_min = 0.1
     p_mat.scale_max = 0.4
 
-    # Анимешный градиент магии телепорта (Ярко-фиолетовый переходит в Голубой)
     var gradient = Gradient.new()
     gradient.colors = [Color(0.8, 0.2, 1.0, 1.0), Color(0.1, 0.8, 1.0, 0.0)]
     gradient.offsets = [0.0, 1.0]
@@ -32,13 +30,25 @@ func _init():
     p_mat.color_ramp = grad_tex
     burst.process_material = p_mat
 
-    # Магический материал (Аддитивное смешивание)
+    # ИСПРАВЛЕНИЕ: Мягкая круглая текстура
+    var circle_grad = Gradient.new()
+    circle_grad.colors = [Color(1, 1, 1, 1), Color(1, 1, 1, 0)]
+    circle_grad.offsets = [0.0, 1.0]
+    var circle_tex = GradientTexture2D.new()
+    circle_tex.gradient = circle_grad
+    circle_tex.fill = GradientTexture2D.FILL_RADIAL
+    circle_tex.fill_from = Vector2(0.5, 0.5)
+    circle_tex.fill_to = Vector2(1.0, 0.5)
+    circle_tex.width = 64
+    circle_tex.height = 64
+
     var draw_mat = StandardMaterial3D.new()
     draw_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     draw_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     draw_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
     draw_mat.vertex_color_use_as_albedo = true
     draw_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+    draw_mat.albedo_texture = circle_tex # Применяем
 
     var quad = QuadMesh.new()
     quad.material = draw_mat
@@ -47,9 +57,7 @@ func _init():
     
     root.add_child(burst)
     burst.owner = root
-    # ============================================
 
-    # Подключаем скрипт для самоуничтожения ноды после вспышки
     var script = load("res://Graphics/VFXAutoDestroy.gd")
     root.set_script(script)
 

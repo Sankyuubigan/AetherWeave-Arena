@@ -22,7 +22,6 @@ config/features=PackedStringArray("4.7")
 [autoload]
 
 Logger="*res://Graphics/Logger.gd"
-SkillDB="*res://Logic/Skills/SkillDB.gd"
 
 [display]
 

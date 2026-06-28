@@ -20,23 +20,33 @@ scale_min = 0.1
 scale_max = 0.4
 color_ramp = SubResource("GradientTexture1D_yx2mb")
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qngb3"]
+[sub_resource type="Gradient" id="Gradient_qngb3"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_js5w0"]
+gradient = SubResource("Gradient_qngb3")
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_8skpt"]
 transparency = 1
 blend_mode = 1
 shading_mode = 0
 vertex_color_use_as_albedo = true
+albedo_texture = SubResource("GradientTexture2D_js5w0")
 billboard_mode = 1
 
-[sub_resource type="QuadMesh" id="QuadMesh_js5w0"]
-material = SubResource("StandardMaterial3D_qngb3")
+[sub_resource type="QuadMesh" id="QuadMesh_k2icq"]
+material = SubResource("StandardMaterial3D_8skpt")
 size = Vector2(0.5, 0.5)
 
-[node name="TeleportEffect" type="Node3D" unique_id=916300272]
+[node name="TeleportEffect" type="Node3D" unique_id=711036937]
 script = ExtResource("1_hnhhe")
 
-[node name="Burst" type="GPUParticles3D" parent="." unique_id=695444871]
+[node name="Burst" type="GPUParticles3D" parent="." unique_id=786307852]
 amount = 120
 one_shot = true
 explosiveness = 0.95
 process_material = SubResource("ParticleProcessMaterial_3uvbd")
-draw_pass_1 = SubResource("QuadMesh_js5w0")
+draw_pass_1 = SubResource("QuadMesh_k2icq")

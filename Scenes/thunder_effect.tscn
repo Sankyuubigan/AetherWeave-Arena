@@ -17,24 +17,34 @@ initial_velocity_min = 5.0
 initial_velocity_max = 15.0
 color_ramp = SubResource("GradientTexture1D_rwo5v")
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_msw1i"]
+[sub_resource type="Gradient" id="Gradient_msw1i"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_n8ua3"]
+gradient = SubResource("Gradient_msw1i")
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1tb6b"]
 transparency = 1
 blend_mode = 1
 shading_mode = 0
 vertex_color_use_as_albedo = true
+albedo_texture = SubResource("GradientTexture2D_n8ua3")
 billboard_mode = 1
 
-[sub_resource type="QuadMesh" id="QuadMesh_n8ua3"]
-material = SubResource("StandardMaterial3D_msw1i")
+[sub_resource type="QuadMesh" id="QuadMesh_o02gn"]
+material = SubResource("StandardMaterial3D_1tb6b")
 size = Vector2(0.5, 0.5)
 
-[node name="ThunderEffect" type="Node3D" unique_id=701993073]
+[node name="ThunderEffect" type="Node3D" unique_id=991016995]
 script = ExtResource("1_f65q0")
 
-[node name="Burst" type="GPUParticles3D" parent="." unique_id=2078777312]
+[node name="Burst" type="GPUParticles3D" parent="." unique_id=982706826]
 amount = 150
 lifetime = 0.5
 one_shot = true
 explosiveness = 1.0
 process_material = SubResource("ParticleProcessMaterial_yfrea")
-draw_pass_1 = SubResource("QuadMesh_n8ua3")
+draw_pass_1 = SubResource("QuadMesh_o02gn")

@@ -76,9 +76,10 @@ class ActionSlot extends ColorRect:
             label_skill.text = ""
             return
             
-        # Теперь иконка также подтягивается из базы данных
-        if SkillDB.skills.has(id):
-            label_skill.text = SkillDB.skills[id].icon
+        # Загружаем напрямую через статическую функцию прелоада
+        var sdb = preload("res://Logic/Skills/SkillDB.gd").get_skills()
+        if sdb.has(id):
+            label_skill.text = sdb[id].icon
         else:
             label_skill.text = "?"
 

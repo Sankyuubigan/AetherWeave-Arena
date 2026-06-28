@@ -1,5 +1,7 @@
 extends CharacterBody3D
 
+const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
+
 @export var speed: float = 5.0
 @export var mouse_sensitivity: float = 0.002
 @export var jump_velocity: float = 4.5
@@ -14,7 +16,6 @@ var spell_caster: Node
 var skill_points: int = 50
 var player_hp: int = 100
 
-# Теперь мы не хардкодим скиллы, а подтягиваем их динамически!
 var unlocked_skills = {}
 var can_double_jump: bool = false
 var was_space_pressed: bool = false
@@ -35,8 +36,8 @@ func _ready():
     if graphics_wrapper:
         graphics_wrapper.position.y = -1.0
         
-    # ИСПРАВЛЕНИЕ: Автоматически добавляем все скиллы из базы в "Неизученные"
-    for s_id in SkillDB.skills:
+    var all_skills = SkillDB.get_skills()
+    for s_id in all_skills:
         if not unlocked_skills.has(s_id):
             unlocked_skills[s_id] = false
         

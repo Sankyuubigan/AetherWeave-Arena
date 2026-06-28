@@ -30,28 +30,38 @@ scale_min = 0.4
 scale_max = 0.9
 color_ramp = SubResource("GradientTexture1D_h3yyx")
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rgrri"]
+[sub_resource type="Gradient" id="Gradient_rgrri"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_rwcvb"]
+gradient = SubResource("Gradient_rgrri")
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_311e2"]
 transparency = 1
 blend_mode = 1
 shading_mode = 0
 vertex_color_use_as_albedo = true
+albedo_texture = SubResource("GradientTexture2D_rwcvb")
 billboard_mode = 1
 
-[sub_resource type="QuadMesh" id="QuadMesh_rwcvb"]
-material = SubResource("StandardMaterial3D_rgrri")
+[sub_resource type="QuadMesh" id="QuadMesh_nddwj"]
+material = SubResource("StandardMaterial3D_311e2")
 size = Vector2(0.3, 0.3)
 
-[node name="Fireball" type="Area3D" unique_id=1424971603]
+[node name="Fireball" type="Area3D" unique_id=651854596]
 script = ExtResource("1_xi7wk")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=2126235818]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=195178581]
 mesh = SubResource("SphereMesh_ne4qj")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=770882368]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1935517434]
 shape = SubResource("SphereShape3D_hcgvv")
 
-[node name="TrailParticles" type="GPUParticles3D" parent="." unique_id=425048213]
+[node name="TrailParticles" type="GPUParticles3D" parent="." unique_id=1344910463]
 amount = 80
 lifetime = 0.6
 process_material = SubResource("ParticleProcessMaterial_jsbbf")
-draw_pass_1 = SubResource("QuadMesh_rwcvb")
+draw_pass_1 = SubResource("QuadMesh_nddwj")

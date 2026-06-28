@@ -1,5 +1,7 @@
 extends CanvasLayer
 
+const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
+
 var panel: Panel
 var is_open: bool = false
 var player: CharacterBody3D
@@ -95,9 +97,9 @@ func _ready():
     grid.position = Vector2(40, 80)
     panel.add_child(grid)
     
-    # Теперь мы динамически вытаскиваем скиллы из базы автозагрузки, а не из хардкода
-    for s_id in SkillDB.skills:
-        var skill_obj = SkillDB.skills[s_id]
+    var all_skills = SkillDB.get_skills()
+    for s_id in all_skills:
+        var skill_obj = all_skills[s_id]
         var slot = SkillSlot.new()
         slot.skill_data = {
             "id": skill_obj.id,

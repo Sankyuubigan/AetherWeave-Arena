@@ -1,23 +1,21 @@
 extends Node
 
-# Теперь компонент ничего не знает про конкретные скиллы. 
-# Он только готовит геометрию (Raycast) и запускает переданный Skill.
+const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
 
 func cast_skill(skill_id: String):
-    # Проверяем, существует ли скилл в глобальной базе
-    if not SkillDB.skills.has(skill_id):
+    var all_skills = SkillDB.get_skills()
+    if not all_skills.has(skill_id):
         return
         
-    var skill = SkillDB.skills[skill_id]
+    var skill = all_skills[skill_id]
     if skill.is_passive: 
-        return # Пассивки нельзя скастовать кнопкой
+        return
 
     var player = get_parent()
     var camera = player.get_node_or_null("SpringArm3D/Camera3D")
     if not camera: 
         return
 
-    # Подготовка Raycast для вычисления цели
     var space_state = player.get_world_3d().direct_space_state
     var cam_pos = camera.global_position
     var forward = -camera.global_transform.basis.z
@@ -36,11 +34,9 @@ func cast_skill(skill_id: String):
         hit_normal = result.normal
         target_node = result.collider
         
-        # Для телепорта небольшая коррекция (отступ от стены)
         if skill_id == "teleport":
             target_point += hit_normal * 1.0
 
-    # Собираем контекст для эффектов "лего"
     var context = {
         "target_pos": target_point,
         "hit_normal": hit_normal,
@@ -49,5 +45,4 @@ func cast_skill(skill_id: String):
         "forward_dir": forward
     }
 
-    # Запускаем выполнение композиции эффектов
     skill.execute(player, context)

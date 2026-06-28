@@ -8,18 +8,17 @@ func _init():
     burst.name = "Burst"
     burst.amount = 150
     burst.lifetime = 0.5
-    burst.explosiveness = 1.0 # Мгновенный взрыв
+    burst.explosiveness = 1.0 
     burst.one_shot = true
 
     var p_mat = ParticleProcessMaterial.new()
     p_mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-    p_mat.emission_sphere_radius = 5.0 # Широкий радиус (соответствует радиусу урона)
+    p_mat.emission_sphere_radius = 5.0 
     p_mat.direction = Vector3(0, 1, 0)
     p_mat.spread = 180.0
     p_mat.initial_velocity_min = 5.0
     p_mat.initial_velocity_max = 15.0
     
-    # Молния: Переход от ярко-голубого к прозрачному
     var gradient = Gradient.new()
     gradient.colors = [Color(0.2, 0.8, 1.0, 1.0), Color(0.1, 0.1, 1.0, 0.0)]
     gradient.offsets = [0.0, 1.0]
@@ -28,12 +27,25 @@ func _init():
     p_mat.color_ramp = grad_tex
     burst.process_material = p_mat
 
+    # ИСПРАВЛЕНИЕ: Мягкая круглая текстура
+    var circle_grad = Gradient.new()
+    circle_grad.colors = [Color(1, 1, 1, 1), Color(1, 1, 1, 0)]
+    circle_grad.offsets = [0.0, 1.0]
+    var circle_tex = GradientTexture2D.new()
+    circle_tex.gradient = circle_grad
+    circle_tex.fill = GradientTexture2D.FILL_RADIAL
+    circle_tex.fill_from = Vector2(0.5, 0.5)
+    circle_tex.fill_to = Vector2(1.0, 0.5)
+    circle_tex.width = 64
+    circle_tex.height = 64
+
     var draw_mat = StandardMaterial3D.new()
     draw_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     draw_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     draw_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
     draw_mat.vertex_color_use_as_albedo = true
     draw_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+    draw_mat.albedo_texture = circle_tex # Применяем
 
     var quad = QuadMesh.new()
     quad.material = draw_mat
