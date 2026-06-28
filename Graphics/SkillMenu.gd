@@ -42,7 +42,13 @@ class SkillSlot extends ColorRect:
             color = Color(0.2, 0.2, 0.2, 1.0)
             
         var status = "ИЗУЧЕНО" if is_unlocked else "Не изучено (Цена: " + str(skill_data["price"]) + " SP)"
-        tooltip_text = skill_data["name"] + "\n" + status + "\n\n[ЛКМ] Купить | [ПКМ] Продать"
+        
+        # Собираем всплывающую подсказку с описанием
+        tooltip_text = skill_data["name"] + "\n"
+        var desc = skill_data.get("description", "")
+        if desc != "":
+            tooltip_text += desc + "\n"
+        tooltip_text += "\n" + status + "\n\n[ЛКМ] Купить | [ПКМ] Продать"
         
         if skill_data["id"] != "double_jump":
             tooltip_text += "\nПеретащите на нижнюю панель"
@@ -105,7 +111,8 @@ func _ready():
             "id": skill_obj.id,
             "price": skill_obj.price,
             "name": skill_obj.skill_name,
-            "icon": skill_obj.icon
+            "icon": skill_obj.icon,
+            "description": skill_obj.description
         }
         slot.menu = self
         grid.add_child(slot)

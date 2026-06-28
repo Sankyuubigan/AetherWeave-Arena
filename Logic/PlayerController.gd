@@ -135,11 +135,16 @@ func _physics_process(delta):
 
     var space_pressed = Input.is_key_pressed(KEY_SPACE)
     if space_pressed and not was_space_pressed:
+        var anim_comp = get_node_or_null("PlayerAnimationComponent")
         if is_on_floor():
             velocity.y = jump_velocity
+            if anim_comp and anim_comp.has_method("play_jump"):
+                anim_comp.play_jump()
         elif can_double_jump:
             velocity.y = jump_velocity
             can_double_jump = false
+            if anim_comp and anim_comp.has_method("play_jump"):
+                anim_comp.play_jump()
             
     was_space_pressed = space_pressed
     move_and_slide()

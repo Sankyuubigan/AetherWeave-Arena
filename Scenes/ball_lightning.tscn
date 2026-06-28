@@ -1,0 +1,67 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Logic/HomingProjectileComponent.gd" id="1_oxyhq"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_w78qe"]
+albedo_color = Color(0.1, 0.8, 1, 1)
+emission_enabled = true
+emission = Color(0.1, 0.8, 1, 1)
+emission_energy_multiplier = 4.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_row5j"]
+material = SubResource("StandardMaterial3D_w78qe")
+radius = 0.25
+height = 0.5
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_wevkm"]
+radius = 0.35
+
+[sub_resource type="Gradient" id="Gradient_kaedy"]
+colors = PackedColorArray(0.2, 0.8, 1, 1, 0, 0.2, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_rbb5h"]
+gradient = SubResource("Gradient_kaedy")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_lpg2f"]
+emission_shape = 1
+emission_sphere_radius = 0.3
+gravity = Vector3(0, 0.5, 0)
+scale_min = 0.2
+scale_max = 0.5
+color_ramp = SubResource("GradientTexture1D_rbb5h")
+
+[sub_resource type="Gradient" id="Gradient_0yxy3"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_tkhdm"]
+gradient = SubResource("Gradient_0yxy3")
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4mpdc"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_texture = SubResource("GradientTexture2D_tkhdm")
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="QuadMesh_hedmj"]
+material = SubResource("StandardMaterial3D_4mpdc")
+size = Vector2(0.3, 0.3)
+
+[node name="BallLightning" type="Area3D" unique_id=397249007]
+script = ExtResource("1_oxyhq")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1608749116]
+mesh = SubResource("SphereMesh_row5j")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=867095796]
+shape = SubResource("SphereShape3D_wevkm")
+
+[node name="TrailParticles" type="GPUParticles3D" parent="." unique_id=1475317532]
+amount = 100
+lifetime = 0.5
+process_material = SubResource("ParticleProcessMaterial_lpg2f")
+draw_pass_1 = SubResource("QuadMesh_hedmj")

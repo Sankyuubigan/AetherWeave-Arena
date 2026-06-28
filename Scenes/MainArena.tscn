@@ -1,41 +1,48 @@
 [gd_scene format=3]
 
-[ext_resource type="PackedScene" path="res://Scenes/arena.tscn" id="1_0jwg0"]
-[ext_resource type="PackedScene" path="res://Scenes/player.tscn" id="2_mf634"]
-[ext_resource type="PackedScene" path="res://Scenes/dummy.tscn" id="3_nn881"]
-[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="4_r5lsm"]
-[ext_resource type="Script" path="res://Logic/MovingDummy.gd" id="5_54qp1"]
+[ext_resource type="PackedScene" path="res://Scenes/arena.tscn" id="1_nn881"]
+[ext_resource type="PackedScene" path="res://Scenes/player.tscn" id="2_r5lsm"]
+[ext_resource type="Script" path="res://Logic/PlayerController.gd" id="3_54qp1"]
+[ext_resource type="PackedScene" path="res://Scenes/dummy.tscn" id="4_tayer"]
+[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="5_o1lbq"]
+[ext_resource type="Script" path="res://Logic/MovingDummy.gd" id="6_jmama"]
+[ext_resource type="Script" path="res://Logic/FriendlyDummy.gd" id="7_inhny"]
 
-[sub_resource type="Environment" id="Environment_tayer"]
+[sub_resource type="Environment" id="Environment_upbp4"]
 background_mode = 1
 background_color = Color(0.4, 0.6, 1, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.3, 0.3, 0.4, 1)
 
-[node name="MainArena" type="Node3D" unique_id=1872817162]
+[node name="MainArena" type="Node3D" unique_id=2115222930]
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1752569396]
-environment = SubResource("Environment_tayer")
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=749457954]
+environment = SubResource("Environment_upbp4")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=120327929]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1745228136]
 transform = Transform3D(0.70710677, -0.4055798, 0.579228, 0, 0.81915206, 0.57357645, -0.70710677, -0.4055798, 0.579228, 0, 0, 0)
 light_energy = 1.5
 shadow_enabled = true
 
-[node name="Arena" type="StaticBody3D" parent="." unique_id=1504988106 instance=ExtResource("1_0jwg0")]
+[node name="Arena" type="StaticBody3D" parent="." unique_id=1504988106 instance=ExtResource("1_nn881")]
 transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0)
 
-[node name="Player" type="CharacterBody3D" parent="." unique_id=318514207 instance=ExtResource("2_mf634")]
+[node name="Player" type="CharacterBody3D" parent="." unique_id=318514207 instance=ExtResource("2_r5lsm")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+script = ExtResource("3_54qp1")
 
-[node name="Dummy" type="StaticBody3D" parent="." unique_id=1967745289 instance=ExtResource("3_nn881")]
+[node name="Dummy" type="StaticBody3D" parent="." unique_id=1967745289 instance=ExtResource("4_tayer")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -5)
-script = ExtResource("4_r5lsm")
+script = ExtResource("5_o1lbq")
 
-[node name="DummyLine" type="StaticBody3D" parent="." unique_id=1912781591 instance=ExtResource("3_nn881")]
+[node name="DummyLine" type="StaticBody3D" parent="." unique_id=314675906 instance=ExtResource("4_tayer")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 1, -15)
-script = ExtResource("5_54qp1")
+script = ExtResource("6_jmama")
 
-[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=922432835 instance=ExtResource("3_nn881")]
+[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=965232622 instance=ExtResource("4_tayer")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, -10)
-script = ExtResource("5_54qp1")
+script = ExtResource("6_jmama")
+
+[node name="FriendlyDummy" type="StaticBody3D" parent="." unique_id=1231451203 instance=ExtResource("4_tayer")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 1, 10)
+script = ExtResource("7_inhny")

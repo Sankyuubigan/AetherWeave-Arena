@@ -2,6 +2,7 @@ extends Node
 
 var anim_player: AnimationPlayer
 var was_in_air: bool = false
+var jump_playing: bool = false
 
 func _ready():
     anim_player = get_parent().get_node("GraphicsWrapper/AnimationPlayer")
@@ -9,17 +10,13 @@ func _ready():
         print("PlayerAnimationComponent: No AnimationPlayer found")
         return
         
-    # ИСПРАВЛЕНИЕ БАГА "ДЕРГАНЬЯ И СКОРОСТИ" (Root Motion):
-    # Обнуляем смещение корневой кости по X и Z во всех анимациях, 
-    # чтобы моделька физически не убегала из капсулы.
+    # Обнуляем смещение корневой кости по X и Z во всех анимациях
     var lib = anim_player.get_animation_library("")
     if lib:
         for anim_name in lib.get_animation_list():
             var anim = lib.get_animation(anim_name)
             for i in range(anim.get_track_count()):
-                # Ищем треки изменения позиций костей
                 if anim.track_get_type(i) == Animation.TYPE_POSITION_3D:
-                    # Проходим по всем кадрам анимации и обнуляем оси X и Z
                     for k in range(anim.track_get_key_count(i)):
                         var pos = anim.track_get_key_value(i, k)
                         pos.x = 0
@@ -32,17 +29,31 @@ func _ready():
     elif anims.size() > 0:
         anim_player.play(anims[0])
 
+func play_jump():
+    if anim_player and anim_player.has_animation("Jump"):
+        anim_player.stop()
+        anim_player.play("Jump")
+        jump_playing = true
+
 func _process(_delta):
     if not anim_player:
         return
+        
     var parent = get_parent()
     var speed = Vector2(parent.velocity.x, parent.velocity.z).length()
     var current = anim_player.current_animation
     var anims = anim_player.get_animation_list()
 
+    # БЛОКИРОВКА: Если анимация прыжка была запущена принудительно, ждем ее окончания
+    if jump_playing:
+        if anim_player.is_playing() and current == "Jump":
+            return # Не прерываем анимацию, даже если коснулись пола
+        else:
+            jump_playing = false # Прыжок завершен, возвращаемся к обычному циклу
+
     var in_air = not parent.is_on_floor()
     if in_air:
-        if "Jump" in anims and current != "Jump":
+        if not jump_playing and "Jump" in anims and current != "Jump":
             anim_player.play("Jump")
         was_in_air = true
         return

@@ -37,6 +37,20 @@ func cast_skill(skill_id: String):
         if skill_id == "teleport":
             target_point += hit_normal * 1.0
 
+    if skill.requires_target:
+        var valid_target = false
+        if target_node:
+            var is_target_friendly = target_node.get("is_friendly") if "is_friendly" in target_node else false
+            
+            if skill.target_type == "friendly" and is_target_friendly and target_node.has_method("heal"):
+                valid_target = true
+            elif skill.target_type == "enemy" and not is_target_friendly and target_node.has_method("take_damage"):
+                valid_target = true
+                
+        if not valid_target:
+            print("Умение " + skill.skill_name + " требует правильную цель в прицеле!")
+            return
+
     var context = {
         "target_pos": target_point,
         "hit_normal": hit_normal,

@@ -25,7 +25,6 @@ func _init():
 
     var arena_scene = load("res://Scenes/arena.tscn")
     var arena = arena_scene.instantiate()
-    # Увеличиваем арену в 2 раза (до 100х100 метров), чтобы было место для бега
     arena.scale = Vector3(2, 1, 2)
     root.add_child(arena)
     arena.owner = root
@@ -48,25 +47,34 @@ func _init():
     var dummy_line = dummy_scene.instantiate()
     dummy_line.position = Vector3(-10, 1, -15)
     dummy_line.name = "DummyLine"
-    # Динамически меняем скрипт прямо при сборке сцены!
     dummy_line.set_script(load("res://Logic/MovingDummy.gd"))
     dummy_line.set("move_type", "line")
     dummy_line.set("move_speed", 3.0)
     root.add_child(dummy_line)
     dummy_line.owner = root
 
-    # 3. Быстрый манекен (Бегает треугольником)
-    var dummy_tri = dummy_scene.instantiate()
-    dummy_tri.position = Vector3(15, 1, -10)
-    dummy_tri.name = "DummyTriangle"
-    dummy_tri.set_script(load("res://Logic/MovingDummy.gd"))
-    dummy_tri.set("move_type", "triangle")
-    dummy_tri.set("move_speed", 8.0)
-    root.add_child(dummy_tri)
-    dummy_tri.owner = root
+    # 3. УЛЬТРА Быстрый вражеский манекен (Многоугольник)
+    var dummy_poly = dummy_scene.instantiate()
+    dummy_poly.position = Vector3(15, 1, -10)
+    dummy_poly.name = "DummyTriangle"
+    dummy_poly.set_script(load("res://Logic/MovingDummy.gd"))
+    dummy_poly.set("move_type", "complex_polygon")
+    dummy_poly.set("move_speed", 16.0) # Скорость x2
+    root.add_child(dummy_poly)
+    dummy_poly.owner = root
+    
+    # 4. Быстрый союзный манекен (Для теста хила)
+    var friendly_dummy = dummy_scene.instantiate()
+    friendly_dummy.position = Vector3(-15, 1, 10)
+    friendly_dummy.name = "FriendlyDummy"
+    friendly_dummy.set_script(load("res://Logic/FriendlyDummy.gd"))
+    friendly_dummy.set("move_type", "triangle")
+    friendly_dummy.set("move_speed", 12.0)
+    root.add_child(friendly_dummy)
+    friendly_dummy.owner = root
 
     var packed = PackedScene.new()
     packed.pack(root)
     ResourceSaver.save(packed, "res://Scenes/MainArena.tscn")
-    print("MainArena generated with moving dummies!")
+    print("MainArena generated with new dummies!")
     quit()
