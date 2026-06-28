@@ -4,12 +4,6 @@ var panel: Panel
 var is_open: bool = false
 var player: CharacterBody3D
 
-var skills_db = [
-    {"id": "fireball", "price": 1, "name": "Огненный Шар", "icon": "🔥"},
-    {"id": "teleport", "price": 2, "name": "Телепорт (20м)", "icon": "🌌"},
-    {"id": "double_jump", "price": 1, "name": "Двойной прыжок", "icon": "🏃"}
-]
-
 class SkillSlot extends ColorRect:
     var skill_data: Dictionary
     var menu: CanvasLayer
@@ -76,8 +70,6 @@ func _ready():
     player = get_parent()
     
     panel = Panel.new()
-    # ИСПРАВЛЕНИЕ: Мы убрали полноэкранный CenterContainer. 
-    # Теперь панель центрируется сама, и вокруг неё "пустота", которая пропускает мышь вниз!
     panel.custom_minimum_size = Vector2(500, 350)
     panel.anchor_left = 0.5
     panel.anchor_top = 0.5
@@ -103,9 +95,16 @@ func _ready():
     grid.position = Vector2(40, 80)
     panel.add_child(grid)
     
-    for s in skills_db:
+    # Теперь мы динамически вытаскиваем скиллы из базы автозагрузки, а не из хардкода
+    for s_id in SkillDB.skills:
+        var skill_obj = SkillDB.skills[s_id]
         var slot = SkillSlot.new()
-        slot.skill_data = s
+        slot.skill_data = {
+            "id": skill_obj.id,
+            "price": skill_obj.price,
+            "name": skill_obj.skill_name,
+            "icon": skill_obj.icon
+        }
         slot.menu = self
         grid.add_child(slot)
     

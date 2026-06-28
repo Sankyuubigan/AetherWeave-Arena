@@ -14,11 +14,8 @@ var spell_caster: Node
 var skill_points: int = 50
 var player_hp: int = 100
 
-var unlocked_skills = {
-    "fireball": false,
-    "double_jump": false,
-    "teleport": false
-}
+# Теперь мы не хардкодим скиллы, а подтягиваем их динамически!
+var unlocked_skills = {}
 var can_double_jump: bool = false
 var was_space_pressed: bool = false
 
@@ -37,6 +34,11 @@ func _ready():
         
     if graphics_wrapper:
         graphics_wrapper.position.y = -1.0
+        
+    # ИСПРАВЛЕНИЕ: Автоматически добавляем все скиллы из базы в "Неизученные"
+    for s_id in SkillDB.skills:
+        if not unlocked_skills.has(s_id):
+            unlocked_skills[s_id] = false
         
     setup_hud()
         
@@ -91,7 +93,6 @@ func _input(event):
     if menu and menu.is_open:
         return
 
-    # Захват мыши по ЛКМ
     if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
         if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
             Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

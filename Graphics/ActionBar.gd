@@ -43,7 +43,6 @@ class ActionSlot extends ColorRect:
         add_child(label_skill)
 
     func _can_drop_data(at_position, data):
-        # ИСПРАВЛЕНИЕ: Заменили typeof() на "data is Dictionary" для максимальной совместимости
         return data is Dictionary and data.has("type") and data["type"] == "skill"
 
     func _drop_data(at_position, data):
@@ -73,9 +72,15 @@ class ActionSlot extends ColorRect:
 
     func set_skill(id: String):
         skill_id = id
-        if id == "fireball": label_skill.text = "🔥"
-        elif id == "teleport": label_skill.text = "🌌"
-        else: label_skill.text = ""
+        if id == "": 
+            label_skill.text = ""
+            return
+            
+        # Теперь иконка также подтягивается из базы данных
+        if SkillDB.skills.has(id):
+            label_skill.text = SkillDB.skills[id].icon
+        else:
+            label_skill.text = "?"
 
 func _ready():
     name = "ActionBar"
@@ -87,7 +92,6 @@ func _ready():
     hbox.position.y = -80
     hbox.add_theme_constant_override("separation", 8)
     
-    # ИСПРАВЛЕНИЕ: Сам контейнер (пустоты между слотами) теперь на 100% пропускает мышь
     hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
     add_child(hbox)
     
