@@ -14,12 +14,12 @@ background_color = Color(0.4, 0.6, 1, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.3, 0.3, 0.4, 1)
 
-[node name="MainArena" type="Node3D" unique_id=2115222930]
+[node name="MainArena" type="Node3D" unique_id=1018445126]
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=749457954]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1869398553]
 environment = SubResource("Environment_upbp4")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1745228136]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1123236927]
 transform = Transform3D(0.70710677, -0.4055798, 0.579228, 0, 0.81915206, 0.57357645, -0.70710677, -0.4055798, 0.579228, 0, 0, 0)
 light_energy = 1.5
 shadow_enabled = true
@@ -35,14 +35,18 @@ script = ExtResource("3_54qp1")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -5)
 script = ExtResource("5_o1lbq")
 
-[node name="DummyLine" type="StaticBody3D" parent="." unique_id=314675906 instance=ExtResource("4_tayer")]
+[node name="DummyLine" type="StaticBody3D" parent="." unique_id=15039873 instance=ExtResource("4_tayer")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 1, -15)
 script = ExtResource("6_jmama")
 
-[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=965232622 instance=ExtResource("4_tayer")]
+[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=1290072441 instance=ExtResource("4_tayer")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, -10)
 script = ExtResource("6_jmama")
+move_type = "complex_polygon"
+move_speed = 16.0
 
-[node name="FriendlyDummy" type="StaticBody3D" parent="." unique_id=1231451203 instance=ExtResource("4_tayer")]
+[node name="FriendlyDummy" type="StaticBody3D" parent="." unique_id=698257906 instance=ExtResource("4_tayer")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 1, 10)
 script = ExtResource("7_inhny")
+move_type = "triangle"
+move_speed = 12.0

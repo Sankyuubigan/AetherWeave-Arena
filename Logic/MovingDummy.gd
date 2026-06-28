@@ -1,7 +1,9 @@
 extends "res://Logic/HealthComponent.gd"
 
-var move_type: String = "line"
-var move_speed: float = 3.0
+# ИСПРАВЛЕНИЕ БАГА: Обязательно нужен @export, иначе при упаковке сцены
+# генератором (build_main_arena.gd) эти значения не сохранятся в .tscn файл!
+@export var move_type: String = "line"
+@export var move_speed: float = 3.0
 
 var waypoints: Array[Vector3] = []
 var current_wp_index: int = 0

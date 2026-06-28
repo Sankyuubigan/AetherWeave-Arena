@@ -4,25 +4,25 @@ func _init():
     var root = Area3D.new()
     root.name = "HeartProjectile"
 
-    # Гениальный хак: используем Label3D с эмодзи вместо 3D модели сердца!
     var label = Label3D.new()
     label.name = "HeartEmoji"
     label.text = "❤️"
-    label.font_size = 200
+    # Сделали сердечко в 2 раза меньше
+    label.font_size = 100 
     label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-    label.modulate = Color(1.0, 0.5, 0.5)
+    # Изменили цвет на яркий розовый
+    label.modulate = Color(1.0, 0.4, 0.8)
     root.add_child(label)
     label.owner = root
 
     var collision = CollisionShape3D.new()
     collision.name = "CollisionShape3D"
     var shape = SphereShape3D.new()
-    shape.radius = 0.5
+    shape.radius = 0.25
     collision.shape = shape
     root.add_child(collision)
     collision.owner = root
     
-    # Розовый шлейф
     var trail = GPUParticles3D.new()
     trail.name = "TrailParticles"
     trail.amount = 40 
@@ -31,13 +31,13 @@ func _init():
 
     var p_mat = ParticleProcessMaterial.new()
     p_mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-    p_mat.emission_sphere_radius = 0.4
+    p_mat.emission_sphere_radius = 0.2
     p_mat.gravity = Vector3(0, 1.5, 0)
     p_mat.scale_min = 0.2
-    p_mat.scale_max = 0.5
+    p_mat.scale_max = 0.4
 
     var gradient = Gradient.new()
-    gradient.colors = [Color(1.0, 0.2, 0.5, 1.0), Color(1.0, 0.2, 0.5, 0.0)]
+    gradient.colors = [Color(1.0, 0.4, 0.8, 1.0), Color(1.0, 0.4, 0.8, 0.0)]
     gradient.offsets = [0.0, 1.0]
     var grad_tex = GradientTexture1D.new()
     grad_tex.gradient = gradient
@@ -65,7 +65,7 @@ func _init():
 
     var quad = QuadMesh.new()
     quad.material = draw_mat
-    quad.size = Vector2(0.3, 0.3)
+    quad.size = Vector2(0.2, 0.2)
     trail.draw_pass_1 = quad
     
     root.add_child(trail)
@@ -77,5 +77,4 @@ func _init():
     var packed = PackedScene.new()
     packed.pack(root)
     ResourceSaver.save(packed, "res://Scenes/heart_projectile.tscn")
-    print("Heart Projectile scene generated successfully!")
     quit()

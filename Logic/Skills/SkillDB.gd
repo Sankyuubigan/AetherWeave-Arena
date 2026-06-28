@@ -9,7 +9,6 @@ static func get_skills() -> Dictionary:
         
     _initialized = true
     
-    # 1. Огненный Шар
     var fb = preload("res://Logic/Skills/Skill.gd").new()
     fb.id = "fireball"
     fb.skill_name = "Огненный Шар"
@@ -23,7 +22,6 @@ static func get_skills() -> Dictionary:
     fb.effects.append(proj)
     _skills["fireball"] = fb
 
-    # 2. Телепорт
     var tp = preload("res://Logic/Skills/Skill.gd").new()
     tp.id = "teleport"
     tp.skill_name = "Телепорт (20м)"
@@ -37,7 +35,6 @@ static func get_skills() -> Dictionary:
     tp.effects.append(tel)
     _skills["teleport"] = tp
 
-    # 3. Двойной прыжок
     var dj = preload("res://Logic/Skills/Skill.gd").new()
     dj.id = "double_jump"
     dj.skill_name = "Двойной прыжок"
@@ -47,7 +44,6 @@ static func get_skills() -> Dictionary:
     dj.is_passive = true
     _skills["double_jump"] = dj
     
-    # 4. Громовой раскат
     var thunder = preload("res://Logic/Skills/Skill.gd").new()
     thunder.id = "thunderclap"
     thunder.skill_name = "Громовой раскат"
@@ -63,7 +59,6 @@ static func get_skills() -> Dictionary:
     thunder.effects.append(aoe)
     _skills["thunderclap"] = thunder
     
-    # 5. Огненный Метеорит
     var meteor = preload("res://Logic/Skills/Skill.gd").new()
     meteor.id = "meteor"
     meteor.skill_name = "Огненный Метеорит"
@@ -84,11 +79,10 @@ static func get_skills() -> Dictionary:
     meteor.effects.append(m_aoe)
     _skills["meteor"] = meteor
 
-    # 6. Шаровая Молния
     var ball_lightning = preload("res://Logic/Skills/Skill.gd").new()
     ball_lightning.id = "ball_lightning"
     ball_lightning.skill_name = "Шаровая Молния"
-    ball_lightning.description = "Самонаводящийся снаряд.\nТребует врага в прицеле.\nСкорость: 8 м/с."
+    ball_lightning.description = "Самонаводящийся снаряд.\nТребует врага в прицеле.\nСкорость: 6 м/с."
     ball_lightning.icon = "🔮"
     ball_lightning.price = 4
     ball_lightning.max_range = 100.0
@@ -100,7 +94,6 @@ static func get_skills() -> Dictionary:
     ball_lightning.effects.append(bl_proj)
     _skills["ball_lightning"] = ball_lightning
 
-    # 7. Сердечко (Исцеление)
     var heart = preload("res://Logic/Skills/Skill.gd").new()
     heart.id = "heart_heal"
     heart.skill_name = "Сердечко"

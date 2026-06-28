@@ -10,6 +10,9 @@ var alive_time: float = 0.0
 var shrinking: bool = false
 var base_scale: Vector3 = Vector3.ONE
 
+# Подгружаем сцену яркого взрыва лечения
+var burst_scene = preload("res://Scenes/heart_burst.tscn")
+
 func set_target(t: Node3D):
     target = t
     if is_instance_valid(target):
@@ -89,5 +92,10 @@ func _on_body_entered(body: Node):
         
     if body.has_method("heal") and body.get("is_friendly"):
         body.heal(heal_amount)
+        # Создаем визуальный эффект взрыва при лечении
+        if burst_scene:
+            var burst = burst_scene.instantiate()
+            get_tree().current_scene.add_child(burst)
+            burst.global_position = global_position
         
     queue_free()
