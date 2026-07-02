@@ -38,7 +38,37 @@ Godot 4.7 находится по пути: `D:\Programs\Godot\Godot_v4.7-stable
 * **Размер кода:** Перед внесением исправлений проверяй количество строк в файле. Старайся не превышать предел в **300-500 строк кода** на один файл. 
 * **Разделение логики:** Если файл слишком разросся или класс превращается в "God Object", выноси часть логики в новые модули или отдельные файлы компонентов. Это критически важно для упрощения поддержки проекта в будущем.
 
-## 7. Конвейер сборки скинов (Skin pipeline)
+## 7. Конвейер сборки анимаций (Animation pipeline)
+
+### Как работает `build_animations.gd`
+Скрипт конвертирует исходные FBX анимации в сжатый `.res` файл, который используют все скины:
+1. Загружает каждый FBX через `FBXDocument`
+2. Извлекает анимации (с исправлением пути `mixamorig1_` → `mixamorig_`)
+3. Сохраняет как `Graphics/Animations/shared_animations.res` (один файл на все скины)
+
+Запуск (выполняется **один раз** после добавления новых FBX анимаций в `raw/`):
+```
+& "D:\Programs\Godot\Godot_v4.7-stable\Godot_v4.7-stable_win64_console.exe" --headless -s res://Generators/build_animations.gd
+```
+
+### Структура папок для анимаций
+```
+res://Graphics/Animations/
+  shared_animations.res   # Скомпилированные анимации (используется в игре)
+  raw/                     # Исходники FBX (не связаны с игрой напрямую)
+    Idle.fbx
+    Running.fbx
+    Jumping.fbx
+```
+
+### Порядок добавления новой анимации:
+1. Положить FBX файл в `res://Graphics/Animations/raw/<name>.fbx`
+2. Добавить запись `"<Name>": RAW_DIR + "<Name>.fbx"` в `build_animations.gd`
+3. Запустить `build_animations.gd` — он пересоберет `shared_animations.res`
+4. Запустить `rebuild_player_from_skin.gd <skin>` — он подхватит новую анимацию
+5. Запустить игру для проверки
+
+## 8. Конвейер сборки скинов (Skin pipeline)
 
 ### Как работает `rebuild_player_from_skin.gd`
 Скрипт автоматизирует создание `player.tscn` из FBX модели:

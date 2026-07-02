@@ -107,6 +107,11 @@ static func get_skills() -> Dictionary:
     if ResourceLoader.exists("res://Scenes/heart_projectile.tscn"):
         h_proj.projectile_scene = load("res://Scenes/heart_projectile.tscn")
     heart.effects.append(h_proj)
+
+    var h_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
+    h_sound.audio_stream = load("res://Audio/SFX/cast_healing_1.ogg")
+    h_sound.volume_db = 6.0
+    heart.effects.append(h_sound)
     _skills["heart_heal"] = heart
     
     return _skills
