@@ -10,7 +10,6 @@ func _ready():
         print("PlayerAnimationComponent: No AnimationPlayer found")
         return
         
-    # Обнуляем смещение корневой кости по X и Z во всех анимациях
     var lib = anim_player.get_animation_library("")
     if lib:
         for anim_name in lib.get_animation_list():
@@ -31,8 +30,9 @@ func _ready():
 
 func play_jump():
     if anim_player and anim_player.has_animation("Jump"):
-        anim_player.stop()
-        anim_player.play("Jump")
+        # ИСПРАВЛЕНИЕ ВАЙБА: Убрали anim_player.stop(), добавили блендинг (0.15 сек)
+        # Это сглаживает рывки при двойном прыжке и отрыве от земли.
+        anim_player.play("Jump", 0.15)
         jump_playing = true
 
 func _process(_delta):
@@ -44,29 +44,28 @@ func _process(_delta):
     var current = anim_player.current_animation
     var anims = anim_player.get_animation_list()
 
-    # БЛОКИРОВКА: Если анимация прыжка была запущена принудительно, ждем ее окончания
     if jump_playing:
         if anim_player.is_playing() and current == "Jump":
-            return # Не прерываем анимацию, даже если коснулись пола
+            return
         else:
-            jump_playing = false # Прыжок завершен, возвращаемся к обычному циклу
+            jump_playing = false
 
     var in_air = not parent.is_on_floor()
     if in_air:
         if not jump_playing and "Jump" in anims and current != "Jump":
-            anim_player.play("Jump")
+            anim_player.play("Jump", 0.2)
         was_in_air = true
         return
 
     if was_in_air:
         was_in_air = false
         if speed < 0.001 and "Idle" in anims:
-            anim_player.play("Idle")
+            anim_player.play("Idle", 0.15)
             return
 
     if speed < 0.001:
         if current != "Idle" and "Idle" in anims:
-            anim_player.play("Idle")
+            anim_player.play("Idle", 0.2)
     else:
         if current != "Run" and "Run" in anims:
-            anim_player.play("Run")
+            anim_player.play("Run", 0.2)
