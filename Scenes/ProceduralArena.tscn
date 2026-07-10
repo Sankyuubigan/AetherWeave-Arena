@@ -1,0 +1,20 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Logic/Procedural/ProceduralArena.gd" id="1_a2gwl"]
+
+[sub_resource type="Environment" id="Environment_ky6sb"]
+background_mode = 1
+background_color = Color(0.4, 0.6, 1, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.3, 0.3, 0.4, 1)
+
+[node name="ProceduralArena" type="Node3D" unique_id=1315772911]
+script = ExtResource("1_a2gwl")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=2087934381]
+environment = SubResource("Environment_ky6sb")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=957738670]
+transform = Transform3D(0.70710677, -0.4055798, 0.579228, 0, 0.81915206, 0.57357645, -0.70710677, -0.4055798, 0.579228, 0, 0, 0)
+light_energy = 1.5
+shadow_enabled = true

@@ -1,52 +1,60 @@
 [gd_scene format=3]
 
-[ext_resource type="PackedScene" path="res://Scenes/arena.tscn" id="1_nn881"]
-[ext_resource type="PackedScene" path="res://Scenes/player.tscn" id="2_r5lsm"]
-[ext_resource type="Script" path="res://Logic/PlayerController.gd" id="3_54qp1"]
-[ext_resource type="PackedScene" path="res://Scenes/dummy.tscn" id="4_tayer"]
-[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="5_o1lbq"]
-[ext_resource type="Script" path="res://Logic/MovingDummy.gd" id="6_jmama"]
-[ext_resource type="Script" path="res://Logic/FriendlyDummy.gd" id="7_inhny"]
+[ext_resource type="PackedScene" path="res://Scenes/arena.tscn" id="1_54qp1"]
+[ext_resource type="PackedScene" path="res://Scenes/player.tscn" id="2_tayer"]
+[ext_resource type="Script" path="res://Logic/PlayerController.gd" id="3_o1lbq"]
+[ext_resource type="PackedScene" path="res://Scenes/dummy.tscn" id="4_jmama"]
+[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="5_inhny"]
+[ext_resource type="Script" path="res://Logic/MovingDummy.gd" id="6_upbp4"]
+[ext_resource type="Script" path="res://Logic/FriendlyDummy.gd" id="7_hwi6t"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/boulder_01/boulder_01.tscn" id="8_je2ms"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/rock_moss_set_01/rock_moss_set_01.tscn" id="9_fosf5"]
 
-[sub_resource type="Environment" id="Environment_upbp4"]
+[sub_resource type="Environment" id="Environment_geo7j"]
 background_mode = 1
 background_color = Color(0.4, 0.6, 1, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.3, 0.3, 0.4, 1)
 
-[node name="MainArena" type="Node3D" unique_id=1018445126]
+[node name="MainArena" type="Node3D" unique_id=1968169674]
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1869398553]
-environment = SubResource("Environment_upbp4")
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=565866739]
+environment = SubResource("Environment_geo7j")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1123236927]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1811215364]
 transform = Transform3D(0.70710677, -0.4055798, 0.579228, 0, 0.81915206, 0.57357645, -0.70710677, -0.4055798, 0.579228, 0, 0, 0)
 light_energy = 1.5
 shadow_enabled = true
 
-[node name="Arena" type="StaticBody3D" parent="." unique_id=1504988106 instance=ExtResource("1_nn881")]
+[node name="Arena" type="StaticBody3D" parent="." unique_id=1504988106 instance=ExtResource("1_54qp1")]
 transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0)
 
-[node name="Player" type="CharacterBody3D" parent="." unique_id=318514207 instance=ExtResource("2_r5lsm")]
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1013984583 instance=ExtResource("2_tayer")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
-script = ExtResource("3_54qp1")
+script = ExtResource("3_o1lbq")
 
-[node name="Dummy" type="StaticBody3D" parent="." unique_id=1967745289 instance=ExtResource("4_tayer")]
+[node name="Dummy" type="StaticBody3D" parent="." unique_id=1967745289 instance=ExtResource("4_jmama")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -5)
-script = ExtResource("5_o1lbq")
+script = ExtResource("5_inhny")
 
-[node name="DummyLine" type="StaticBody3D" parent="." unique_id=15039873 instance=ExtResource("4_tayer")]
+[node name="DummyLine" type="StaticBody3D" parent="." unique_id=590720183 instance=ExtResource("4_jmama")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 1, -15)
-script = ExtResource("6_jmama")
+script = ExtResource("6_upbp4")
 
-[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=1290072441 instance=ExtResource("4_tayer")]
+[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=1945728053 instance=ExtResource("4_jmama")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, -10)
-script = ExtResource("6_jmama")
+script = ExtResource("6_upbp4")
 move_type = "complex_polygon"
 move_speed = 16.0
 
-[node name="FriendlyDummy" type="StaticBody3D" parent="." unique_id=698257906 instance=ExtResource("4_tayer")]
+[node name="FriendlyDummy" type="StaticBody3D" parent="." unique_id=115648024 instance=ExtResource("4_jmama")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 1, 10)
-script = ExtResource("7_inhny")
+script = ExtResource("7_hwi6t")
 move_type = "triangle"
 move_speed = 12.0
+
+[node name="Boulder 01" type="StaticBody3D" parent="." unique_id=1637008095 instance=ExtResource("8_je2ms")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -3)
+
+[node name="Rock Moss Set 01" type="StaticBody3D" parent="." unique_id=1596348369 instance=ExtResource("9_fosf5")]
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, -5, 0, -3)

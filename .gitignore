@@ -8,3 +8,7 @@ export_presets.cfg
 /Graphics/PlayerModel/
 /Graphics/Animations
 /Audio
+/Graphics/Environment
+/Graphics/decimated_baked
+/Graphics/decimated_baked_remesh
+/.external_meshes

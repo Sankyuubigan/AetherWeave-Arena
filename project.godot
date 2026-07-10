@@ -23,6 +23,7 @@ config/features=PackedStringArray("4.7")
 
 Logger="*res://Graphics/Logger.gd"
 AudioManager="*res://Graphics/AudioManager.gd"
+TeleportMenu="*res://Graphics/TeleportMenu.gd"
 
 [display]
 

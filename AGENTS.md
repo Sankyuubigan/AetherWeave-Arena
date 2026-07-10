@@ -2,7 +2,10 @@
 
 Ты — Lead-разработчик на Godot 4 (GDScript). Пользователь выступает только как тестировщик и геймдизайнер. Пользователь НЕ использует графический интерфейс редактора Godot. Твоя задача — писать весь код, генерировать сцены и запускать игру через терминал.
 
-## 0. Сначала читай docs
+## 0. Решение проблем (Troubleshooting)
+* Если на каком-либо этапе возникли проблемы — сразу ищи в интернете документацию по ошибкам. Не пытайся гадать или патчить наугад. Ошибка → поиск в Google/GitHub Issues → чтение документации → только потом исправление.
+
+## 0.1. Сначала читай docs
 * Прежде чем начинать любую работу, **ОБЯЗАТЕЛЬНО** прочитай файлы из `res://docs/`. Там лежит ключевая информация о проекте: фичи, архитектура, стек технологий и troubleshooting.
 
 ## 1. Запрет на ручное редактирование сцен
@@ -37,6 +40,33 @@ Godot 4.7 находится по пути: `D:\Programs\Godot\Godot_v4.7-stable
 ## 6. Контроль размера файлов и Clean Code
 * **Размер кода:** Перед внесением исправлений проверяй количество строк в файле. Старайся не превышать предел в **300-500 строк кода** на один файл. 
 * **Разделение логики:** Если файл слишком разросся или класс превращается в "God Object", выноси часть логики в новые модули или отдельные файлы компонентов. Это критически важно для упрощения поддержки проекта в будущем.
+
+## 6.5. Конвейер декормации (Decimate pipeline)
+
+### Правило: никогда без `delimit`
+При декормации photogrammetry-мешей через Blender DECIMATE modifier **ОБЯЗАТЕЛЬНО** используй:
+```python
+mod.delimit = {'NORMAL', 'UV', 'SEAM', 'SHARP'}
+mod.use_collapse_triangulate = False
+```
+
+Без `delimit` DECIMATE коллапсит рёбра поперёк UV-швов и границ нормалей, создавая растянутые треугольники с битыми нормалями. В Godot это выглядит как «прозрачность» модели (артефакты normal map из-за растянутых UV).
+
+### Режимы декормации
+- **REMESH (VOXEL)** — для одиночных больших мешей (boulder 66K→13.5K): `--remesh`. Voxel Remesh + Smart UV Project + Normal Bake. Лучшее качество на одиночных мешах.
+- **DECIMATE (Collapse + delimit)** — для мульти-мешей (rock_moss 63K→15K, 6 объектов): режим по умолчанию. Single-pass с `delimit = {'NORMAL', 'UV', 'SEAM', 'SHARP'}`.
+- **Multi-pass** (устарел): итеративные проходы — не нужны.
+
+### Важные ограничения
+- DECIMATE НЕЛЬЗЯ использовать на одиночных мешах >20K — creates stretched triangles с битыми нормалями ("прозрачность")
+- REMESH(voxel) теряет UV и материалы — нужно пересоздавать их через Smart UV Project + сборку материала
+- ARM текстуры (AO/Roughness/Metallic) экспортируются в glTF через `ShaderNodeSeparateColor` (mode=RGB)
+- Blender 5.1: `ShaderNodeSeparateRGB` переименован в `ShaderNodeSeparateColor`
+
+### Запуск
+```
+& "D:\Programs\Blender Foundation\Blender 5.1\blender.exe" --background --python res://Generators/optimize_triangles.py -- <path_to_gltf> [--no-bake] [--no-decimate]
+```
 
 ## 7. Конвейер сборки анимаций (Animation pipeline)
 
@@ -107,3 +137,47 @@ res://Graphics/PlayerModel/
 * **Не редактировать .tscn** вручную — всё генерируется
 * **Не удалять .gdignore** из `raw/` — иначе Godot расплодит PNG мусор при импорте FBX
 * Если нужно принудительно перестроить скин — удалить папку `<skin_name>/` и перезапустить скрипт
+
+## 9. Конвейер сборки пропов (Prop pipeline)
+
+### Как работает `build_env_prop.gd`
+Скрипт конвертирует baked glTF (из `optimize_triangles.py`) в компактный `.tscn` префаб пропа:
+1. Загружает glTF через `GLTFDocument`
+2. Читает `images` из glTF JSON, для каждой текстуры вызывает `load(webp_path)` — получает `CompressedTexture2D` (если есть `.import`) или `ImageTexture` (если нет)
+3. Заменяет текстуры в материалах на загруженные — теперь у них есть `resource_path`
+4. `ResourceSaver.save(mesh)` → текстуры сохраняются как внешние ссылки, не встраиваются
+5. Создаёт `StaticBody3D` + `CollisionShape3D` + Graphics, сохраняет `.tscn`
+
+**Ключевая идея:** без `--import`. `load("file.webp")` в Godot 4 возвращает `ImageTexture` даже без `.import` файла. `ResourceSaver` видит `resource_path` и сохраняет компактно.
+
+### Запуск
+```
+& "D:\Programs\Godot\Godot_v4.7-stable\Godot_v4.7-stable_win64_console.exe" --headless -s res://Generators/build_env_prop.gd <prop_name>
+```
+
+### Структура папок
+```
+res://Graphics/Environment/Props/
+  <prop_name>/
+    <prop_name>_4k_baked.gltf   # Выход optimize_triangles.py
+    <prop_name>_4k_baked.bin
+    <texture>.webp              # Текстуры (из glTF или отдельно)
+    <texture>.webp.import       # Создаются Editor при --import (опционально)
+    <prop_name>_mesh_0.res      # Меш с внешними текстурными ссылками (маленький)
+    <prop_name>_mesh_1.res      # Для multi-mesh пропов
+    <prop_name>.tscn            # Готовый префаб
+```
+
+### Порядок добавления нового пропа
+1. Положить baked glTF в `res://Graphics/Environment/Props/<prop_name>/` (через `optimize_triangles.py`)
+2. Запустить `build_env_prop.gd <prop_name>`
+3. Добавить запись в `build_main_arena.gd`
+4. Запустить `build_main_arena.gd` для обновления главной сцены
+5. Запустить игру для проверки
+
+### Запрет на `--import` (важно)
+* `--import` на весь проект сканирует все папки, включая `raw/` с тысячами файлов → 15-30 минут
+* Все `raw/` папки защищены `.gdignore` — Editor их не видит
+* `build_env_prop.gd` не требует `--import` вообще — использует runtime `load()` для WebP
+* Если текстуры уже имеют `.import` файлы (были импортированы ранее), `load()` вернёт `CompressedTexture2D` (лучше)
+* Если `.import` нет — `load()` вернёт `ImageTexture` (тоже работает, чуть дольше загрузка)
