@@ -1,17 +1,28 @@
 extends SceneTree
 ## Ретаргет НЕЙРО-анимаций kimodo.cpp (SOMA 30 суставов) → mixamorig_ (скин Ch24).
-## Источник: D:/nn/kimodo.cpp/out/<clip>/root_positions.f32 (frames×3, метры,
-## Y-up, лицо +Z) + local_rotations_xyzw.f32 (frames×30×4, XYZW, локальные),
-## fps=30. Скелет SOMA30 — копия из kimodo.cpp src/skeleton.hpp (T-поза,
-## rest-повороты = identity, офсеты родитель-локальные).
+## Источник: Graphics/Animations/neuro_soma/<clip>/{root_positions,local_rotations_xyzw}.f32
+## (frames×3 + frames×30×4, XYZW, локальные, fps=30).
 ##
-## Математика та же, что починила UAL-ретаргет (инвариант 87°→1.47°):
-## C_m = mix_rest(m) · G_ref(m)^-1, где G_ref — нейтраль ИСТОЧНИКА = кадр 0
-## клипа (полный FK: root_positions + кваты; в нейтрали q_local = rest
-## ЛОКАЛЬНО точно, позиция Hips = rest_скина + дельты root_positions).
-## ⚠ Нейтраль от аналитической T-позы НЕЛЬЗЯ: офсеты не содержат высоты
-## корня (~0.97 м в отдельном канале) — C_Hips двоил её, фигура «прыгала
-## наверх и висела» на каждом касте (баг 17.11.26, починен кадром-0).
+## ── МАТЕМАТИКА (v2, 17.11.26) ──────────────────────────────────────────────
+## У SOMA rest-повороты = identity ⇒ её T-поза лежит в мировых осях, а FK
+## локальных кватов даёт мировую ориентацию кости G(m,t).basis = Δ_src(m,t) —
+## дельту от T-позы. Отображение на цель — мировая дельта ПОВЕРХ rest-базиса
+## скина (НЕ конъюгация!):
+##     R_out_global(m,t) = Δ_src(m,t) · R_mix_rest_global(m)
+## rest→rest, плоскости и направления движения источника сохраняются точно,
+## roll каждой кости якорится к rest скина (мешь скинена к нему).
+##
+## ⚠ ИСТОРИЯ БАГА (v1, объясняет «кукла/хуйню творит» 17.11.26): формула
+##     L = (C_p·g_p)^-1 · C_m · g_m,  C_m = rest·G_ref^-1
+## давала глобально R_out = R_mix·(G_ref^-1·g) — дельта источника,
+## КОНЪЮГИРОВАННАЯ в оси кости цели (R_mix слева). При G_ref = кадр 0
+## (естественная поза) плоскости движений ломались mid-клипа: прицел обеими
+## руками перед собой (RAW z+0.68) → на скине руки ±0.72 в стороны (Т-поза);
+## замах правой (RAW y1.62) → кисть на ЛЕВОЙ стороне скина (x+0.40). Плюс
+## t=0 = rest = Т-поза скина — на старте КАЖДОГО каста руки мигом раскидывало
+## в стороны (V-позы на 3.9s/6.8s/9.7s в видео юзера). «Инвариант t=0=rest»
+## проверял именно этот баг. Правильная нейтральная пара — Т-поза↔Т-поза,
+## и маппинг — через мировые дельты (источник слева), а не конъюгацию.
 ##
 ## side_flip: если SOMA-«Left» на другой стороне X, чем mixamo-Left — пары
 ## свапаются автоматически (лог SIDE CHECK).
@@ -24,11 +35,10 @@ const LIB_PATH := "res://Graphics/Animations/shared_animations.res"
 const SOMA_DIR := "res://Graphics/Animations/neuro_soma"
 const FPS := 30.0
 
-## Нейро-клипы: имя в библиотеке → подкаталог out/. ЗЕРКАЛ НЕТ: конъюгация
-## кватернионов (x,-y,-z,w) НЕ переводит rest левой кости в rest правой на
-## mixamo-риге (тест поймал 176.7° на RightShoulder t=0 — «кукла» на _L).
-## Лево/право-варианты генерируются НЕЙРОСЕТЬЮ отдельными промптами
-## (pistol_shoot_l, cast_shoot_b), см. neuro_soma/prompts/.
+## Нейро-клипы: имя в библиотеке → подкаталог neuro_soma/. ЗЕРКАЛ НЕТ:
+## конъюгация (x,-y,-z,w) НЕ переводит rest левой кости в rest правой на
+## mixamo-риге (тест ловил 176.7° на RightShoulder t=0). Лево/право-варианты —
+## отдельные нейро-генерации (pistol_shoot_l, cast_shoot_b), см. prompts/.
 const TASKS := {
 	"Cast_Enter": "cast_enter",
 	"Cast_Loop": "cast_loop",
@@ -41,6 +51,7 @@ const TASKS := {
 }
 
 ## SOMA30 → mixamorig. Листья SOMA (Jaw, глаза, кончики пальцев) не мапятся.
+## ПОРЯДОК ВАЖЕН: родители раньше потомков (обход цепи при построении globals).
 const BONE_MAP := {
 	"Hips": "mixamorig_Hips",
 	"Spine1": "mixamorig_Spine",
@@ -105,9 +116,11 @@ const SOMA_OFFSETS := [
 	Vector3(-3.42907669e-9, -0.0507960932, 0.132841956),
 ]
 
-var mix_rest: Dictionary = {}   # mixamorig имя -> глоб rest скина (player.tscn, SSOT)
-var g_ref: Dictionary = {}      # SOMA сустав -> глоб T-позы (identity-повороты)
-var side_flip := false          # SOMA-«Left» на другой стороне X, чем mixamo-Left
+var mix_rest: Dictionary = {}    # mixamorig имя → глоб rest скина (player.tscn, SSOT)
+var mix_parent: Dictionary = {}  # mixamorig имя → имя родителя ("" у корня)
+var rest_local: Dictionary = {}  # mixamorig имя → локальный rest (origin = длины костей цели)
+var g_ref: Dictionary = {}       # SOMA сустав → глоб T-позы (identity-повороты) — для side-чека
+var side_flip := false           # SOMA-«Left» на другой стороне X, чем mixamo-Left
 
 func _init() -> void:
 	call_deferred("_run")
@@ -121,7 +134,12 @@ func _run() -> void:
 	for i in mix_skel.get_bone_count():
 		var bn: String = mix_skel.get_bone_name(i).replace("mixamorig1_", "mixamorig_")
 		mix_rest[bn] = mix_skel.get_bone_global_rest(i)
+		var pi: int = mix_skel.get_bone_parent(i)
+		mix_parent[bn] = mix_skel.get_bone_name(pi).replace("mixamorig1_", "mixamorig_") if pi >= 0 else ""
 	mix_root.free()
+	for bn in mix_rest:
+		var pn: String = mix_parent[bn]
+		rest_local[bn] = mix_rest[pn].inverse() * mix_rest[bn] if pn != "" else mix_rest[bn]
 	_build_soma_neutral()
 
 	var soma_left_x: float = g_ref["LeftHand"].origin.x
@@ -176,9 +194,7 @@ func _retarget_one(clip_dir: String, out_name: String) -> Animation:
 
 	# Шов лупа: зонд показал до 43° на кисти между кадром 0 и последним.
 	# Кроссфейд хвоста на ОБРАТНУЮ голову: out[L+i] = slerp(M(L+i), M(N-1-i), w),
-	# w→1 ⇒ последний кадр = M(0) ТОЧНО (нулевой поп на завороте; обратный
-	# микро-путь кисти за 0.33с канала незаметен). Цели берутся из головы
-	# (< L), мутация in-place безопасна.
+	# w→1 ⇒ последний кадр = M(0) ТОЧНО (нулевой поп на завороте лупа).
 	if out_name == "Cast_Loop" and frames >= 12:
 		var n_fade := mini(10, frames / 4)
 		var head := frames - n_fade
@@ -204,80 +220,69 @@ func _retarget_one(clip_dir: String, out_name: String) -> Animation:
 	var emap: Dictionary = {}
 	for m in BONE_MAP:
 		var key: String = _mirror_name(m) if side_flip else m
-		emap[key] = {"target": BONE_MAP[m], "soma": m}
+		emap[key] = BONE_MAP[m]
 
-	# Нейтраль клипа = кадр 0 ЭТОГО клипа (философия UAL-фикса «куклы»).
-	# ЛОВЕШКА, на которой персонаж «прыгал наверх»: аналитическая T-поза
-	# SOMA имеет Hips в (0,0,0) — высота бёдер (~0.97 м) живёт в ОТДЕЛЬНОМ
-	# канале root_positions и в офсеты НЕ входит. C_Hips от такой нейтрали
-	# ДВОИЛ высоту (rest_скина + полные 0.97 м) — фигура взлетала на касте.
-	# Кадр 0 содержит и высоту, и стартовую позу ⇒ на t=0 выход = rest
-	# скина точно, позиция бёдер — только дельты root_positions.
-	var g0: Dictionary = {}
-	_soma_fk(roots, rots, 0, g0)
-
-	# C_m и родители (ключи — в пространстве данных).
-	var C: Dictionary = {}
-	var parent_key: Dictionary = {}
-	for key in emap:
-		var soma_name: String = emap[key]["soma"]
-		C[key] = mix_rest[emap[key]["target"]] * g0[soma_name].inverse()
-		var pi: int = SOMA_PARENTS[SOMA_NAMES.find(soma_name)]
-		var pname: String = SOMA_NAMES[pi] if pi >= 0 else ""
-		parent_key[key] = (_mirror_name(pname) if side_flip else pname)
-
-	var out := Animation.new()
-	out.length = frames / FPS
-	out.loop_mode = Animation.LOOP_LINEAR if out_name == "Cast_Loop" else Animation.LOOP_NONE
-
-	var rot_track: Dictionary = {}  # key -> индекс трека
-	var pos_track := -1
-	var g: Dictionary = {}          # SOMA глобальные FK кадра
-	var t_out: Dictionary = {}      # key -> глоб в целевом пространстве
+	# ГЛАВНОЕ: глоб базис цели = Δ_src · R_mix_rest (источник СЛЕВА —
+	# мировые плоскости движения; R_mix·Δ = конъюгация = баг v1).
+	var root0 := Vector3(roots[0], roots[1], roots[2])
+	var hips_rest_g: Transform3D = mix_rest["mixamorig_Hips"]
+	var g: Dictionary = {}     # SOMA глобальные FK кадра
+	var g_out: Dictionary = {} # цель-пространство глобалы уже обработанных костей
 	var hand_lo := Vector3(1e9, 1e9, 1e9)
 	var hand_hi := Vector3(-1e9, -1e9, -1e9)
 	var hips_lo := 1e9
 	var hips_hi := -1e9
 	var hips_rest_y: float = mix_rest["mixamorig_Hips"].origin.y
 
+	var out := Animation.new()
+	out.length = frames / FPS
+	out.loop_mode = Animation.LOOP_LINEAR if out_name == "Cast_Loop" else Animation.LOOP_NONE
+	var rot_track: Dictionary = {}  # ключ → индекс трека
+	var pos_track := -1
+
 	for k in frames:
-		var t := k / FPS
 		_soma_fk(roots, rots, k, g)
+		var root_t := Vector3(roots[k * 3], roots[k * 3 + 1], roots[k * 3 + 2])
+		for key in emap:  # вставочный порядок = родители раньше потомков
+			var target: String = emap[key]
+			var gt := Transform3D()
+			gt.basis = g[key].basis * mix_rest[target].basis
+			var pkey: String = parent_key(key)   # родитель в SOMA-пространстве
+			var pbone: String = emap.get(pkey, "")
+			if key == "Hips":
+				# Высота = rest скина + только ДЕЛЬТЫ root_positions (статичные
+				# 0.97 м источника НЕ переносим — они уже в rest скина).
+				gt.origin = hips_rest_g.origin + (root_t - root0)
+				if pos_track < 0:
+					pos_track = out.add_track(Animation.TYPE_POSITION_3D)
+					out.track_set_path(pos_track, NodePath("Skeleton3D:" + target))
+				out.track_insert_key(pos_track, k / FPS, gt.origin)
+				hips_lo = minf(hips_lo, gt.origin.y)
+				hips_hi = maxf(hips_hi, gt.origin.y)
+			else:
+				# Длина кости — целевая: origin = глоб родителя · rest-локал цели.
+				# (g_out ключится SOMA-ключами — как emap.)
+				if pkey == "" or not g_out.has(pkey):
+					_fail("битая иерархия: у %s нет родителя в карте" % key)
+					return null
+				gt.origin = (g_out[pkey] * rest_local[target]).origin
+			g_out[key] = gt
+			# Локальный кват цели = (глоб родителя)^-1 · глоб кости.
+			var lb: Basis = gt.basis if pkey == "" else (g_out[pkey].basis.inverse() * gt.basis)
+			if not rot_track.has(key):
+				rot_track[key] = out.add_track(Animation.TYPE_ROTATION_3D)
+				out.track_set_path(rot_track[key], NodePath("Skeleton3D:" + target))
+			out.track_insert_key(rot_track[key], k / FPS, lb.get_rotation_quaternion().normalized())
 		var lh: Vector3 = g["LeftHand"].origin
 		var rh: Vector3 = g["RightHand"].origin
 		hand_lo = hand_lo.min(lh).min(rh)
 		hand_hi = hand_hi.max(lh).max(rh)
-		# Топ-даун (SOMA_NAMES упорядочены родитель-раньше-потомка; BONE_MAP тоже).
-		for key in emap:
-			var soma_name: String = emap[key]["soma"]
-			var pk: String = parent_key[key]
-			var g_soma: Transform3D = g[soma_name]
-			var c_self: Transform3D = C[key]
-			var gt: Transform3D
-			if pk == "" or not C.has(pk):
-				gt = c_self * g_soma
-			else:
-				gt = (C[pk] * g[pk]).inverse() * c_self * g_soma
-			t_out[key] = gt
-		for key in emap:
-			if not rot_track.has(key):
-				rot_track[key] = out.add_track(Animation.TYPE_ROTATION_3D)
-				out.track_set_path(rot_track[key], NodePath("Skeleton3D:" + emap[key]["target"]))
-			out.track_insert_key(rot_track[key], t, t_out[key].basis.get_rotation_quaternion().normalized())
-			if emap[key]["soma"] == "Hips":
-				if pos_track < 0:
-					pos_track = out.add_track(Animation.TYPE_POSITION_3D)
-					out.track_set_path(pos_track, NodePath("Skeleton3D:" + emap[key]["target"]))
-				var o: Vector3 = t_out[key].origin
-				hips_lo = minf(hips_lo, o.y)
-				hips_hi = maxf(hips_hi, o.y)
-				out.track_insert_key(pos_track, t, o)
 
 	if out.get_track_count() == 0:
 		print("RETARGET FAIL: пустой выход для " + out_name)
 		return null
-	# Инвариант высоты (регресс «прыгает наверх»): бёдра не должны уходить
-	# от rest-высоты скина дальше 0.15 м — иначе клип левитирует.
+	# Инвариант высоты (регресс «прыгает наверх»): бёдра не дальше 0.15 м от
+	# rest-высоты скина — иначе клип левитирует.
 	if maxf(absf(hips_lo - hips_rest_y), absf(hips_hi - hips_rest_y)) > 0.15:
 		print("  HIPS WARN: y %.2f..%.2f при rest %.2f — клип левитирует!" % [hips_lo, hips_hi, hips_rest_y])
 	else:
@@ -298,15 +303,22 @@ func _soma_fk(roots: PackedFloat32Array, rots: PackedFloat32Array, frame: int, g
 		else:
 			g[SOMA_NAMES[j]] = g[SOMA_NAMES[pi]] * Transform3D(Basis(q), SOMA_OFFSETS[j])
 
-## Аналитическая T-поза SOMA — ТОЛЬКО для side-чека (знак X кисти);
-## нейтраль ретаргета — кадр 0 клипа (см. _retarget_one).
+## Родитель СОМЕДСКОГО ключа в пространстве данных (с учётом side_flip).
+func parent_key(key: String) -> String:
+	var pi: int = SOMA_PARENTS[SOMA_NAMES.find(key)]
+	var pname: String = SOMA_NAMES[pi] if pi >= 0 else ""
+	return _mirror_name(pname) if side_flip else pname
+
+## Аналитическая T-поза SOMA — ТОЛЬКО для side-чека (знак X кисти).
+## ⚠ НЕ нейтраль ретаргета: её офсеты не содержат высоты бёдер (~0.97 м
+## живёт в root_positions) — см. историю бага в шапке.
 func _build_soma_neutral() -> void:
 	g_ref.clear()
 	for j in SOMA_NAMES.size():
 		var local := Transform3D(Basis.IDENTITY, SOMA_OFFSETS[j])
 		var pi: int = SOMA_PARENTS[j]
 		g_ref[SOMA_NAMES[j]] = g_ref[SOMA_NAMES[pi]] * local if pi >= 0 else local
-	print("NEUTRAL REF: %d суставов SOMA (T-поза из офсетов)" % g_ref.size())
+	print("NEUTRAL REF: %d суставов SOMA (T-поза из офсетов, только side-check)" % g_ref.size())
 
 static func _mirror_name(n: String) -> String:
 	return n.replace("Left", "@TMP@").replace("Right", "Left").replace("@TMP@", "Right")
