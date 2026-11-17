@@ -49,7 +49,12 @@ func _ready():
 func take_damage(amount: int):
     if is_dead:
         return
-        
+
+    # Боевой музон: любой урон (в нас или от нас) — сигнал MusicDirector
+    var md = get_node_or_null("/root/MusicDirector")
+    if md:
+        md.note_combat()
+
     current_health -= amount
     
     if current_health <= 0:

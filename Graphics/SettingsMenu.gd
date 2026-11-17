@@ -1,15 +1,19 @@
 extends CanvasLayer
 
-## Окно настроек (автолоад): слайдер общей громкости + кнопка тест-звука.
-## Открытие/закрытие — F2. Громкость через AudioManager (Master-шина),
-## значение сохраняется в user://settings.cfg.
+## Окно настроек (автолоад): три ползунка громкости (общая/эффекты/музыка)
+## + кнопка тест-звука. Открытие/закрытие — F2. Громкости через AudioManager
+## (шины Master/SFX/Music), значения сохраняются в user://settings.cfg.
 ## UI строится кодом по образцу SkillMenu (без .tscn).
 
 var is_open: bool = false
 var _root: Control
 var _panel: PanelContainer
-var _slider: HSlider
-var _value_label: Label
+var _master_slider: HSlider
+var _master_label: Label
+var _sfx_slider: HSlider
+var _sfx_label: Label
+var _music_slider: HSlider
+var _music_label: Label
 
 const TEST_SOUND := "res://Audio/SFX/neural_ui_click.res"
 
@@ -50,29 +54,23 @@ func _build_ui() -> void:
 
     vbox.add_child(HSeparator.new())
 
-    var vol_row := HBoxContainer.new()
-    vol_row.add_theme_constant_override("separation", 10)
-    vbox.add_child(vol_row)
+    var master := _add_volume_row(vbox, "Общая громкость:")
+    _master_slider = master[0]
+    _master_label = master[1]
+    _master_slider.value_changed.connect(_on_master_changed)
 
-    var vol_caption := Label.new()
-    vol_caption.text = "Общая громкость:"
-    vol_row.add_child(vol_caption)
+    var sfx := _add_volume_row(vbox, "Эффекты:")
+    _sfx_slider = sfx[0]
+    _sfx_label = sfx[1]
+    _sfx_slider.value_changed.connect(_on_sfx_changed)
 
-    _value_label = Label.new()
-    _value_label.text = "100%"
-    vol_row.add_child(_value_label)
-
-    _slider = HSlider.new()
-    _slider.min_value = 0
-    _slider.max_value = 100
-    _slider.step = 1
-    _slider.value = 100
-    _slider.custom_minimum_size = Vector2(0, 24)
-    _slider.value_changed.connect(_on_volume_changed)
-    vbox.add_child(_slider)
+    var music := _add_volume_row(vbox, "Музыка:")
+    _music_slider = music[0]
+    _music_label = music[1]
+    _music_slider.value_changed.connect(_on_music_changed)
 
     var test_btn := Button.new()
-    test_btn.text = "Проверить звук"
+    test_btn.text = "Проверить звук (эффекты)"
     test_btn.pressed.connect(_on_test_sound)
     vbox.add_child(test_btn)
 
@@ -83,6 +81,29 @@ func _build_ui() -> void:
     hint.add_theme_font_size_override("font_size", 13)
     hint.modulate = Color(1, 1, 1, 0.6)
     vbox.add_child(hint)
+
+## Строка «подпись: N%» + слайдер под ней. Возвращает [слайдер, подпись-значения].
+func _add_volume_row(vbox: VBoxContainer, caption_text: String) -> Array:
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation", 10)
+    vbox.add_child(row)
+
+    var caption := Label.new()
+    caption.text = caption_text
+    row.add_child(caption)
+
+    var value_label := Label.new()
+    value_label.text = "100%"
+    row.add_child(value_label)
+
+    var slider := HSlider.new()
+    slider.min_value = 0
+    slider.max_value = 100
+    slider.step = 1
+    slider.value = 100
+    slider.custom_minimum_size = Vector2(0, 24)
+    vbox.add_child(slider)
+    return [slider, value_label]
 
 ## _unhandled_input: не сработает, пока GUI занят событиями (печать текста).
 func _unhandled_input(event):
@@ -98,18 +119,36 @@ func _unhandled_input(event):
 
 func _sync_from_audio() -> void:
     var audio = get_node_or_null("/root/AudioManager")
-    var v: float = audio.master_volume if audio else 1.0
-    _slider.set_value_no_signal(roundf(v * 100.0))
-    _update_value_label()
+    var master: float = audio.master_volume if audio else 1.0
+    var sfx: float = audio.sfx_volume if audio else 1.0
+    var music: float = audio.music_volume if audio else 1.0
+    _master_slider.set_value_no_signal(roundf(master * 100.0))
+    _sfx_slider.set_value_no_signal(roundf(sfx * 100.0))
+    _music_slider.set_value_no_signal(roundf(music * 100.0))
+    _update_labels()
 
-func _on_volume_changed(v: float) -> void:
-    _update_value_label()
+func _on_master_changed(_v: float) -> void:
     var audio = get_node_or_null("/root/AudioManager")
     if audio:
-        audio.set_master_volume(v / 100.0)
+        audio.set_master_volume(_master_slider.value / 100.0)
+    _update_labels()
 
-func _update_value_label() -> void:
-    _value_label.text = str(int(roundf(_slider.value))) + "%"
+func _on_sfx_changed(_v: float) -> void:
+    var audio = get_node_or_null("/root/AudioManager")
+    if audio:
+        audio.set_sfx_volume(_sfx_slider.value / 100.0)
+    _update_labels()
+
+func _on_music_changed(_v: float) -> void:
+    var audio = get_node_or_null("/root/AudioManager")
+    if audio:
+        audio.set_music_volume(_music_slider.value / 100.0)
+    _update_labels()
+
+func _update_labels() -> void:
+    _master_label.text = str(int(roundf(_master_slider.value))) + "%"
+    _sfx_label.text = str(int(roundf(_sfx_slider.value))) + "%"
+    _music_label.text = str(int(roundf(_music_slider.value))) + "%"
 
 func _on_test_sound() -> void:
     var audio = get_node_or_null("/root/AudioManager")

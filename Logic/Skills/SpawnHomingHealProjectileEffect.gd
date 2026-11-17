@@ -7,6 +7,9 @@ const ProjectilePool = preload("res://Logic/Skills/ProjectilePool.gd")
 ## Спавн от кисти (план 17.11.26 Шаг 3) — context.cast_origin (лево/право
 ## при alternate_hands решает SpellCasterComponent).
 @export var spawn_from_hand: bool = false
+## Задержка спавна от нажатия (с), 0 = инстант: снаряд рождается в момент
+## выброса руки в клипе, из ЖИВОЙ позиции кисти (Effect.hand_pos).
+@export var spawn_delay: float = 0.0
 
 func apply(caster: Node, context: Dictionary) -> void:
     if not projectile_scene:
@@ -15,6 +18,16 @@ func apply(caster: Node, context: Dictionary) -> void:
     var target = context.get("target_node")
     if not target:
         return
+
+    if spawn_delay > 0.0:
+        await caster.get_tree().create_timer(spawn_delay).timeout
+        # За время ожидания кастер/цель могли умереть.
+        if not is_instance_valid(caster) or not caster.is_inside_tree():
+            return
+        if not is_instance_valid(target):
+            return
+        if spawn_from_hand:
+            context["cast_origin"] = hand_pos(caster, context.get("hand", "Right"))
 
     var tree = caster.get_tree()
     var parent = tree.current_scene if tree and tree.current_scene else caster.get_parent()

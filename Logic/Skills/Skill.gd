@@ -22,6 +22,10 @@ extends Resource
 ## Чередование рук при инста-касте (сердечко: лево/право, вердикт 17.11.26).
 ## Левая версия анимации = <cast_anim>_L (зеркало генерит retarget_ual_anims).
 @export var alternate_hands: bool = false
+## Рука каста ("Right"/"Left"): откуда вылетает снаряд. Должна совпадать с
+## рукой cast_anim (Cast_Shoot — левая, Throw — правая). alternate_hands
+## перекрывает это поле (попеременно Л/П).
+@export var cast_hand: String = "Right"
 
 func execute(caster: Node, context: Dictionary) -> void:
     for eff in effects:

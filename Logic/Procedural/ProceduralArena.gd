@@ -106,21 +106,32 @@ func _add_nature():
 	trunk_mat.albedo_color = Color(0.35, 0.20, 0.08)
 	trunk_mesh.material = trunk_mat
 
-	var rock_mesh = SphereMesh.new()
-	rock_mesh.radius = 0.4
-	rock_mesh.height = 0.3
-	var rock_mat = StandardMaterial3D.new()
-	rock_mat.albedo_color = Color(0.45, 0.40, 0.35)
-	rock_mesh.material = rock_mat
+	# Камни: нейро-проп (trellis → префаб). Фолбэк — старая сфера, если ресурса нет.
+	var rock_mesh: Mesh = load("res://Graphics/Environment/Props/test_stone/test_stone_mesh_0.res")
+	if rock_mesh == null:
+		var sphere = SphereMesh.new()
+		sphere.radius = 0.4
+		sphere.height = 0.3
+		var rock_mat = StandardMaterial3D.new()
+		rock_mat.albedo_color = Color(0.45, 0.40, 0.35)
+		sphere.material = rock_mat
+		rock_mesh = sphere
 
 	var rng = RandomNumberGenerator.new()
 
 	_add_scatter_group("Trees", tree_mesh, 200, rng, half, 0.3, 25.0)
 	_add_scatter_group("Trunks", trunk_mesh, 200, rng, half, 0.3, 25.0)
-	_add_scatter_group("Rocks", rock_mesh, 150, rng, half, 0.6, 20.0)
+	# Камни: всегда масштабируем (разные размеры — вопрос юзера), диапазон шире деревьев.
+	_add_scatter_group("Rocks", rock_mesh, 150, rng, half, 0.6, 20.0, 0.5, 2.5, true)
 
-func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomNumberGenerator, half: float, spacing: float, camp_radius: float):
+func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomNumberGenerator, half: float, spacing: float, camp_radius: float, scale_lo := 0.8, scale_hi := 1.3, always_scale := false):
 	rng.seed = randi()
+
+	# Сажаем проп за низ AABB: origin меша бывает в центре (камень trellis),
+	# без подъёма проп уходит под землю тем глубже, чем больше масштаб.
+	# 10% высоты оставляем под землёй — посадка в рельеф без «парения».
+	var aabb := mesh.get_aabb()
+	var lift := -minf(aabb.position.y, 0.0) - aabb.size.y * 0.1
 
 	var positions = []
 	for i in count * 3:
@@ -148,18 +159,39 @@ func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomN
 	mm.instance_count = positions.size()
 	mm.mesh = mesh
 
+	var instance_transforms: Array[Transform3D] = []
 	for i in positions.size():
+		var s := 1.0
+		if always_scale or rng.randf() > 0.5:
+			s = rng.randf_range(scale_lo, scale_hi)
 		var t = Transform3D.IDENTITY
-		t.origin = positions[i]
+		t.origin = positions[i] + Vector3(0, lift * s, 0)
 		t.basis = t.basis.rotated(Vector3.UP, rng.randf_range(0, PI * 2))
-		if rng.randf() > 0.5:
-			t.basis = t.basis.scaled(Vector3(rng.randf_range(0.8, 1.3), rng.randf_range(0.8, 1.3), rng.randf_range(0.8, 1.3)))
+		if s != 1.0:
+			t.basis = t.basis.scaled(Vector3(s, s, s))
 		mm.set_instance_transform(i, t)
+		instance_transforms.append(t)
 
 	var mmi = MultiMeshInstance3D.new()
 	mmi.name = group_name
 	mmi.multimesh = mm
 	add_child(mmi)
+
+	# Коллизия: MultiMesh сам по себе не коллизится (юзер ходил сквозь
+	# деревья/камни). Один StaticBody на группу, у каждого инстанса —
+	# цилиндр из AABB пропа (дешёвая форма, масштаб наследуется от инстанса).
+	var body := StaticBody3D.new()
+	body.name = group_name + "_Body"
+	add_child(body)
+	var shape := CylinderShape3D.new()
+	shape.radius = maxf(maxf(aabb.size.x, aabb.size.z) * 0.45, 0.1)
+	shape.height = maxf(aabb.size.y * 0.9, 0.2)
+	var aabb_center := aabb.position + aabb.size * 0.5
+	for t in instance_transforms:
+		var cs := CollisionShape3D.new()
+		cs.shape = shape
+		cs.transform = t * Transform3D(Basis.IDENTITY, aabb_center)
+		body.add_child(cs)
 
 func _add_wfc_camp():
 	var modules = WFCModuleDB.get_modules()

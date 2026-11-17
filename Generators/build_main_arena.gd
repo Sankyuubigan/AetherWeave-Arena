@@ -71,6 +71,16 @@ func _init():
 	root.add_child(friendly_dummy)
 	friendly_dummy.owner = root
 
+	# Стоячий зелёный (заявка 17.11.26): мишень для отхила сердечком —
+	# не бегает (walks=false), 10% HP + гниение как у бегуна.
+	var friendly_still = dummy_scene.instantiate()
+	friendly_still.position = Vector3(-11, 1, 10)
+	friendly_still.name = "FriendlyDummyStill"
+	friendly_still.set_script(load("res://Logic/FriendlyDummy.gd"))
+	friendly_still.set("walks", false)
+	root.add_child(friendly_still)
+	friendly_still.owner = root
+
 	var prop_paths = {
 		"Boulder": { "path": "res://Graphics/Environment/Props/boulder_01/boulder_01.tscn", "pos": Vector3(5, 0, -3), "scale": Vector3(1, 1, 1) },
 		"RockMoss": { "path": "res://Graphics/Environment/Props/rock_moss_set_01/rock_moss_set_01.tscn", "pos": Vector3(-5, 0, -3), "scale": Vector3(0.8, 0.8, 0.8) }

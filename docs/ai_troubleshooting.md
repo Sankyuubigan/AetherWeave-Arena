@@ -1,4 +1,4 @@
-# AI Troubleshooting & Godot 4.7 Best Practices
+# AI Troubleshooting & Godot 4.x Best Practices (актуально для 4.8-beta3)
 
 Этот файл содержит список критических ошибок, которые были допущены ранее. Внимательно проверяй свой код по этому чеклисту ПЕРЕД тем, как отчитываться о готовности.
 
@@ -10,14 +10,14 @@
 * **Позиционирование:** НИКОГДА не пытайся изменить `global_position` у инстанцированной сцены до того, как добавишь её в дерево. 
   * **ПРАВИЛЬНО:** `add_child(fireball)` -> `fireball.global_position = ...`
 
-## 3. Ввод (Input) в Godot 4.7
+## 3. Ввод (Input) в Godot 4.x
 * **Математика кнопок:** Вычитание булевых значений (`bool - bool`) в Godot 4.x запрещено и вызывает Parse Error.
   * **ПРАВИЛЬНО:** `int(Input.is_key_pressed(KEY_D)) - int(Input.is_key_pressed(KEY_A))` или используй `Input.get_axis()`.
 * **Мышь и Клавиатура:** Не путай `ui_accept` с кликом мыши. Для ЛКМ проверяй `event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT`.
 * **Регистрация Input-экшенов:** Не пытайся вручную прописывать сложный JSON для кастомных инпутов прямо в `project.godot`. Делай это кодом через `InputMap.add_action()` при инициализации игры (в синглтоне/автозагрузке).
 
 ## 4. Логирование и Терминал (PowerShell / CMD)
-* **Настройки логов:** Не пытайся прописывать `debug/settings/stdout/print_to_file` в `project.godot`, в 4.7 формат другой. 
+* **Настройки логов:** Не пытайся прописывать `debug/settings/stdout/print_to_file` в `project.godot`, в 4.x формат другой. 
 * **PowerShell:** Не используй одновременно `-RedirectStandardOutput` и `-RedirectStandardError` в `Start-Process`, это вызывает краш в PowerShell 5.1. 
   * **ПРАВИЛЬНО (CMD-style):** Используй перенаправление потоков через `> log.txt 2>&1` при обычном вызове экзешника.
 

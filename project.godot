@@ -23,6 +23,8 @@ config/features=PackedStringArray("4.8")
 
 Logger="*res://Graphics/Logger.gd"
 AudioManager="*res://Graphics/AudioManager.gd"
+MusicDirector="*res://Graphics/MusicDirector.gd"
+FpsCounter="*res://Graphics/FpsCounter.gd"
 TeleportMenu="*res://Graphics/TeleportMenu.gd"
 SettingsMenu="*res://Graphics/SettingsMenu.gd"
 

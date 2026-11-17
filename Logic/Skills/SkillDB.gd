@@ -20,8 +20,12 @@ static func get_skills() -> Dictionary:
     if ResourceLoader.exists("res://Scenes/fireball.tscn"):
         proj.projectile_scene = load("res://Scenes/fireball.tscn")
     proj.spawn_from_hand = true  # инста-каст из правой кисти (план 17.11.26)
+    # Спавн в момент ТОЛЧКА единого каст-жеста (cast_push: пик z0.82@k12≈0.4 с;
+    # вердикт 17.11.26: снаряд не должен улетать раньше жеста).
+    proj.spawn_delay = 0.35
     fb.effects.append(proj)
-    # Инста-каст-анимация: бросок из руки (UAL OverhandThrow, ретаргет).
+    # Инста-каст-анимация: единый каст-жест (cast_push, толчок вперёд на
+    # высоте груди — вердикт 17.11.26: «волейбольный замах — это не каст»).
     fb.cast_anim = "Throw"
     # Нейро-звук (Шаг 5.1 A/B): MOSS v2, 48 кГц — Audio/Gen/neural/fireball.wav.
     var fb_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
@@ -125,9 +129,12 @@ static func get_skills() -> Dictionary:
     if ResourceLoader.exists("res://Scenes/ball_lightning.tscn"):
         bl_proj.projectile_scene = load("res://Scenes/ball_lightning.tscn")
     bl_proj.spawn_from_hand = true  # инста-каст из правой кисти (план 17.11.26)
+    # Cast_Shoot: обе руки вытягиваются к k8≈0.27 с — спавн в момент выброса.
+    bl_proj.spawn_delay = 0.3
     ball_lightning.effects.append(bl_proj)
     # Инста-каст: резкий выброс рукой (UAL Pistol_Shoot, ретаргет).
     ball_lightning.cast_anim = "Cast_Shoot"
+    ball_lightning.cast_hand = "Left"  # снаряд из анимированной (левой) кисти
     # Нейро-звук v2 (17.11.26 вердикт: тесла-треск с вибрациями) —
     # Audio/Gen/neural/neural_ball_lightning.wav.
     var bl_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
@@ -149,6 +156,9 @@ static func get_skills() -> Dictionary:
     if ResourceLoader.exists("res://Scenes/heart_projectile.tscn"):
         h_proj.projectile_scene = load("res://Scenes/heart_projectile.tscn")
     h_proj.spawn_from_hand = true  # сердце вылетает из кисти
+    # Спавн в момент «отпуска» жеста: конец Enter-подъёма, старт Exit-спада
+    # склейки Heart_Cast (0.533 с) → 0.55 с.
+    h_proj.spawn_delay = 0.55
     heart.effects.append(h_proj)
 
     var h_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
@@ -163,9 +173,10 @@ static func get_skills() -> Dictionary:
     ]
     h_sound.volume_db = 0.0  # громкость выровнена K-нормализацией (LUFS)
     heart.effects.append(h_sound)
-    # Инста-каст ОДНОЙ рукой с ЧЕРЕДОВАНИЕМ лево/право (вердикт 17.11.26):
-    # Pistol_Shoot / зеркальный Pistol_Shoot_L (ретаргет UAL).
-    heart.cast_anim = "Pistol_Shoot"
+    # Вердикт 17.11.26: каст = Spell_Simple_Enter + Spell_Simple_Exit (UAL),
+    # склеенные в Heart_Cast (левая рука); Heart_Cast_L — иерархическое зеркало
+    # (Generators/build_heart_cast.gd). Спам = поочерёдно лево/право.
+    heart.cast_anim = "Heart_Cast"
     heart.alternate_hands = true
     _skills["heart_heal"] = heart
 
@@ -178,6 +189,13 @@ static func get_skills() -> Dictionary:
     beam.max_range = 100.0
     var hitscan = preload("res://Logic/Skills/SpawnHitscanEffect.gd").new()
     hitscan.damage = 35
+    # Вердикт 17.11.26 №2 («груз толкает»): Push_Loop не подошёл — луч бьёт
+    # резким выбросом ЛЕВОЙ ладони (Cast_Shoot = Spell_Simple_Shoot); cast_hand
+    # = Left, чтобы луч шёл из анимированной кисти.
+    beam.cast_anim = "Cast_Shoot"
+    beam.cast_hand = "Left"
+    hitscan.spawn_from_hand = true
+    hitscan.spawn_delay = 0.3  # выброс Cast_Shoot ≈0.27 с
     beam.effects.append(hitscan)
     # Нейро-звук (17.11.26 вердикт: нейро лучше, старый лазер удалён).
     var beam_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()

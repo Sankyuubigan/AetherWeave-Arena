@@ -14,3 +14,9 @@ export_presets.cfg
 /.external_meshes
 /tasks
 /extension_api.json
+
+# Heavy local assets & temp
+/_tmp_probe/
+/tools/
+/game_live*.log
+/game_live*.err.log

@@ -111,6 +111,43 @@ def bake_normal_map(lp_obj, hp_obj, nodes, links, bsdf):
         print(f"    Bake FAILED: {e}")
 
 
+def bake_diffuse_map(lp_obj, hp_obj, nodes, links, bsdf):
+    """Diffuse-бейк (только Color) с HP на LP: альбедо для новых UV после REMESH."""
+    img_name = f"{lp_obj.name}_baked_diff"
+    baked_img = bpy.data.images.new(
+        name=img_name, width=BAKE_IMAGE_SIZE, height=BAKE_IMAGE_SIZE, alpha=False
+    )
+    # sRGB по умолчанию — для альбедо это правильно.
+
+    tex_node = nodes.new('ShaderNodeTexImage')
+    tex_node.location = (-400, 800)
+    tex_node.image = baked_img
+    tex_node.select = True
+    nodes.active = tex_node
+    links.new(tex_node.outputs['Color'], bsdf.inputs['Base Color'])
+
+    bpy.ops.object.select_all(action='DESELECT')
+    hp_obj.select_set(True)
+    lp_obj.select_set(True)
+    bpy.context.view_layer.objects.active = lp_obj
+
+    bpy.context.view_layer.objects.active = lp_obj
+
+    bpy.context.scene.render.bake.use_selected_to_active = True
+    bpy.context.scene.render.bake.use_pass_direct = False
+    bpy.context.scene.render.bake.use_pass_indirect = False
+    bpy.context.scene.render.bake.use_pass_color = True
+    bpy.context.scene.render.bake.cage_extrusion = 0.01
+    bpy.context.scene.render.bake.max_ray_distance = 0.5
+    bpy.context.scene.render.bake.margin = 8
+    try:
+        bpy.ops.object.bake(type='DIFFUSE')
+        baked_img.pack()
+        print(f"    Diffuse baked OK")
+    except Exception as e:
+        print(f"    Diffuse bake FAILED: {e}")
+
+
 def process_model(filepath, output_dir, skip_decimate=False):
     base_name = os.path.splitext(os.path.basename(filepath))[0]
     print(f"\n{'='*60}")
@@ -218,6 +255,10 @@ def process_model(filepath, output_dir, skip_decimate=False):
                 bpy.context.scene.cycles.device = 'GPU'
                 mat, nodes, links, bsdf = build_material_with_arm(obj, tex_diff, tex_rough)
                 bake_normal_map(obj, hp_coll.objects[0], nodes, links, bsdf)
+                # REMESH создаёт НОВЫЕ UV (Smart Project) — старое альбедо на них
+                # не ложится. Переносим цвет с высокополигональника diffuse-бейком,
+                # иначе материал уходит в белый (гость: камень trellis «Mesh_0»).
+                bake_diffuse_map(obj, hp_coll.objects[0], nodes, links, bsdf)
             else:
                 ratio = target_for_mesh / current_tris
                 if ratio >= 1.0:

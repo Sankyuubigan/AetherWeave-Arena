@@ -1,12 +1,20 @@
 extends SceneTree
 ## Ретаргет каст-анимаций UAL (Unity/UE Mannequin) → mixamorig_ (скин Ch24).
-## Математика: дельта глобальных rest-поз C_x = G_mixamo(x) · G_ual(m)^-1;
-## локальная ротация цели B_x_local(t) = (C_px · A_pm(t))^-1 · C_x · A_m(t),
-## где A_* — глобальные анимированные трансформы mannequin (рекурсия вверх),
-## pm — mannequin-родитель (вся цепочка мапится 1:1). Позиция — только pelvis
-## (длины костей у ригов разные — остальные сохраняют mixamo rest-офсеты).
-## Выход дописывается в shared_animations.res (Cast_Enter/Loop/Shoot/Exit,
-## Throw), Cast_Loop зациклен.
+## v4 (17.11.26): мировая дельта от T-позы, ПЕРЕЗАРЯЖЕННАЯ через S.
+## Диагноз v3 (зонд probe_bone_trace/probe_apply_pred): выход v3 был точен
+## (рантайм == C_b·A_b до миллиметра), но C_b рук малы (5-16°) — кости рук
+## обоих ригов конвентно выровнены, и мировые дельты gT^-1·A (живут в Z-up
+## мире UAL) прикладывались в Y-up мир скина БЕЗ конвертации осей: «вверх»
+## источника (+Z chain) читался как «вперёд» скина (+Z skin) → сторона/фронт
+## менялись местами («зеркало»: источник левую — скин правую).
+## Формула v4 (семантика работающего SOMA-ретаргета R=Δ·R_rest + конвертация):
+##   R_out(b,t) = S·(A_b·gT_b^-1)·S^-1 · mix_rest_b
+##   pelvis     = mix_rest.origin + S·(A_pelvis.origin − gT.origin)
+## где S = rotX(−90°) (chain: up=+Z, fwd=−Y, right=−X → skin: up=+Y, fwd=+Z,
+## right=−X); T-позы ригов совпадают под S (оверли рук/стоп проверен зондами).
+## Нейтраль = эталонная T-поза пака (клип A_TPose), T↔T-пара.
+## Выход: ual_casts_test.res (тестовая библиотека; shared_animations.res
+## занят нейро-клипами, ждущими вердикта юзера).
 ##
 ## Запуск:
 ## & "...Godot_v4.8-beta3_win64_console.exe" --headless -s res://Generators/retarget_ual_anims.gd
@@ -17,21 +25,26 @@ const UAL2 := "res://Graphics/Animations/raw/Universal Animation Library 2[Stand
 ## Idle.fbx расходятся со скином до ~90° на кистях (зонд probe_retarget,
 ## вердикт юзера «перекашивает как куклу») — дельты от Idle давали вывихи.
 const PLAYER_SCENE := "res://Scenes/player.tscn"
-const LIB_PATH := "res://Graphics/Animations/shared_animations.res"
+## v3 (17.11.26): вывод в ТЕСТОВУЮ библиотеку — shared_animations.res занят
+## нейро-клипами (вердикт юзера по ним ещё не дан), не трогаем.
+const LIB_PATH := "res://Graphics/Animations/ual_casts_test.res"
 
 ## Анимации к ретаргету: имя в библиотеке → [файл, имя в UAL, зеркало]
 ## Зеркало (вердикт юзера: сердечко кастует попеременно лево/право): свап
 ## Left↔Right в именах костей + сопряжение кватернионов (w,x,-y,-z) +
 ## X-флип позиции pelvis — стандартная техника зеркалирования скелеток.
+## v3: зеркала _L выпилены (конъюгация не переводит rest Left→Right — баг
+## Задачи 26); юзер просил каст ПОД ПРАВУЮ руку — берём правые клипы.
 const TASKS := {
 	"Cast_Enter": [UAL1, "Armature|Spell_Simple_Enter", false],
 	"Cast_Loop": [UAL1, "Armature|Spell_Simple_Idle_Loop", false],
 	"Cast_Shoot": [UAL1, "Armature|Spell_Simple_Shoot", false],
-	"Cast_Shoot_L": [UAL1, "Armature|Spell_Simple_Shoot", true],
 	"Cast_Exit": [UAL1, "Armature|Spell_Simple_Exit", false],
 	"Throw": [UAL2, "Armature|OverhandThrow", false],
 	"Pistol_Shoot": [UAL1, "Armature|Pistol_Shoot", false],
-	"Pistol_Shoot_L": [UAL1, "Armature|Pistol_Shoot", true],
+	# Двуручный толчок для лазера (beam). ОТДЕЛЬНОЕ имя, чтобы не задевать
+	# сердечки: они играют "Cast_Push" (SOMA) — юзер подберёт анимацию сам.
+	"Beam_Push": [UAL1, "Armature|Push_Loop", false],
 }
 const LOOPED := ["Cast_Loop"]
 
@@ -65,7 +78,8 @@ func _init() -> void:
 	call_deferred("_run")
 
 var mix_rest: Dictionary = {}      # "mixamorig_Hips" -> Transform3D (глоб rest скина)
-var g_ref: Dictionary = {}         # mannequin: кость -> глоб НЕЙТРАЛИ (t=0 Enter)
+var g_refs: Dictionary = {}        # путь FBX -> {кость -> глоб НЕЙТРАЛИ (A_TPose)}
+var g_ref: Dictionary = {}         # нейтраль ТЕКУЩЕГО исходника (см. _retarget_one)
 var ual_skel: Skeleton3D
 var ual_anim: Animation
 var ual_tracks: Dictionary = {}    # bone name -> {"rot": idx, "pos": idx}
@@ -80,11 +94,14 @@ func _run() -> void:
 		var bn: String = mix_skel.get_bone_name(i).replace("mixamorig1_", "mixamorig_")
 		mix_rest[bn] = mix_skel.get_bone_global_rest(i)
 	mix_root.free()
-	_build_neutral_ref()
+	# Нейтраль строится per-исходник в _retarget_one (кэш g_refs).
 
 	var lib = load(LIB_PATH)
-	if lib == null or not (lib is AnimationLibrary):
-		_fail("не загрузилась библиотека " + LIB_PATH)
+	if lib == null:
+		print("RETARGET: библиотеки нет — создаём новую " + LIB_PATH)
+		lib = AnimationLibrary.new()
+	elif not (lib is AnimationLibrary):
+		_fail("не библиотека: " + LIB_PATH)
 		return
 
 	var ok := 0
@@ -133,11 +150,24 @@ func _retarget_one(src_path: String, src_anim_name: String, out_name: String, mi
 	# Индекс треков mannequin по именам костей
 	_index_tracks()
 
-	# Дельты C_x = G_B(x) · G_A_ref(m)^-1 — референс mannequin = НЕЙТРАЛЬ
-	# анимаций (t=0 Enter), НЕ bind: bind-рулы рук UAL развёрнуты на 70–86°
-	# против авторских кадров (зонд probe3) — отсюда была «кукла».
-	var C: Dictionary = {}
-	var M: Dictionary = {}
+	# Нейтраль = эталонная T-поза ПАКА (клип A_TPose, есть в обоих файлах).
+	## v3, корень прошлых провалов: нейтралью был кадр 0 Enter (расслабленная
+	## стойка) → дельта «от стойки», приложенная к T-позе скина, давала
+	## систематический сдвиг всех поз + T-позу-вспышку каждый раз, когда клип
+	## проходит около нейтрали («всё кривые, ужасно»). T↔T-пара (как в
+	## работающем SOMA-ретаргете) даёт чистые мировые дельты движения.
+	## t=0 выходного клипа теперь ЕСТЕСТВЕННЫЙ (расслабленный), НЕ rest —
+	## инвариант «t=0 = rest» для UAL больше не гейт (он цементировал баг).
+	if not g_refs.has(src_path):
+		_build_neutral_ref(src_path)
+	g_ref = g_refs[src_path]
+
+	# v4: W-дельты. S = rotX(−90°): chain (up=+Z, fwd=−Y, right=−X) → skin
+	# (up=+Y, fwd=+Z, right=−X). T-позы ригов совпадают под S (оверли зондов:
+	# S·gT(hand_r)=(−0.74,1.44,−0.07) ≈ rest RightHand (−0.712,1.30,−0.012)).
+	var S_q := Quaternion(Vector3(1, 0, 0), deg_to_rad(-90.0))
+	var S_qi := S_q.inverse()
+	var W_data: Dictionary = {}  # ual bone -> {mix: Quaternion, gT: Quaternion}
 	var name2idx: Dictionary = {}
 	for i in ual_skel.get_bone_count():
 		name2idx[ual_skel.get_bone_name(i)] = i
@@ -145,26 +175,25 @@ func _retarget_one(src_path: String, src_anim_name: String, out_name: String, mi
 		if not mix_rest.has(BONE_MAP[m]) or not g_ref.has(m):
 			print("RETARGET WARN: нет пары костей ", m, "→", BONE_MAP[m])
 			continue
-		C[m] = mix_rest[BONE_MAP[m]] * g_ref[m].inverse()
+		W_data[m] = {
+			"mix": (mix_rest[BONE_MAP[m]] as Transform3D).basis.get_rotation_quaternion(),
+			"gT": (g_ref[m] as Transform3D).basis.get_rotation_quaternion(),
+		}
 	var parent_map: Dictionary = {}
-	for m in C:
+	for m in W_data:
 		var pi: int = ual_skel.get_bone_parent(name2idx[m])
 		var pname: String = ual_skel.get_bone_name(pi) if pi >= 0 else ""
-		parent_map[m] = pname if C.has(pname) else ""
-
-	for m in C:
-		var cp: Transform3D = Transform3D.IDENTITY
-		if parent_map[m] != "":
-			cp = C[parent_map[m]]
-		M[m] = cp.inverse() * C[m]
+		parent_map[m] = pname if W_data.has(pname) else ""
 
 	var out := Animation.new()
 	out.length = ual_anim.length
 	out.loop_mode = Animation.LOOP_LINEAR if out_name in LOOPED else Animation.LOOP_NONE
 
-	for m in C:
+	for m in W_data:
 		var xname: String = _mirror_name(BONE_MAP[m]) if mirror else BONE_MAP[m]
 		var d: Dictionary = ual_tracks.get(m, {})
+		var mix_q: Quaternion = W_data[m]["mix"]
+		var gt_qi: Quaternion = (W_data[m]["gT"] as Quaternion).inverse()
 		if d.has("rot"):
 			var tr: int = d["rot"]
 			var kc := ual_anim.track_get_key_count(tr)
@@ -173,13 +202,21 @@ func _retarget_one(src_path: String, src_anim_name: String, out_name: String, mi
 			var pm_name: String = parent_map[m]
 			for k in kc:
 				var t := ual_anim.track_get_key_time(tr, k)
-				var b_local := _mannequin_global(name2idx[m], t)
+				# W_b = S·(A_b·gT_b⁻¹)·S⁻¹·mix_rest_b — мировая дельта от T-позы,
+				# перезаряженная в мир скина; out_global рантайма = W_b (индукция
+				# по локальной конверсии ниже).
+				var a_q: Quaternion = _mannequin_global(name2idx[m], t).basis.get_rotation_quaternion()
+				var w: Quaternion = (S_q * (a_q * gt_qi) * S_qi * mix_q).normalized()
 				var q: Quaternion
 				if pm_name == "":
-					q = (M[m] * b_local).basis.get_rotation_quaternion()
+					# pelvis: родитель вне карты (UAL root) — Hips корневая кость
+					# скина: её глобаль = трек-локаль
+					q = w
 				else:
-					var b_parent := _mannequin_global(name2idx[pm_name], t)
-					q = ((C[parent_map[m]] * b_parent).inverse() * C[m] * b_local).basis.get_rotation_quaternion()
+					var a_p: Quaternion = _mannequin_global(name2idx[pm_name], t).basis.get_rotation_quaternion()
+					var wd_p: Dictionary = W_data[pm_name]
+					var w_p: Quaternion = (S_q * (a_p * (wd_p["gT"] as Quaternion).inverse()) * S_qi * (wd_p["mix"] as Quaternion)).normalized()
+					q = (w_p.inverse() * w).normalized()
 				if mirror:
 					q = Quaternion(q.x, -q.y, -q.z, q.w)
 				out.track_insert_key(ntr, t, q.normalized())
@@ -188,10 +225,12 @@ func _retarget_one(src_path: String, src_anim_name: String, out_name: String, mi
 			var kc2 := ual_anim.track_get_key_count(tr2)
 			var ntr2 := out.add_track(Animation.TYPE_POSITION_3D)
 			out.track_set_path(ntr2, NodePath("Skeleton3D:" + xname))
+			var mix_o: Vector3 = (mix_rest[BONE_MAP["pelvis"]] as Transform3D).origin
+			var gt_o: Vector3 = (g_ref["pelvis"] as Transform3D).origin
 			for k in kc2:
 				var t2 := ual_anim.track_get_key_time(tr2, k)
-				var g := _mannequin_global(name2idx["pelvis"], t2)
-				var o: Vector3 = (C["pelvis"] * g).origin
+				var g_o: Vector3 = _mannequin_global(name2idx["pelvis"], t2).origin
+				var o: Vector3 = mix_o + S_q * (g_o - gt_o)
 				if mirror:
 					o = Vector3(-o.x, o.y, o.z)
 				out.track_insert_key(ntr2, t2, o)
@@ -201,30 +240,42 @@ func _retarget_one(src_path: String, src_anim_name: String, out_name: String, mi
 		return null
 	return out
 
-## Референс-поза mannequin = кадр t=0 Spell_Simple_Enter («нейтраль»
-## библиотеки, от которой авторованы все клипы). BIND-rest не годится:
-## у UAL bind-фреймы рук развёрнуты на 70–86° против авторских (probe3),
-## дельты от bind дают вывихнутые позы («перекашивает как куклу»).
-func _build_neutral_ref() -> void:
-	var root = load_fbx_scene(UAL1)
+## Референс-поза mannequin = кадр 0 клипа A_TPose (эталонная T-поза пака).
+## v3 (было: t=0 Spell_Simple_Enter — расслабленная стойка; дельты от неё
+## ломали позы mid-клипа, см. коммент в _retarget_one). BIND-rest тоже не
+## годится: у UAL bind-фреймы рук развёрнуты на 70–86° против авторских
+## (probe3), дельты от bind дают вывихнутые позы («перекашивает как куклу»).
+func _build_neutral_ref(src_path: String) -> void:
+	# Хелперы (_mannequin_global/_index_tracks) держат состояние в членах:
+	# нейтраль грузит СВОЮ сцену, поэтому члены задачи сохраняем/возвращаем.
+	var saved_skel := ual_skel
+	var saved_anim := ual_anim
+	# Dictionary — ССЫЛОЧНЫЙ тип: без duplicate() saved_tracks разделяет объект
+	# с ual_tracks, и _index_tracks() нейтрали стирает индекс задачи.
+	var saved_tracks: Dictionary = ual_tracks.duplicate(true)
+	var root = load_fbx_scene(src_path)
 	if root == null:
-		_fail("нет UAL1 для референс-позы")
+		_fail("нет исходника для референс-позы: " + src_path)
 		return
 	ual_skel = find_skeleton(root)
 	var ap = find_animation_player(root)
 	if ual_skel == null or ap == null:
-		_fail("нет скелета/аниматора UAL1 для референса")
+		_fail("нет скелета/аниматора для референса: " + src_path)
 		return
-	ual_anim = _find_anim(ap.get_animation_library(""), "Armature|Spell_Simple_Enter")
+	ual_anim = _find_anim(ap.get_animation_library(""), "Armature|A_TPose")
 	if ual_anim == null:
-		_fail("нет Spell_Simple_Enter для референса")
+		_fail("нет A_TPose для референса в " + src_path)
 		return
 	_index_tracks()
 	g_ref.clear()
 	for i in ual_skel.get_bone_count():
 		g_ref[ual_skel.get_bone_name(i)] = _mannequin_global(i, 0.0)
+	g_refs[src_path] = g_ref.duplicate(true)
 	root.free()
-	print("NEUTRAL REF: %d костей от t=0 Spell_Simple_Enter" % g_ref.size())
+	ual_skel = saved_skel
+	ual_anim = saved_anim
+	ual_tracks = saved_tracks
+	print("NEUTRAL REF: %d костей от A_TPose (%s)" % [g_ref.size(), src_path.get_file()])
 
 func _find_anim(fbx_lib: AnimationLibrary, src_anim_name: String) -> Animation:
 	var a = fbx_lib.get_animation(src_anim_name) \

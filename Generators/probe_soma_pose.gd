@@ -51,11 +51,10 @@ const SOMA_OFFSETS := [
 ]
 
 ## clip → имя в библиотеке (raw-каталог == имя клипа).
-const CLIPS := ["cast_enter", "cast_loop", "cast_shoot", "cast_exit", "throw", "pistol_shoot", "pistol_shoot_l", "cast_shoot_b"]
+const CLIPS := ["cast_enter", "cast_loop", "cast_shoot", "cast_exit", "cast_push", "cast_shoot_b"]
 const LIB_NAME := {
 	"cast_enter": "Cast_Enter", "cast_loop": "Cast_Loop", "cast_shoot": "Cast_Shoot",
-	"cast_exit": "Cast_Exit", "throw": "Throw", "pistol_shoot": "Pistol_Shoot",
-	"pistol_shoot_l": "Pistol_Shoot_L", "cast_shoot_b": "Cast_Shoot_L",
+	"cast_exit": "Cast_Exit", "cast_push": "Cast_Push", "cast_shoot_b": "Cast_Shoot_L",
 }
 
 func _init() -> void:

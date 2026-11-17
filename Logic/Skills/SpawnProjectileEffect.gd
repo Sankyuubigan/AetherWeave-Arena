@@ -13,12 +13,25 @@ const ProjectilePool = preload("res://Logic/Skills/ProjectilePool.gd")
 ## (кладёт SpellCasterComponent из BoneAttachment3D RightHand/CastPoint).
 ## false — старое поведение от тела+offset_y (метеор летит с неба).
 @export var spawn_from_hand: bool = false
+## Задержка спавна от нажатия (с), 0 = инстант. Для инста-кастов, чей клип
+## начинает выброс позже t=0 (Throw: замах → хлыст ~0.3 с): снаряд рождается
+## в момент хлыста из ЖИВОЙ позиции кисти, а не из позы нажатия.
+@export var spawn_delay: float = 0.0
 
 func apply(caster: Node, context: Dictionary) -> void:
     if not projectile_scene:
         return
 
     var tree = caster.get_tree()
+    if spawn_delay > 0.0:
+        var side: String = context.get("hand", "Right")
+        await tree.create_timer(spawn_delay).timeout
+        # За время задержки сцена/кастер могли умереть.
+        if not is_instance_valid(caster) or not caster.is_inside_tree():
+            return
+        if spawn_from_hand:
+            context["cast_origin"] = hand_pos(caster, side)
+
     var parent = tree.current_scene if tree and tree.current_scene else caster.get_parent()
     if not parent:
         return

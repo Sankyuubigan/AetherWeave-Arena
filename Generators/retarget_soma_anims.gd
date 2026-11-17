@@ -35,20 +35,32 @@ const LIB_PATH := "res://Graphics/Animations/shared_animations.res"
 const SOMA_DIR := "res://Graphics/Animations/neuro_soma"
 const FPS := 30.0
 
-## Нейро-клипы: имя в библиотеке → подкаталог neuro_soma/. ЗЕРКАЛ НЕТ:
-## конъюгация (x,-y,-z,w) НЕ переводит rest левой кости в rest правой на
-## mixamo-риге (тест ловил 176.7° на RightShoulder t=0). Лево/право-варианты —
-## отдельные нейро-генерации (pistol_shoot_l, cast_shoot_b), см. prompts/.
+## Нейро-клипы: имя в библиотеке → подкаталог neuro_soma/.
+## ЕДИНЫЙ КАСТ-ЖЕСТ (вердикт юзера 17.11.26: «фаербол — не каст, машет как
+## волейбол»; «у лазера анимации вообще нет»; сердечко-правая = ТА ЖЕ
+## анимация, что у фаербола): cast_push — резкий толчок вперёд на высоте
+## груди, одна рука. Throw (фаербол), Cast_Push (сердечко-правая и луч) —
+## один и тот же клип; Cast_Push_L — ЗЕРКАЛО ДАННЫХ (Generators/
+## mirror_cast_push.gd: кватернионы (x,−y,−z,w) + обмен L/R-слотов + x корня).
+## ⚠ Отвергнутые способы зеркала: (1) конъюгация на уровне рига — мапит
+## rest-ориентации, ломает mixamo (176.7° RightShoulder); (2) КРЕСТ мировых
+## дельт (дельты левой руки → правая цель) — «висящая» дельта левой (R_z(−90°):
+## +X→−Y) на правом rest (+X в другую сторону) поднимает руку ВВЕРХ: мир-
+## инвариантен только pitch, а дельта от Т-позы всегда содержит side-зависимый
+## roll. Зеркало ДАННЫХ свободно от обоих: локальная структура отражается
+## точно, rest якорится у каждой целевой кости своим (математика v2).
 const TASKS := {
 	"Cast_Enter": "cast_enter",
 	"Cast_Loop": "cast_loop",
 	"Cast_Shoot": "cast_shoot",
 	"Cast_Shoot_L": "cast_shoot_b",
 	"Cast_Exit": "cast_exit",
-	"Throw": "throw",
-	"Pistol_Shoot": "pistol_shoot",
-	"Pistol_Shoot_L": "pistol_shoot_l",
+	"Throw": "cast_push",
+	"Cast_Push": "cast_push",
+	"Cast_Push_L": "cast_push_l",
 }
+## Легаси-имена (UAL-эпоха «пистолетов»), вычищаемые из библиотеки.
+const LEGACY := ["Pistol_Shoot", "Pistol_Shoot_L"]
 
 ## SOMA30 → mixamorig. Листья SOMA (Jaw, глаза, кончики пальцев) не мапятся.
 ## ПОРЯДОК ВАЖЕН: родители раньше потомков (обход цепи при построении globals).
@@ -168,6 +180,10 @@ func _run() -> void:
 		return
 	if ok < TASKS.size():
 		print("RETARGET WARN: успешных %d из %d (недостающие клипы не сгенерены)" % [ok, TASKS.size()])
+	for legacy in LEGACY:
+		if lib.has_animation(legacy):
+			lib.remove_animation(legacy)
+			print("LEGACY REMOVED: " + legacy)
 	var err := ResourceSaver.save(lib, LIB_PATH)
 	if err != OK:
 		_fail("save err " + str(err))

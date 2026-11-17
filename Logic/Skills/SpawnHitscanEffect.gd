@@ -20,16 +20,27 @@ const AnimatedDecalComponent = preload("res://Graphics/AnimatedDecalComponent.gd
 @export var offset_y: float = 1.2
 @export var leave_decal: bool = true
 @export var decal_size: float = 0.7
+## Луч из живой позиции кисти (Effect.hand_pos) — синхронно с каст-жестом.
+@export var spawn_from_hand: bool = false
+## Задержка выстрела от нажатия (с): луч бьёт в момент толчка руки в клипе.
+@export var spawn_delay: float = 0.0
 
 func apply(caster: Node, context: Dictionary) -> void:
     var tree := caster.get_tree()
     if not tree:
         return
+    if spawn_delay > 0.0:
+        await tree.create_timer(spawn_delay).timeout
+        # За время ожидания кастер мог умереть/покинуть сцену.
+        if not is_instance_valid(caster) or not caster.is_inside_tree():
+            return
     var parent: Node = tree.current_scene if tree.current_scene else caster.get_parent()
     if not parent:
         return
 
     var start: Vector3 = caster.global_position + Vector3(0, offset_y, 0)
+    if spawn_from_hand:
+        start = hand_pos(caster, context.get("hand", "Right"))
     var end: Vector3 = context.get("target_pos", start + Vector3.FORWARD * 50.0)
     var normal: Vector3 = context.get("hit_normal", Vector3.UP)
     var target_node: Node = context.get("target_node")

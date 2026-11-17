@@ -53,7 +53,10 @@ mod.use_collapse_triangulate = False
 Без `delimit` DECIMATE коллапсит рёбра поперёк UV-швов и границ нормалей, создавая растянутые треугольники с битыми нормалями. В Godot это выглядит как «прозрачность» модели (артефакты normal map из-за растянутых UV).
 
 ### Режимы декормации
-- **REMESH (VOXEL)** — для одиночных больших мешей (boulder 66K→13.5K): `--remesh`. Voxel Remesh + Smart UV Project + Normal Bake. Лучшее качество на одиночных мешах.
+- **REMESH (VOXEL)** — для одиночных больших мешей (boulder 66K→13.5K): `--remesh`. Voxel Remesh + Smart UV Project + Normal Bake + **Diffuse Bake (обязателен!)**. Лучшее качество на одиночных мешах.
+  REMESH строит НОВЫЕ UV → старое альбедо невалидно. Без `bake_diffuse_map` материал
+  получается белым (tex_diff=None): так «поседели» камни карты 2 (17.11.26 — вердикт
+  юзера «белые камни выглядят ужасно пиксельно»). Нормал-бейк без диффуз-бейка не спасает.
 - **DECIMATE (Collapse + delimit)** — для мульти-мешей (rock_moss 63K→15K, 6 объектов): режим по умолчанию. Single-pass с `delimit = {'NORMAL', 'UV', 'SEAM', 'SHARP'}`.
 - **Multi-pass** (устарел): итеративные проходы — не нужны.
 
@@ -148,7 +151,25 @@ res://Graphics/PlayerModel/
 4. `ResourceSaver.save(mesh)` → текстуры сохраняются как внешние ссылки, не встраиваются
 5. Создаёт `StaticBody3D` + `CollisionShape3D` + Graphics, сохраняет `.tscn`
 
-**Ключевая идея:** без `--import`. `load("file.webp")` в Godot 4 возвращает `ImageTexture` даже без `.import` файла. `ResourceSaver` видит `resource_path` и сохраняет компактно.
+**Ключевая идея:** без `--import`. В Godot 4.8 `load("file.webp")` БЕЗ `.import` падает
+«No loader found» (png работает) — поэтому `build_env_prop.gd` грузит текстуры через
+`Image.load_from_file(globalize_path)` + `generate_mipmaps()` + `ImageTexture.create_from_image`.
+Сырая картинка без мипмапов даёт пиксельную рябь в 3D — генерация мипмапов обязательна.
+`ResourceSaver` сохраняет меш с внешними ссылками на текстуры — префаб компактный (KB вместо MB).
+
+### Грабли проп-пайплайна (все пойманы на практике)
+* **bin-файл НЕ переименовывать**: gltf ссылается на буфер ПО ИМЕНИ файла в `buffers[0].uri`;
+  переименовал bin → «no nodes» каскадом. Нужно другое имя — правь uri в gltf или дублируй.
+* **«:» в имени файла запрещено**: Windows превращает хвост в NTFS Alternate Data Stream —
+  файл обрезается/теряется (ловили на именах планов). Замена — «—».
+* **Порядок «новый проп»:**optimize → **check_polycount.gd (обязательный гейт)** →
+  build_env_prop → render_prop_check (посмотреть PNG самому) → build_main_arena → смоук.
+  Нормы полигонажа: фон 50–300 трис, средний 300–1500, хиро 1000–5000 (AAA до 10K с нормал-бейком).
+* **MultiMesh-скаттер не коллизится сам по себе** (ProceduralArena): один StaticBody3D на
+  группу + per-instance CylinderShape3D из AABB пропа. Без него юзер ходит сквозь деревья/камни.
+* **AABB origin в центре меша** (origin не в подошве) → скаттер обязан поднимать инстанс за
+  низ AABB (`-minf(aabb.position.y, 0)`) минус 10% высоты на врытие — иначе пропы утонут,
+  тем глубже, чем больше масштаб.
 
 ### Запуск
 ```

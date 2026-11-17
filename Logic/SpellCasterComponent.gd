@@ -55,8 +55,9 @@ func cast_skill(skill_id: String):
 
 	var player = get_parent()
 
-	# Рука каста: правая по умолчанию; alternate_hands — попеременно Л/П.
-	var hand := "Right"
+	# Рука каста: из скилла (cast_hand — должна совпадать с рукой cast_anim);
+	# alternate_hands перекрывает — попеременно Л/П.
+	var hand: String = skill.cast_hand
 	var cast_anim_name: String = skill.cast_anim
 	if skill.alternate_hands:
 		_alt_left = not _alt_left
@@ -151,6 +152,7 @@ func _aim_context(player: Node, skill_id: String, skill, hand: String) -> Dictio
 		"camera_pos": cam_pos,
 		"forward_dir": forward,
 		"cast_origin": _hand_pos(player, hand),
+		"hand": hand,  # для отложенного спавна из живой кисти (spawn_delay)
 	}
 
 ## Глобальная позиция кости кисти (для спавна снарядов из руки).

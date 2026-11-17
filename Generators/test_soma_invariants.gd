@@ -9,11 +9,11 @@ extends SceneTree
 ## Запуск: --headless -s res://Generators/test_soma_invariants.gd
 
 const NAMES := ["Cast_Enter", "Cast_Loop", "Cast_Shoot", "Cast_Shoot_L",
-	"Cast_Exit", "Throw", "Pistol_Shoot", "Pistol_Shoot_L"]
+	"Cast_Exit", "Throw", "Cast_Push", "Cast_Push_L"]
 const RAW_DIR := {  # имя в библиотеке → каталог neuro_soma
 	"Cast_Enter": "cast_enter", "Cast_Loop": "cast_loop", "Cast_Shoot": "cast_shoot",
-	"Cast_Shoot_L": "cast_shoot_b", "Cast_Exit": "cast_exit", "Throw": "throw",
-	"Pistol_Shoot": "pistol_shoot", "Pistol_Shoot_L": "pistol_shoot_l",
+	"Cast_Shoot_L": "cast_shoot_b", "Cast_Exit": "cast_exit", "Throw": "cast_push",
+	"Cast_Push": "cast_push", "Cast_Push_L": "cast_push_l",
 }
 const LIB_PATH := "res://Graphics/Animations/shared_animations.res"
 const SOMA_BASE := "res://Graphics/Animations/neuro_soma"

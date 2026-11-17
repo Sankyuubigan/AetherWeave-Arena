@@ -94,10 +94,16 @@ func replace_textures_in_state(state: GLTFState):
 			print("  SKIP %d: %s not found" % [i, webp_path])
 			continue
 
-		var new_tex = load(webp_path)
-		if not new_tex:
+		# Godot 4.8: ResourceLoader.load() для webp без .import даёт «No loader
+		# found» — грузим через Image.load_from_file (ест webp/png/jpg).
+		# Сырая картинка идёт БЕЗ мипмапов — в 3D это пиксельная рябь, генерим.
+		var img: Image = Image.load_from_file(ProjectSettings.globalize_path(webp_path))
+		if img == null:
 			print("  SKIP %d: cannot load %s" % [i, webp_path])
 			continue
+		if not img.has_mipmaps():
+			img.generate_mipmaps()
+		var new_tex: ImageTexture = ImageTexture.create_from_image(img)
 
 		for mat in materials:
 			if mat is BaseMaterial3D:
