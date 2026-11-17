@@ -78,6 +78,10 @@ func _init():
     root.add_child(trail)
     trail.owner = root
 
+    # Лента Trail3D УБРАНА (решение юзера 17.11: родной партикл-хвост
+    # красивее; та же причина, что у сердечка и шаровой молнии).
+    # pooled_reset() ищет узел через get_node_or_null — null-безопасно.
+
     var proj_script = load("res://Logic/ProjectileComponent.gd")
     root.set_script(proj_script)
 

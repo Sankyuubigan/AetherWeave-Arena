@@ -1,5 +1,9 @@
 extends Area3D
 
+const ProjectilePool = preload("res://Logic/Skills/ProjectilePool.gd")
+const DecalFrames = preload("res://Graphics/DecalFrames.gd")
+const AnimatedDecalComponent = preload("res://Graphics/AnimatedDecalComponent.gd")
+
 @export var speed: float = 10.0
 @export var heal_amount: int = 5
 
@@ -37,7 +41,7 @@ func _physics_process(delta):
     if shrinking:
         var shrink_progress = (alive_time - 15.0) / 3.0
         if shrink_progress >= 1.0:
-            queue_free()
+            ProjectilePool.release(self)
             return
         scale = base_scale * (1.0 - shrink_progress)
     else:
@@ -89,7 +93,7 @@ func _calculate_avoidance() -> Vector3:
 func _on_body_entered(body: Node):
     if body == caster or shrinking:
         return
-        
+
     if body.has_method("heal") and body.get("is_friendly"):
         body.heal(heal_amount)
         # Создаем визуальный эффект взрыва при лечении
@@ -97,5 +101,33 @@ func _on_body_entered(body: Node):
             var burst = burst_scene.instantiate()
             get_tree().current_scene.add_child(burst)
             burst.global_position = global_position
-        
-    queue_free()
+        # Пульсирующий круг благословения на полу под союзником (аним. декаль 4.8).
+        _spawn_blessing()
+
+    ProjectilePool.release(self)
+
+func _spawn_blessing():
+    var scene := get_tree().current_scene if get_tree() else null
+    if not scene:
+        return
+    var ground := AnimatedDecalComponent.ground_hit_below(get_world_3d(), global_position)
+    if ground.is_empty():
+        return  # Пола нет (полёт над пропастью) — декаль не спавним.
+    var frames := DecalFrames.heal_pulse(Color(1.0, 0.5, 0.65))
+    var decal := AnimatedDecalComponent.new()
+    decal.configure(frames, 8.0, 4.0, 1.4)
+    scene.add_child(decal)
+    decal.place(ground.position, ground.normal)
+
+func pooled_reset():
+    # Полный сброс полёта: _ready при переиспользовании не вызывается.
+    target = null
+    caster = null
+    current_velocity = Vector3.ZERO
+    alive_time = 0.0
+    shrinking = false
+    scale = base_scale
+    # Шлейф Trail3D: сброс истории при переиспользовании из пула.
+    var ribbon := get_node_or_null("TrailRibbon")
+    if ribbon and ribbon.has_method("clear"):
+        ribbon.clear()

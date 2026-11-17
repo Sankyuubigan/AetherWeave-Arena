@@ -1,10 +1,14 @@
 extends CanvasLayer
 
 const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
+const SkillPresetsPanel = preload("res://Graphics/SkillPresetsPanel.gd")
 
 var panel: Panel
 var is_open: bool = false
 var player: CharacterBody3D
+var grid: GridContainer
+var sp_label: Label
+var presets_panel
 
 class SkillSlot extends ColorRect:
     var skill_data: Dictionary
@@ -78,29 +82,36 @@ func _ready():
     player = get_parent()
     
     panel = Panel.new()
-    panel.custom_minimum_size = Vector2(500, 350)
+    panel.custom_minimum_size = Vector2(900, 480)
     panel.anchor_left = 0.5
     panel.anchor_top = 0.5
     panel.anchor_right = 0.5
     panel.anchor_bottom = 0.5
-    panel.offset_left = -250
-    panel.offset_top = -175
-    panel.offset_right = 250
-    panel.offset_bottom = 175
+    panel.offset_left = -450
+    panel.offset_top = -240
+    panel.offset_right = 450
+    panel.offset_bottom = 240
     add_child(panel)
-    
+
     var title = Label.new()
     title.text = "Книга Навыков (Закрыть - 'N')\nНаведите мышь на навык для инфо"
     title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-    title.position.y = 15
+    title.position.y = 10
     panel.add_child(title)
-    
-    var grid = GridContainer.new()
+
+    # Очки навыков перенесены сюда из HUD (формат «осталось/всего»).
+    sp_label = Label.new()
+    sp_label.position = Vector2(40, 56)
+    sp_label.add_theme_font_size_override("font_size", 16)
+    sp_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+    panel.add_child(sp_label)
+
+    grid = GridContainer.new()
     grid.columns = 5
     grid.add_theme_constant_override("h_separation", 15)
     grid.add_theme_constant_override("v_separation", 15)
-    grid.position = Vector2(40, 80)
+    grid.position = Vector2(40, 90)
     panel.add_child(grid)
     
     var all_skills = SkillDB.get_skills()
@@ -116,33 +127,51 @@ func _ready():
         }
         slot.menu = self
         grid.add_child(slot)
-    
+
+    # Боковая панель пресетов (снапшоты по skill id, JSON user://).
+    presets_panel = SkillPresetsPanel.new(self)
+    presets_panel.position = Vector2(520, 30)
+    presets_panel.custom_minimum_size = Vector2(350, 430)
+    panel.add_child(presets_panel)
+
     panel.hide()
+
+func refresh_sp() -> void:
+    if sp_label:
+        sp_label.text = "Очки навыков: %d/%d" % [player.skill_points, player.SP_MAX]
+
+func refresh_grid() -> void:
+    for child in grid.get_children():
+        if child.has_method("update_visuals"):
+            child.update_visuals()
 
 func buy_skill(id: String, price: int):
     if not player.unlocked_skills.get(id, false) and player.skill_points >= price:
         player.skill_points -= price
         player.unlocked_skills[id] = true
         player.update_hud()
+        refresh_sp()
 
 func sell_skill(id: String, price: int):
     if player.unlocked_skills.get(id, false):
         player.skill_points += price
         player.unlocked_skills[id] = false
         player.update_hud()
+        refresh_sp()
         player.unlearn_cleanup(id)
 
-func _input(event):
+## _unhandled_input: пока LineEdit пресетов держит фокус, «N» печатается
+## в поле, а не закрывает окно.
+func _unhandled_input(event):
     if event is InputEventKey and event.pressed and event.keycode == KEY_N:
         is_open = !is_open
-        
+
         if is_open:
             panel.show()
             Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-            var grid = panel.get_child(1)
-            for child in grid.get_children():
-                if child.has_method("update_visuals"):
-                    child.update_visuals()
+            refresh_grid()
+            refresh_sp()
+            presets_panel.refresh()
         else:
             panel.hide()
             Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

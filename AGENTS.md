@@ -21,7 +21,7 @@
   5. Сохрани: `ResourceSaver.save(packed, "res://Scenes/player.tscn")`.
   6. Вызови `quit()`.
 * Запусти этот скрипт через терминал:
-  `& "D:\Programs\Godot\Godot_v4.7-stable\Godot_v4.7-stable_win64_console.exe" --headless -s res://Generators/build_player.gd`
+  `& "D:\Programs\Godot\Godot_v4.8-beta3\Godot_v4.8-beta3_win64_console.exe" --headless -s res://Generators/build_player.gd`
 
 ## 3. Файловая структура
 Сразу создай и поддерживай строгую иерархию:
@@ -32,10 +32,10 @@
 
 ## 4. Запуск для пользователя
 Когда ты закончил генерацию и хочешь, чтобы пользователь протестировал игру, запусти главную сцену через терминал:
-`& "D:\Programs\Godot\Godot_v4.7-stable\Godot_v4.7-stable_win64_console.exe" res://Scenes/MainArena.tscn`
+`& "D:\Programs\Godot\Godot_v4.8-beta3\Godot_v4.8-beta3_win64_console.exe" res://Scenes/MainArena.tscn`
 
 ## 5. Путь к движку
-Godot 4.7 находится по пути: `D:\Programs\Godot\Godot_v4.7-stable\Godot_v4.7-stable_win64_console.exe`
+Godot 4.8-beta3 находится по пути: `D:\Programs\Godot\Godot_v4.8-beta3\Godot_v4.8-beta3_win64_console.exe` (откат на 4.7: `D:\Programs\Godot\Godot_v4.7-stable\Godot_v4.7-stable_win64_console.exe`)
 
 ## 6. Контроль размера файлов и Clean Code
 * **Размер кода:** Перед внесением исправлений проверяй количество строк в файле. Старайся не превышать предел в **300-500 строк кода** на один файл. 
@@ -78,7 +78,7 @@ mod.use_collapse_triangulate = False
 
 Запуск (выполняется **один раз** после добавления новых FBX анимаций в `raw/`):
 ```
-& "D:\Programs\Godot\Godot_v4.7-stable\Godot_v4.7-stable_win64_console.exe" --headless -s res://Generators/build_animations.gd
+& "D:\Programs\Godot\Godot_v4.8-beta3\Godot_v4.8-beta3_win64_console.exe" --headless -s res://Generators/build_animations.gd
 ```
 
 ### Структура папок для анимаций
@@ -110,7 +110,7 @@ res://Graphics/Animations/
 
 Запуск:
 ```
-& "D:\Programs\Godot\Godot_v4.7-stable\Godot_v4.7-stable_win64_console.exe" --headless -s res://Generators/rebuild_player_from_skin.gd <skin_name>
+& "D:\Programs\Godot\Godot_v4.8-beta3\Godot_v4.8-beta3_win64_console.exe" --headless -s res://Generators/rebuild_player_from_skin.gd <skin_name>
 ```
 
 ### Структура папок для нового скина
@@ -152,7 +152,7 @@ res://Graphics/PlayerModel/
 
 ### Запуск
 ```
-& "D:\Programs\Godot\Godot_v4.7-stable\Godot_v4.7-stable_win64_console.exe" --headless -s res://Generators/build_env_prop.gd <prop_name>
+& "D:\Programs\Godot\Godot_v4.8-beta3\Godot_v4.8-beta3_win64_console.exe" --headless -s res://Generators/build_env_prop.gd <prop_name>
 ```
 
 ### Структура папок

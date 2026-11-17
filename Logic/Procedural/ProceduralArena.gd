@@ -25,72 +25,67 @@ func _ready():
 	_noise.fractal_octaves = 4
 	_noise.fractal_gain = 0.5
 
-	_add_terrain()
-	_add_nature()
-	_add_wfc_camp()
-	_add_entities()
-	
+	# Генерация БЕЗ фриза (17.11.26: зонд поймал 6 рестартов генерации подряд —
+	# фриз во время синхронной генерации → юзер долбил телепорт → каждая клика
+	# рестартила генерацию). Тяжёлые шаги разнесены по кадрам, поверх — оверлей
+	# «Генерация карты...» с текущей стадией.
+	_generate_async()
+
+## Разнос генерации по кадрам: один тяжёлый вызов между process_frame,
+## оверлей показывает стадию. Многосекундный фриз → короткие чанки с видимой
+## стадией. Телепорт посреди генерации безопасен: объект освободится вместе со
+## сценой, корутина оборвётся.
+func _generate_async() -> void:
+	_make_loading_overlay()
+	await get_tree().process_frame  # оверлей должен отрисоваться до шага
+	await _gen_step("Рельеф карты...", _add_terrain)
+	await _gen_step("Растительность...", _add_nature)
+	await _gen_step("Лагерь (WFC)...", _add_wfc_camp)
+	await _gen_step("Существа и игрок...", _add_entities)
+
+	# Профайлер карты (Шаг 4): метрики раз в 2с в лог — таблица до/после.
+	var profiler = preload("res://Logic/Diagnostics/MapProfiler.gd").new()
+	profiler.name = "MapProfiler"
+	add_child(profiler)
+
 	print("Runtime: Procedural Arena generation complete!")
+	_loading_layer.queue_free()
+
+## Один шаг генерации: подпись стадии → кадр → тяжёлый вызов → кадр.
+func _gen_step(text: String, fn: Callable) -> void:
+	_loading_label.set_text(text)
+	await get_tree().process_frame
+	fn.call()
+	await get_tree().process_frame
+
+## Оверлей «Генерация карты...»: CanvasLayer поверх 3D с панелью по центру.
+var _loading_layer: CanvasLayer
+var _loading_label: Label
+
+func _make_loading_overlay() -> void:
+	_loading_layer = CanvasLayer.new()
+	_loading_layer.layer = 90
+	add_child(_loading_layer)
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	var label := Label.new()
+	label.text = "Генерация карты..."
+	label.custom_minimum_size = Vector2(280, 44)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	panel.add_child(label)
+	_loading_layer.add_child(panel)
+	_loading_label = label
 
 func _height(x: float, z: float) -> float:
 	return _noise.get_noise_2d(x, z) * 4.0
 
 func _add_terrain():
-	var half = TERRAIN_SIZE / 2.0
-	var step = TERRAIN_SIZE / float(TERRAIN_RES)
-
-	var st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	var height_data = []
-	for iz in TERRAIN_RES:
-		var row = []
-		for ix in TERRAIN_RES:
-			var x = ix * step - half
-			var z = iz * step - half
-			var y = _height(x, z)
-			row.append(y)
-			var uv = Vector2(float(ix) / TERRAIN_RES * 8.0, float(iz) / TERRAIN_RES * 8.0)
-			st.set_uv(uv)
-			st.add_vertex(Vector3(x, y, z))
-		height_data.append(row)
-
-	for iz in TERRAIN_RES - 1:
-		for ix in TERRAIN_RES - 1:
-			var tl = iz * TERRAIN_RES + ix
-			var tr = tl + 1
-			var bl = (iz + 1) * TERRAIN_RES + ix
-			var br = bl + 1
-			st.add_index(tl); st.add_index(tr); st.add_index(bl)
-			st.add_index(tr); st.add_index(br); st.add_index(bl)
-
-	st.generate_normals()
-
-	var mat = StandardMaterial3D.new()
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.albedo_color = Color(0.35, 0.55, 0.25)
-	if theme_style == "cyberpunk":
-		mat.albedo_color = Color(0.1, 0.1, 0.2)
-	elif theme_style == "desert":
-		mat.albedo_color = Color(0.8, 0.7, 0.4)
-
-	var terrain_mesh = st.commit()
-
-	var body = StaticBody3D.new()
-	body.name = "Terrain"
-	add_child(body)
-
-	var mi = MeshInstance3D.new()
-	mi.name = "Mesh"
-	mi.mesh = terrain_mesh
-	mi.material_override = mat
-	body.add_child(mi)
-
-	# ИСПРАВЛЕНИЕ КОЛЛИЗИИ: Создаем точную форму на основе сгенерированного меша
-	# Теперь игрок будет бегать строго по холмам, и объекты не провалятся под землю!
-	var floor_cs = CollisionShape3D.new()
-	floor_cs.shape = terrain_mesh.create_trimesh_shape()
-	body.add_child(floor_cs)
+	# Рельеф вынесен в TerrainBuilder: чанки 4×4 со статическим LOD (ближние
+	# плотные, дальние разреженные, юбки против щелей), вершинные цвета по
+	# высоте/наклону, коллизия — единый trimesh 64×64 независимо от LOD.
+	var TerrainBuilder = preload("res://Logic/Procedural/TerrainBuilder.gd")
+	TerrainBuilder.build(self, _height, TERRAIN_SIZE, theme_style)
 
 func _add_nature():
 	var half = TERRAIN_SIZE / 2.0 - 10.0
@@ -232,6 +227,10 @@ func _add_entities():
 		var player = player_scene.instantiate()
 		player.position = Vector3(2, _height(2, 2) + 1.5, 2)
 		add_child(player)
+		# Диагностика телепорт-бага (Шаг 1 плана): зонд пишет скачки позиции,
+		# смерть и пересоздание игрока в консоль.
+		var probe := preload("res://Logic/Diagnostics/PlayerProbe.gd").new()
+		player.add_child(probe)
 
 	var dummy_scene = load("res://Scenes/dummy.tscn")
 	if not dummy_scene: return

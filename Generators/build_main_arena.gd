@@ -11,6 +11,7 @@ func _init():
 	env.background_color = Color(0.4, 0.6, 1.0)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.3, 0.3, 0.4)
+	env.ssao_enabled = true # 4.8: multi-bounce AO
 	env_node.environment = env
 	root.add_child(env_node)
 	env_node.owner = root
@@ -20,6 +21,7 @@ func _init():
 	light.rotation_degrees = Vector3(-35, 45, 0)
 	light.light_energy = 1.5
 	light.shadow_enabled = true
+	light.shadow_contact_shadows_allow = true # 4.8: contact shadows — объекты не «парят»
 	root.add_child(light)
 	light.owner = root
 

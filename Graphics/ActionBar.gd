@@ -107,21 +107,35 @@ func remove_skill(id: String):
         if slot.skill_id == id:
             slot.set_skill("")
 
-func _input(event):
+## КЛАВИШИ — _unhandled_input: LineEdit с фокусом (печать имени пресета)
+## поглощает клавиши раньше нас — хоткеи не срабатывают во время печати.
+func _unhandled_input(event):
+    if not (event is InputEventKey):
+        return
     var menu = get_parent().get_node_or_null("SkillMenu")
     if menu and menu.is_open:
         return
 
     for slot in slots:
         if slot.skill_id == "": continue
-        
-        var is_pressed = false
-        if slot.key_info["type"] == "key" and event is InputEventKey:
-            if event.pressed and not event.echo and (event.keycode == slot.key_info["code"] or event.physical_keycode == slot.key_info["code"]):
-                is_pressed = true
-        elif slot.key_info["type"] == "mouse" and event is InputEventMouseButton:
-            if event.pressed and event.button_index == slot.key_info["code"]:
-                is_pressed = true
+        if slot.key_info["type"] != "key": continue
 
-        if is_pressed:
+        if event.pressed and not event.echo and (event.keycode == slot.key_info["code"] or event.physical_keycode == slot.key_info["code"]):
+            get_parent().use_skill(slot.skill_id)
+
+## КНОПКИ МЫШИ — _input (сырой ввод): STOP-слоты под виртуальным курсором
+## поглощают клик до _unhandled_input — касты ЛКМ/ПКМ «пропадали» при
+## наведении на панель. Меню открыто → гвард (drag&drop слотов не трогаем).
+func _input(event):
+    if not (event is InputEventMouseButton and event.pressed):
+        return
+    var menu = get_parent().get_node_or_null("SkillMenu")
+    if menu and menu.is_open:
+        return
+
+    for slot in slots:
+        if slot.skill_id == "": continue
+        if slot.key_info["type"] != "mouse": continue
+
+        if event.button_index == slot.key_info["code"]:
             get_parent().use_skill(slot.skill_id)

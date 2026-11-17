@@ -71,6 +71,9 @@ func _init():
     root.add_child(trail)
     trail.owner = root
 
+    # Лента Trail3D УБРАНА (решение юзера 17.11: родной партикл-хвост
+    # красивее). pooled_reset() ищет узел через get_node_or_null — безопасно.
+
     var proj_script = load("res://Logic/HomingHealProjectileComponent.gd")
     root.set_script(proj_script)
 

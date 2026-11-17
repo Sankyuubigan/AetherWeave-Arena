@@ -51,16 +51,16 @@ billboard_mode = 1
 material = SubResource("StandardMaterial3D_311e2")
 size = Vector2(0.3, 0.3)
 
-[node name="Fireball" type="Area3D" unique_id=651854596]
+[node name="Fireball" type="Area3D" unique_id=2113330986]
 script = ExtResource("1_xi7wk")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=195178581]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=832473340]
 mesh = SubResource("SphereMesh_ne4qj")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1935517434]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1732310022]
 shape = SubResource("SphereShape3D_hcgvv")
 
-[node name="TrailParticles" type="GPUParticles3D" parent="." unique_id=1344910463]
+[node name="TrailParticles" type="GPUParticles3D" parent="." unique_id=545053504]
 amount = 80
 lifetime = 0.6
 process_material = SubResource("ParticleProcessMaterial_jsbbf")

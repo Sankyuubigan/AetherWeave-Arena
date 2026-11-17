@@ -248,6 +248,23 @@ func build_player_scene(model_root: Node):
 		model_root.get_parent().remove_child(model_root)
 	wrapper.add_child(model_root)
 
+	# ── Якоря кистей (план каст-анимаций, Шаг 2) ────────────────────
+	# BoneAttachment3D — ребёнок Skeleton3D: точки спавна снарядов (инста-каст)
+	# и крепления будущего оружия (лазер). CastPoint — маркер для спавна.
+	var hand_skel = find_skeleton_node(model_root)
+	if hand_skel:
+		for hand_info in [["RightHandAnchor", "mixamorig_RightHand"], ["LeftHandAnchor", "mixamorig_LeftHand"]]:
+			var anchor = BoneAttachment3D.new()
+			anchor.name = hand_info[0]
+			anchor.bone_name = hand_info[1]
+			hand_skel.add_child(anchor)
+			var cast_point = Marker3D.new()
+			cast_point.name = "CastPoint"
+			anchor.add_child(cast_point)
+		print("  ANCHORS: RightHand/LeftHand -> " + str(hand_skel.name))
+	else:
+		print("  WARN: Skeleton3D не найден — якоря кистей не созданы")
+
 	var ap = AnimationPlayer.new()
 	ap.name = "AnimationPlayer"
 	wrapper.add_child(ap)
@@ -308,6 +325,17 @@ func set_owner_recursive(node: Node, owner_node: Node):
 	for child in node.get_children():
 		set_owner_recursive(child, owner_node)
 
+
+static func find_skeleton_node(node: Node) -> Skeleton3D:
+	if not node:
+		return null
+	if node is Skeleton3D:
+		return node
+	for c in node.get_children():
+		var r = find_skeleton_node(c)
+		if r:
+			return r
+	return null
 
 static func find_animation_player(node: Node) -> AnimationPlayer:
 	if not node:

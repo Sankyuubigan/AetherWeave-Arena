@@ -17,15 +17,20 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 config/name="3D Arena Game"
 config/description="A 3D arena game prototype with magic combat"
 run/main_scene="res://Scenes/MainArena.tscn"
-config/features=PackedStringArray("4.7")
+config/features=PackedStringArray("4.8")
 
 [autoload]
 
 Logger="*res://Graphics/Logger.gd"
 AudioManager="*res://Graphics/AudioManager.gd"
 TeleportMenu="*res://Graphics/TeleportMenu.gd"
+SettingsMenu="*res://Graphics/SettingsMenu.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+
+[rendering]
+
+textures/streaming/enabled=true

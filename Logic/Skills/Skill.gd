@@ -13,6 +13,16 @@ extends Resource
 
 @export var effects: Array[Resource] = []
 
+## Каст-анимация (план 17.11.26): имя клипа из shared_animations
+## ("Throw", "Cast_Shoot"). Играется при касте, эффекты срабатывают сразу.
+@export var cast_anim: String = ""
+## >0 — длительный каст двумя руками: Cast_Enter → Cast_Loop до cast_time →
+## Cast_Shoot + execute (канал, движение заблокировано).
+@export var cast_time: float = 0.0
+## Чередование рук при инста-касте (сердечко: лево/право, вердикт 17.11.26).
+## Левая версия анимации = <cast_anim>_L (зеркало генерит retarget_ual_anims).
+@export var alternate_hands: bool = false
+
 func execute(caster: Node, context: Dictionary) -> void:
     for eff in effects:
         if eff.has_method("apply"):

@@ -6,8 +6,14 @@ const OUTPUT_PATH = "res://Graphics/Animations/shared_animations.res"
 var sources = {
 	"Idle": RAW_DIR + "Idle.fbx",
 	"Run": RAW_DIR + "Running.fbx",
-	"Jump": RAW_DIR + "Jumping.fbx"
+	"Jump": RAW_DIR + "Jumping.fbx",
+	"Falling": RAW_DIR + "Falling Idle.fbx",
+	"Landing": RAW_DIR + "Falling To Landing.fbx",
+	"FrontFlip": RAW_DIR + "Front Flip.fbx"
 }
+
+## Циклические клипы (зацикленность не должна зависеть от настроек импорта).
+const LOOPED_ANIMS = ["Idle", "Run", "Falling"]
 
 func _init():
 	print("Building shared animation library...")
@@ -38,6 +44,7 @@ func _init():
 				if "mixamorig1_" in path_str:
 					path_str = path_str.replace("mixamorig1_", "mixamorig_")
 					dup.track_set_path(i, NodePath(path_str))
+			dup.loop_mode = Animation.LOOP_LINEAR if anim_name in LOOPED_ANIMS else Animation.LOOP_NONE
 			lib.add_animation(anim_name, dup)
 			var raw = dup.get_track_count()
 			print("  ANIM: %s (%d tracks)" % [anim_name, raw])

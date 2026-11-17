@@ -12,3 +12,5 @@ export_presets.cfg
 /Graphics/decimated_baked
 /Graphics/decimated_baked_remesh
 /.external_meshes
+/tasks
+/extension_api.json

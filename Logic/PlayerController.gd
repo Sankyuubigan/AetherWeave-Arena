@@ -8,20 +8,26 @@ const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
 
 const GRAVITY: float = 9.8
 
+## Общий бюджет очков навыков (механика добора SP пока не введена).
+const SP_MAX: int = 50
+
 var camera: Camera3D
 var spring_arm: Node3D
 var graphics_wrapper: Node3D
 var spell_caster: Node
 
-var skill_points: int = 50
+var skill_points: int = SP_MAX
 var player_hp: int = 100
 
 var unlocked_skills = {}
 var can_double_jump: bool = false
 var was_space_pressed: bool = false
 
+## Свип телепорта (TeleportEffect): пока true, позицией владеет твин —
+## ввод/гравитация спят, move_and_slide гоняется только ради is_on_floor().
+var input_locked: bool = false
+
 var hud_hp: ProgressBar
-var hud_sp: Label
 
 func _ready():
     camera = $SpringArm3D/Camera3D
@@ -42,7 +48,7 @@ func _ready():
             unlocked_skills[s_id] = false
         
     setup_hud()
-        
+
     var skill_menu = preload("res://Graphics/SkillMenu.gd").new()
     add_child(skill_menu)
     
@@ -63,16 +69,10 @@ func setup_hud():
     sb.bg_color = Color(0.2, 0.7, 0.2, 1.0)
     hud_hp.add_theme_stylebox_override("fill", sb)
     hud.add_child(hud_hp)
-    
-    hud_sp = Label.new()
-    hud_sp.position = Vector2(20, 60)
-    hud_sp.text = "Очки навыков (SP): " + str(skill_points)
-    hud.add_child(hud_sp)
-    
+
     add_child(hud)
 
 func update_hud():
-    if hud_sp: hud_sp.text = "Очки навыков (SP): " + str(skill_points)
     if hud_hp: hud_hp.value = player_hp
 
 func use_skill(skill_id: String):
@@ -89,6 +89,10 @@ func unlearn_cleanup(skill_id: String):
     if action_bar and action_bar.has_method("remove_skill"):
         action_bar.remove_skill(skill_id)
 
+## МЫШЬ — сырой ввод в _input (камера не должна зависеть от GUI-каскада:
+## STOP-контрол под виртуальным курсором съедает клик/-motion до
+## _unhandled_input — камера «умирала», если клик-захват попадал на UI).
+## Печать в полях не страдает: при открытых меню мышь видима, гвард ниже.
 func _input(event):
     var menu = get_node_or_null("SkillMenu")
     if menu and menu.is_open:
@@ -111,7 +115,14 @@ func _input(event):
         Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 func _physics_process(delta):
-    var input_dir = Vector2(
+    # Поллинг идёт мимо системы событий: пока фокус у GUI (печать имени
+    # пресета) — сырой ввод игры (WASD/Space) игнорируем.
+    var typing: bool = get_viewport().gui_get_focus_owner() != null
+    # Канал каста (метеор/гром): движение и прыжок заблокированы.
+    var casting: bool = spell_caster != null and spell_caster.has_method("is_channeling") \
+            and spell_caster.is_channeling()
+    var locked: bool = typing or casting or input_locked
+    var input_dir = Vector2.ZERO if locked else Vector2(
         int(Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)) - int(Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT)),
         int(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)) - int(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP))
     )
@@ -133,7 +144,7 @@ func _physics_process(delta):
     else:
         can_double_jump = unlocked_skills.get("double_jump", false)
 
-    var space_pressed = Input.is_key_pressed(KEY_SPACE)
+    var space_pressed = (not locked) and Input.is_key_pressed(KEY_SPACE)
     if space_pressed and not was_space_pressed:
         var anim_comp = get_node_or_null("PlayerAnimationComponent")
         if is_on_floor():
@@ -144,7 +155,14 @@ func _physics_process(delta):
             velocity.y = jump_velocity
             can_double_jump = false
             if anim_comp and anim_comp.has_method("play_jump"):
-                anim_comp.play_jump()
+                anim_comp.play_jump(true)  # сальто на двойном прыжке
             
     was_space_pressed = space_pressed
+    if input_locked:
+        # Свип телепорта: твин двигает тело сам, гравитацию не трогаем.
+        # move_and_slide нужен, чтобы is_on_floor() обновился (коллизии
+        # заглушены → автомат видит «в воздухе» → Jump/Falling → Landing).
+        velocity = Vector3.ZERO
+        move_and_slide()
+        return
     move_and_slide()
