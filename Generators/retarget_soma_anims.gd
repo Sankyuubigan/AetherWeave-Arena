@@ -6,11 +6,12 @@ extends SceneTree
 ## rest-повороты = identity, офсеты родитель-локальные).
 ##
 ## Математика та же, что починила UAL-ретаргет (инвариант 87°→1.47°):
-## C_m = mix_rest(m) · G_ref(m)^-1 (G_ref — нейтраль источника; для SOMA это
-## T-поза из офсетов), q_local(t) = ((C_p · G_p(t))^-1 · C_m · G_m(t)).rot,
-## где G_* — глобальный FK источника. В нейтрали q_local = rest ЛОКАЛЬНО
-## точно (инвариант по построению). Позиция — только Hips:
-## o = t_out(Hips).origin (высота скина подхватывается через C_Hips).
+## C_m = mix_rest(m) · G_ref(m)^-1, где G_ref — нейтраль ИСТОЧНИКА = кадр 0
+## клипа (полный FK: root_positions + кваты; в нейтрали q_local = rest
+## ЛОКАЛЬНО точно, позиция Hips = rest_скина + дельты root_positions).
+## ⚠ Нейтраль от аналитической T-позы НЕЛЬЗЯ: офсеты не содержат высоты
+## корня (~0.97 м в отдельном канале) — C_Hips двоил её, фигура «прыгала
+## наверх и висела» на каждом касте (баг 17.11.26, починен кадром-0).
 ##
 ## side_flip: если SOMA-«Left» на другой стороне X, чем mixamo-Left — пары
 ## свапаются автоматически (лог SIDE CHECK).
@@ -23,18 +24,20 @@ const LIB_PATH := "res://Graphics/Animations/shared_animations.res"
 const SOMA_DIR := "res://Graphics/Animations/neuro_soma"
 const FPS := 30.0
 
-## Нейро-клипы: имя в библиотеке → [подкаталог out/, зеркало].
-## Зеркало (сердечко кастует попеременно лево/право) — та же техника, что в
-## retarget_ual_anims.gd: свап сторон в целевых именах + (x,-y,-z,w) кват + X-флип Hips.
+## Нейро-клипы: имя в библиотеке → подкаталог out/. ЗЕРКАЛ НЕТ: конъюгация
+## кватернионов (x,-y,-z,w) НЕ переводит rest левой кости в rest правой на
+## mixamo-риге (тест поймал 176.7° на RightShoulder t=0 — «кукла» на _L).
+## Лево/право-варианты генерируются НЕЙРОСЕТЬЮ отдельными промптами
+## (pistol_shoot_l, cast_shoot_b), см. neuro_soma/prompts/.
 const TASKS := {
-	"Cast_Enter": ["cast_enter", false],
-	"Cast_Loop": ["cast_loop", true],
-	"Cast_Shoot": ["cast_shoot", false],
-	"Cast_Shoot_L": ["cast_shoot", true],
-	"Cast_Exit": ["cast_exit", false],
-	"Throw": ["throw", false],
-	"Pistol_Shoot": ["pistol_shoot", false],
-	"Pistol_Shoot_L": ["pistol_shoot", true],
+	"Cast_Enter": "cast_enter",
+	"Cast_Loop": "cast_loop",
+	"Cast_Shoot": "cast_shoot",
+	"Cast_Shoot_L": "cast_shoot_b",
+	"Cast_Exit": "cast_exit",
+	"Throw": "throw",
+	"Pistol_Shoot": "pistol_shoot",
+	"Pistol_Shoot_L": "pistol_shoot_l",
 }
 
 ## SOMA30 → mixamorig. Листья SOMA (Jaw, глаза, кончики пальцев) не мапятся.
@@ -133,15 +136,13 @@ func _run() -> void:
 
 	var ok := 0
 	for out_name in TASKS:
-		var clip_dir: String = TASKS[out_name][0]
-		var mirror: bool = TASKS[out_name][1]
-		var new_anim = _retarget_one(clip_dir, out_name, mirror)
+		var new_anim = _retarget_one(TASKS[out_name], out_name)
 		if new_anim == null:
 			continue
 		if lib.has_animation(out_name):
 			lib.remove_animation(out_name)
 		lib.add_animation(out_name, new_anim)
-		print("RETARGET: %s ← soma/%s (%.2f с, треков %d)%s" % [out_name, clip_dir, new_anim.length, new_anim.get_track_count(), " [LOOP]" if new_anim.loop_mode != Animation.LOOP_NONE else ""])
+		print("RETARGET: %s ← soma/%s (%.2f с, треков %d)%s" % [out_name, TASKS[out_name], new_anim.length, new_anim.get_track_count(), " [LOOP]" if new_anim.loop_mode != Animation.LOOP_NONE else ""])
 		ok += 1
 
 	if ok == 0:
@@ -157,7 +158,7 @@ func _run() -> void:
 	quit(0)
 
 ## Читает .f32 клипа и ретаргетит → Animation (или null, если клипа нет).
-func _retarget_one(clip_dir: String, out_name: String, mirror: bool) -> Animation:
+func _retarget_one(clip_dir: String, out_name: String) -> Animation:
 	var rot_file := FileAccess.open(SOMA_DIR + "/" + clip_dir + "/local_rotations_xyzw.f32", FileAccess.READ)
 	var root_file := FileAccess.open(SOMA_DIR + "/" + clip_dir + "/root_positions.f32", FileAccess.READ)
 	if rot_file == null or root_file == null:
@@ -199,21 +200,28 @@ func _retarget_one(clip_dir: String, out_name: String, mirror: bool) -> Animatio
 		print("  LOOP FADE: хвост %d кадров → точный шов (последний кадр = кадр 0)" % n_fade)
 
 	# Эффективная карта: ключ = СОМЕДСКИЙ сустав в пространстве данных
-	# (side_flip свапает имена), значение = целевая кость + оригинал для FK.
+	# (side_flip свапает имена), значение = целевая кость.
 	var emap: Dictionary = {}
 	for m in BONE_MAP:
 		var key: String = _mirror_name(m) if side_flip else m
-		var target: String = BONE_MAP[m]
-		if mirror:
-			target = _mirror_name(target)
-		emap[key] = {"target": target, "soma": m, "mirror": mirror}
+		emap[key] = {"target": BONE_MAP[m], "soma": m}
+
+	# Нейтраль клипа = кадр 0 ЭТОГО клипа (философия UAL-фикса «куклы»).
+	# ЛОВЕШКА, на которой персонаж «прыгал наверх»: аналитическая T-поза
+	# SOMA имеет Hips в (0,0,0) — высота бёдер (~0.97 м) живёт в ОТДЕЛЬНОМ
+	# канале root_positions и в офсеты НЕ входит. C_Hips от такой нейтрали
+	# ДВОИЛ высоту (rest_скина + полные 0.97 м) — фигура взлетала на касте.
+	# Кадр 0 содержит и высоту, и стартовую позу ⇒ на t=0 выход = rest
+	# скина точно, позиция бёдер — только дельты root_positions.
+	var g0: Dictionary = {}
+	_soma_fk(roots, rots, 0, g0)
 
 	# C_m и родители (ключи — в пространстве данных).
 	var C: Dictionary = {}
 	var parent_key: Dictionary = {}
 	for key in emap:
 		var soma_name: String = emap[key]["soma"]
-		C[key] = mix_rest[emap[key]["target"]] * g_ref[soma_name].inverse()
+		C[key] = mix_rest[emap[key]["target"]] * g0[soma_name].inverse()
 		var pi: int = SOMA_PARENTS[SOMA_NAMES.find(soma_name)]
 		var pname: String = SOMA_NAMES[pi] if pi >= 0 else ""
 		parent_key[key] = (_mirror_name(pname) if side_flip else pname)
@@ -228,6 +236,9 @@ func _retarget_one(clip_dir: String, out_name: String, mirror: bool) -> Animatio
 	var t_out: Dictionary = {}      # key -> глоб в целевом пространстве
 	var hand_lo := Vector3(1e9, 1e9, 1e9)
 	var hand_hi := Vector3(-1e9, -1e9, -1e9)
+	var hips_lo := 1e9
+	var hips_hi := -1e9
+	var hips_rest_y: float = mix_rest["mixamorig_Hips"].origin.y
 
 	for k in frames:
 		var t := k / FPS
@@ -252,22 +263,25 @@ func _retarget_one(clip_dir: String, out_name: String, mirror: bool) -> Animatio
 			if not rot_track.has(key):
 				rot_track[key] = out.add_track(Animation.TYPE_ROTATION_3D)
 				out.track_set_path(rot_track[key], NodePath("Skeleton3D:" + emap[key]["target"]))
-			var q: Quaternion = t_out[key].basis.get_rotation_quaternion()
-			if emap[key]["mirror"]:
-				q = Quaternion(q.x, -q.y, -q.z, q.w)
-			out.track_insert_key(rot_track[key], t, q.normalized())
+			out.track_insert_key(rot_track[key], t, t_out[key].basis.get_rotation_quaternion().normalized())
 			if emap[key]["soma"] == "Hips":
 				if pos_track < 0:
 					pos_track = out.add_track(Animation.TYPE_POSITION_3D)
 					out.track_set_path(pos_track, NodePath("Skeleton3D:" + emap[key]["target"]))
 				var o: Vector3 = t_out[key].origin
-				if mirror:
-					o = Vector3(-o.x, o.y, o.z)
+				hips_lo = minf(hips_lo, o.y)
+				hips_hi = maxf(hips_hi, o.y)
 				out.track_insert_key(pos_track, t, o)
 
 	if out.get_track_count() == 0:
 		print("RETARGET FAIL: пустой выход для " + out_name)
 		return null
+	# Инвариант высоты (регресс «прыгает наверх»): бёдра не должны уходить
+	# от rest-высоты скина дальше 0.15 м — иначе клип левитирует.
+	if maxf(absf(hips_lo - hips_rest_y), absf(hips_hi - hips_rest_y)) > 0.15:
+		print("  HIPS WARN: y %.2f..%.2f при rest %.2f — клип левитирует!" % [hips_lo, hips_hi, hips_rest_y])
+	else:
+		print("  HIPS OK: y %.2f..%.2f (rest %.2f)" % [hips_lo, hips_hi, hips_rest_y])
 	print("  HANDS: y %.2f..%.2f z %.2f..%.2f" % [hand_lo.y, hand_hi.y, hand_lo.z, hand_hi.z])
 	return out
 
@@ -284,7 +298,8 @@ func _soma_fk(roots: PackedFloat32Array, rots: PackedFloat32Array, frame: int, g
 		else:
 			g[SOMA_NAMES[j]] = g[SOMA_NAMES[pi]] * Transform3D(Basis(q), SOMA_OFFSETS[j])
 
-## Нейтраль SOMA = T-поза из офсетов при identity-поворотах.
+## Аналитическая T-поза SOMA — ТОЛЬКО для side-чека (знак X кисти);
+## нейтраль ретаргета — кадр 0 клипа (см. _retarget_one).
 func _build_soma_neutral() -> void:
 	g_ref.clear()
 	for j in SOMA_NAMES.size():
