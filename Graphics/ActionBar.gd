@@ -116,6 +116,14 @@ func remove_skill(id: String):
         if slot.skill_id == id:
             slot.set_skill("")
 
+## Текст клавиши, куда забинжен скилл (AIM ASSIST Q29: подпись на отметке
+## цели). key-слоты: key_info["label"] = "1".."5"; мышиные — М1/М2.
+func key_label_for_skill(id: String) -> String:
+    for slot in slots:
+        if slot.skill_id == id:
+            return str(slot.key_info.get("label", ""))
+    return ""
+
 ## КЛАВИШИ — _unhandled_input: LineEdit с фокусом (печать имени пресета)
 ## поглощает клавиши раньше нас — хоткеи не срабатывают во время печати.
 func _unhandled_input(event):

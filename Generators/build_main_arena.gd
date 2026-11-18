@@ -112,12 +112,16 @@ func _init():
 		inst.owner = root
 		print(p_name + " placed at " + str(p.pos))
 
-	# Желе-монстр (QUEUE Q6, заказ юзера: «сделай монстра желе... здоровенным,
-	# поставь на карту — посмотрю»): гигантский слизень SoftBody3D, дрожит от
-	# давления, отзывается волнами на толчки игрока (collision_mask 1).
+	# Желе-монстр (QUEUE Q6 → Q25 → v3 по вердикту юзера «хотдог-мешок»):
+	# SoftBody3D-слизень. y=1.95: низ купола (r*0.72=1.87) касается пола —
+	# пин-юбка фиксирует точки СРАЗУ на уровне пола, без провиса-гамака.
 	var jelly = preload("res://Logic/JellyMonster.gd").new()
 	jelly.name = "JellyMonster"
-	jelly.position = Vector3(7, 2.9, -6)
+	# Меш ДО add_child (грабля 4.8, probe 19.11.26): назначение меша SoftBody3D
+	# когда узел уже в дереве, сбрасывает его трансформ в identity — желе
+	# уезжало из точки спавна в origin у спавна. Меш попадёт в tscn sub_resource.
+	jelly.mesh = preload("res://Logic/JellyMonster.gd").build_blob_mesh(jelly.radius)
+	jelly.position = Vector3(7, 1.95, -6)
 	root.add_child(jelly)
 	jelly.owner = root
 
@@ -128,6 +132,27 @@ func _init():
 	npc.position = Vector3(38, 0, 38)
 	root.add_child(npc)
 	npc.owner = root
+
+	# FFA-боты (QUEUE Q10): 3 бота кольцом r=12 — кастуют скиллы через
+	# SpellCasterComponent, таргет = ближайший живой (игрок или другой бот).
+	# Скины как у врагов ада (Demon/Ganfaul); без сцены — капсульный фолбэк.
+	var bot_skin_paths := [
+		"res://Scenes/enemy_Demon_T_Wiezzorek.tscn",
+		"res://Scenes/enemy_Ganfaul_M_Aure.tscn",
+		"res://Scenes/enemy_Demon_T_Wiezzorek.tscn",
+	]
+	var bot_script := preload("res://Logic/Enemies/BotEnemy.gd")
+	for i in bot_skin_paths.size():
+		var skin: PackedScene = null
+		if ResourceLoader.exists(bot_skin_paths[i]):
+			skin = load(bot_skin_paths[i])
+		var b = skin.instantiate() if skin else bot_script.new()
+		b.set_script(bot_script)
+		var ang := TAU * i / bot_skin_paths.size() + 0.6
+		b.name = "FFABot_%d" % i
+		b.position = Vector3(cos(ang) * 12.0, 0.2, sin(ang) * 12.0)
+		root.add_child(b)
+		b.owner = root
 
 	var packed = PackedScene.new()
 	packed.pack(root)

@@ -174,4 +174,14 @@ func _unhandled_input(event):
             presets_panel.refresh()
         else:
             panel.hide()
+            # МЫШЬ ССОТ v2 (docs/ui_input_rules.md): закрытие UI возвращает
+            # мышь в игру (вердикт юзера 19.11.26: «мышь автоматом не
+            # фокусится — исправь»). CAPTURED разрешён только здесь и в
+            # PlayerController (клик по миру).
             Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+func _process(_delta):
+    # Гард симметричен SettingsMenu: пока книга открыта, мышь видима, даже
+    # если другое окно закрылось и закапчурило курсор «мимо нас».
+    if is_open and Input.get_mouse_mode() != Input.MOUSE_MODE_VISIBLE:
+        Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)

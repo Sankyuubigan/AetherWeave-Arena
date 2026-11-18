@@ -63,9 +63,25 @@ func _ready():
 
     var skill_menu = preload("res://Graphics/SkillMenu.gd").new()
     add_child(skill_menu)
+
+    # Рэгдолл-смерть игрока (QUEUE Q26, фидбэк юзера 19.11.26: «перс просто
+    # исчезает, рэгдола нет»): компонент куклы как у врагов ада, activate() в
+    # take_damage. Скин без PhysicalBoneSimulator3D → путь куклы-манекена.
+    var rag := Node.new()
+    rag.name = "Ragdoll"
+    rag.set_script(load("res://Graphics/RagdollComponent.gd"))
+    rag.set("tint", Color(0.85, 0.9, 1.0))
+    add_child(rag)
     
     var action_bar = preload("res://Graphics/ActionBar.gd").new()
     add_child(action_bar)
+
+    # AIM ASSIST (QUEUE Q29): отметка целей рядом с прицелом + честный перенос
+    # помеченной цели в каст (SpellCasterComponent._aim_context assist-first).
+    var aim_assist := Node.new()
+    aim_assist.name = "AimAssist"
+    aim_assist.set_script(load("res://Logic/AimAssistComponent.gd"))
+    add_child(aim_assist)
 
 func _exit_tree():
     # Снапшот скиллов при уходе с карты (телепорт непися / меню I / смерть).
@@ -125,6 +141,18 @@ func take_damage(amount: int):
         md.note_combat()
     if player_hp <= 0:
         is_dying = true
+        # Рэгдолл-смерть (QUEUE Q26, фидбэк юзера: «перс просто исчезает,
+        # мгновенный респавн на новую локу»): кукла-труп на месте смерти,
+        # респавн через 2.5 с — труп успевает упасть и полежать.
+        var rag = get_node_or_null("Ragdoll")
+        if rag:
+            rag.activate(MAX_HP, Vector3(0, 1, 0))
+        if graphics_wrapper:
+            graphics_wrapper.hide()
+        var col = get_node_or_null("CollisionShape3D")
+        if col:
+            col.set_deferred("disabled", true)
+        await get_tree().create_timer(2.5).timeout
         get_tree().change_scene_to_file("res://Scenes/MainArena.tscn")
 
 func use_skill(skill_id: String):
@@ -141,20 +169,14 @@ func unlearn_cleanup(skill_id: String):
     if action_bar and action_bar.has_method("remove_skill"):
         action_bar.remove_skill(skill_id)
 
-## МЫШЬ — сырой ввод в _input (камера не должна зависеть от GUI-каскада:
-## STOP-контрол под виртуальным курсором съедает клик/-motion до
-## _unhandled_input — камера «умирала», если клик-захват попадал на UI).
-## Печать в полях не страдает: при открытых меню мышь видима, гвард ниже.
+## МЫШЬ: вращение камеры — сырой ввод в _input (при захвате GUI не должен
+## глотать motion: STOP-контрол под виртуальным курсором съедает события до
+## _unhandled_input — камера «умирала»). ЗАХВАТ же мыши — в _unhandled_input:
+## он срабатывает ТОЛЬКО когда клик не съеден GUI (клик по карточке телепорта/
+## ползунку F2 до капчура не дойдёт — Q24). Вариант Q24 v1 (гейт по
+## gui_get_hovered_control в _input) вечно блокировал захват — фидбэк юзера
+## 19.11.26 «мышь не фокусится в игру больше никак».
 func _input(event):
-    var menu = get_node_or_null("SkillMenu")
-    if menu and menu.is_open:
-        return
-
-    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-        if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
-            Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-            return
-
     if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
         return
 
@@ -166,7 +188,38 @@ func _input(event):
     if event.is_action_pressed("ui_cancel"):
         Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
+## Клик по пустому месту (GUI его не съел) = захват мыши. Клик по живому
+## GUI-контролу (F2, карточки телепорта, HUD-слоты) до сюда не доходит.
+func _unhandled_input(event):
+    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT \
+            and event.pressed:
+        if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED and not _gui_blocks_capture():
+            Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+## true, если клик должен уйти в UI, а не в захват мыши: открыто меню
+## (скилл-меню игрока, F2-настройки) или диалог непися-телепортера
+## (группа npc_dialog_open). Hovered-эвристики не нужны: клик по живому
+## контролу сам не дойдёт до _unhandled_input.
+## Меню-I больше нет (убрано 19.11.26: перемещение — только через неписей).
+func _gui_blocks_capture() -> bool:
+    var menu = get_node_or_null("SkillMenu")
+    if menu and menu.is_open:
+        return true
+    var ui = get_node_or_null("/root/SettingsMenu")
+    if ui and ui.get("is_open"):
+        return true
+    # Окно телепортера-непися (NPCTeleporter живёт в сцене, не autoload):
+    # группа-флаг ставится/снимается в _open_dialog/_close_dialog.
+    if get_tree().get_first_node_in_group("npc_dialog_open"):
+        return true
+    return false
+
 func _physics_process(delta):
+    # Смерть (Q30, фидбэк юзера «перс падает сквозь пол»): тело заморожено —
+    # коллизия отключена, гравитация не тянет капсулу под пол, камера не ныряет.
+    if is_dying:
+        velocity = Vector3.ZERO
+        return
     # Поллинг идёт мимо системы событий: пока фокус у GUI (печать имени
     # пресета) — сырой ввод игры (WASD/Space) игнорируем.
     var typing: bool = get_viewport().gui_get_focus_owner() != null

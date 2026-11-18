@@ -75,13 +75,18 @@ func _physics_process(_delta: float) -> void:
 	if _dialog_open and not _player_near:
 		_close_dialog()
 		return
-	# Z — гранцевый опрос (удержание не переоткрывает); печать в полях — мимо.
-	var z_now: bool = (not _dialog_open and _player_near) and \
-			Input.is_key_pressed(KEY_Z) and \
-			get_viewport().gui_get_focus_owner() == null
-	if z_now and not _z_was:
-		_open_dialog()
-	_z_was = z_now
+	# Z — гранцевый опрос (удержание не мигает открыто/закрыто). ЗАКРЫВАЕТ окно
+	# тоже (фидбэк юзера 19.11.26: «окно через z не закрывается» — старое
+	# условие «not _dialog_open» не пускало Z до закрытия окна). Фокус-гард
+	# только на открытие: после клика по кнопке фокус у неё, а закрывать Z
+	# должен всегда.
+	var z_pressed := Input.is_key_pressed(KEY_Z)
+	if z_pressed and not _z_was:
+		if _dialog_open:
+			_close_dialog()
+		elif _player_near and get_viewport().gui_get_focus_owner() == null:
+			_open_dialog()
+	_z_was = z_pressed
 
 ## Значок «[Z] Телепорт» — слева снизу экрана (верб. юзера).
 func _make_prompt() -> CanvasLayer:
@@ -151,11 +156,18 @@ func _make_dialog() -> CanvasLayer:
 func _open_dialog() -> void:
 	_dialog_open = true
 	_dialog.visible = true
+	# Группа-флаг для гварда капчура мыши в PlayerController (Q24/Q27): клик
+	# мимо окна при открытом диалоге не должен уходить в захват мира.
+	add_to_group("npc_dialog_open")
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 func _close_dialog() -> void:
 	_dialog_open = false
 	_dialog.visible = false
+	remove_from_group("npc_dialog_open")
+	# МЫШЬ ССОТ v2 (docs/ui_input_rules.md): закрытие UI возвращает мышь в
+	# игру (вердикт юзера 19.11.26: ушли от непися / Z / телепорт — курсор
+	# сразу обратно в захват, без «кликни в мир»).
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 ## Смена сцены с защитой от петли регенераций (паттерн TeleportMenu 17.11.26:

@@ -44,6 +44,11 @@ func _on_body_entered(body: Node):
         if cs:
             cs.add_trauma(get_meta("impact_shake"))
 
+    # Желе-монстр (QUEUE Q25): взрыв дёргает софтбоди. Area3D/CharacterBody
+    # софтбоди физически не давят — JellyMonster сам спавнит RigidBody-толкатель
+    # и фильтрует далёкие взрывы по дистанции.
+    get_tree().call_group("jelly_monster", "jolt_from", global_position)
+
     ProjectilePool.release(self)
 
 func _spawn_scorch():

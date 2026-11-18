@@ -10,8 +10,10 @@ extends Node
 ##  2. Капсульный манекен (скелета нет) — спавним куклу-труп ragdoll_dummy.tscn
 ##     в current_scene (не ребёнком сущности: MovingDummy движется, труп остаётся).
 
-const IMPULSE_BASE := 40.0        # Н·с — база кинетического удара
-const IMPULSE_PER_DAMAGE := 3.0   # Н·с за единицу урона (∝ смертельный урон)
+const IMPULSE_BASE := 15.0        # Н·с — база кинетического удара
+const IMPULSE_PER_DAMAGE := 0.4   # Н·с за единицу урона (∝ смертельный урон)
+# (рендер-проба 19.11.26: 40+3×дамаг при массе костей ~2.5 кг = 75 м/с —
+# труп улетал на 7+ м от места смерти, «исчезал»; 15+0.4x = дуга 2–4 м)
 const IMPULSE_CAP := 60.0         # потолок урона в формуле (гигантский AoE не улетает на Луну)
 const UP_BIAS := 0.45             # подъёмная доля импульса — дуга, не в пол
 
@@ -25,7 +27,9 @@ func activate(amount: int, hit_dir: Vector3) -> void:
 	if body == null:
 		return
 	var sim := _find_simulator(body)
-	if sim:
+	# Пустой симулятор (без PhysicalBone3D) — путь в никуда: визуал скрыт, а
+	# кукла не спавнится, сущность «просто исчезает» (фидбэк юзера 19.11.26).
+	if sim != null and _sim_has_bones(sim):
 		_activate_physical_bones(body, sim, amount, hit_dir)
 	else:
 		_spawn_doll(body, amount, hit_dir)
@@ -41,6 +45,14 @@ func launch_impulse(amount: int, hit_dir: Vector3) -> Vector3:
 		dir = Vector3.UP
 	var lifted := Vector3(dir.x, absf(dir.y) * 0.5 + UP_BIAS, dir.z)
 	return lifted.normalized() * impulse_magnitude(amount)
+
+## Только симулятор с реальными PhysicalBone3D-детьми годится для скелетного
+## пути (см. activate — пустой симулятор съедал смерть).
+func _sim_has_bones(sim: PhysicalBoneSimulator3D) -> bool:
+	for c in sim.get_children():
+		if c is PhysicalBone3D:
+			return true
+	return false
 
 ## Скелетный путь (будущие мобы со скинами): анимации выкл, физика костей вкл.
 func _activate_physical_bones(body: Node3D, sim: PhysicalBoneSimulator3D, amount: int, hit_dir: Vector3) -> void:
@@ -62,8 +74,16 @@ func _spawn_doll(body: Node3D, amount: int, hit_dir: Vector3) -> void:
 		return
 	var doll := doll_scene.instantiate()
 	doll.set("initial_impulse", launch_impulse(amount, hit_dir))
+	# ПОЗИЦИЯ ДО add_child (грабля как у SoftBody3D, фидбэк юзера 19.11.26
+	# «трупы просто исчезают»): в _ready кости уходят в физику — динамические
+	# PhysicalBone3D живут в глобальном пространстве и НЕ следуют за корнем
+	# после старта симуляции. Спавн в origin + перенос «на место смерти»
+	# после add_child оставлял кости лежать у (0,0,0) карты.
+	var scene_root := tree.current_scene as Node3D
+	if scene_root:
+		doll.position = scene_root.global_transform.affine_inverse() \
+				* _ground_position(body)
 	tree.current_scene.add_child(doll)
-	doll.global_position = _ground_position(body)
 	doll.reset_physics_interpolation()
 	doll.set_tint(tint)
 

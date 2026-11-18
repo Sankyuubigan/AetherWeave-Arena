@@ -15,6 +15,12 @@ var _sfx_label: Label
 var _music_slider: HSlider
 var _music_label: Label
 var _quality_option: OptionButton
+var _aim_slider: HSlider
+var _aim_label: Label
+
+## AIM ASSIST (Q29): угловая толерантность наведения, градусы. Персист
+## user://settings.cfg секция [input] (файл общий с [audio]/[graphics]).
+var aim_assist_deg: float = 4.0
 
 const TEST_SOUND := "res://Audio/SFX/neural_ui_click.res"
 ## Качество графики (QUEUE Q1): скрипт автолоада прелоадом — голое имя
@@ -23,6 +29,7 @@ const GraphicsQualityScript = preload("res://Graphics/GraphicsQuality.gd")
 
 func _ready():
     layer = 50
+    _load_aim()
     _build_ui()
     # ВАЖНО: прячем КОРЕНЬ, а не только панель — full-rect Control со
     # STOP-фильтром, оставшись видимым, перехватывал бы ВСЕ клики игры
@@ -87,6 +94,26 @@ func _build_ui() -> void:
     qrow.add_child(_quality_option)
     _quality_option.item_selected.connect(_on_quality_changed)
 
+    # AIM ASSIST (Q29): «чувствительность наведения» — насколько близко к цели
+    # вести прицел, чтобы появилась анимированная отметка (0.5–12°, дефолт 4°).
+    var arow := HBoxContainer.new()
+    arow.add_theme_constant_override("separation", 10)
+    vbox.add_child(arow)
+    var acaption := Label.new()
+    acaption.text = "Чувствительность наведения:"
+    arow.add_child(acaption)
+    _aim_label = Label.new()
+    _aim_label.text = "%.1f°" % aim_assist_deg
+    arow.add_child(_aim_label)
+    _aim_slider = HSlider.new()
+    _aim_slider.min_value = 0.5
+    _aim_slider.max_value = 12.0
+    _aim_slider.step = 0.5
+    _aim_slider.value = aim_assist_deg
+    _aim_slider.custom_minimum_size = Vector2(0, 24)
+    vbox.add_child(_aim_slider)
+    _aim_slider.value_changed.connect(_on_aim_changed)
+
     var test_btn := Button.new()
     test_btn.text = "Проверить звук (эффекты)"
     test_btn.pressed.connect(_on_test_sound)
@@ -130,10 +157,46 @@ func _unhandled_input(event):
         if is_open:
             _sync_from_audio()
             _root.show()
+            # МЫШЬ ССОТ (docs/ui_input_rules.md): открытие UI делает мышь
+            # видимой; закрытие её НЕ трогает — клик по миру вернёт захват.
             Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
         else:
             _root.hide()
+            # МЫШЬ ССОТ v2: закрытие F2 возвращает мышь в игру (вердикт юзера
+            # 19.11.26). Гард _process ниже разруливает случай, когда открыто
+            # и другое окно (кто-то из двоих капчурит — гард возвращает VISIBLE
+            # пока ЭТО окно открыто).
             Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+func _process(_delta):
+    # Q24-гард «пока F2 открыто — фокус всегда с мышкой» (верб. юзера 19.11.26)
+    # сохранён как страховка: по МЫШЬ ССОТ (docs/ui_input_rules.md) единственный
+    # захватчик мыши в игре — клик по миру в PlayerController, и он заблокирован
+    # гейтом _gui_blocks_capture(), пока is_open. Гард ловит только утечки
+    # будущего кода, нарушающего ССОТ.
+    if is_open and Input.get_mouse_mode() != Input.MOUSE_MODE_VISIBLE:
+        Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+## AIM ASSIST (Q29): загрузка/сохранение толерантности. load-first: cfg общий
+## с [audio]/[graphics] — ConfigFile без load() стёр бы чужие секции (грабля
+## GraphicsQuality, см. её _save_settings).
+func _load_aim() -> void:
+    var cf := ConfigFile.new()
+    if cf.load("user://settings.cfg") == OK:
+        aim_assist_deg = clampf(
+            cf.get_value("input", "aim_assist_deg", 4.0), 0.5, 12.0)
+
+func _save_aim() -> void:
+    var cf := ConfigFile.new()
+    cf.load("user://settings.cfg")
+    cf.set_value("input", "aim_assist_deg", aim_assist_deg)
+    cf.save("user://settings.cfg")
+
+func _on_aim_changed(v: float) -> void:
+    aim_assist_deg = v
+    if _aim_label:
+        _aim_label.text = "%.1f°" % v
+    _save_aim()
 
 func _sync_from_audio() -> void:
     var audio = get_node_or_null("/root/AudioManager")
@@ -144,6 +207,9 @@ func _sync_from_audio() -> void:
     _sfx_slider.set_value_no_signal(roundf(sfx * 100.0))
     _music_slider.set_value_no_signal(roundf(music * 100.0))
     _sync_quality()
+    if _aim_slider:
+        _aim_slider.set_value_no_signal(aim_assist_deg)
+        _aim_label.text = "%.1f°" % aim_assist_deg
     _update_labels()
 
 func _gq() -> Node:

@@ -5,7 +5,7 @@ extends SceneTree
 ##   1) структура куклы: 13 костей/13 PhysicalBone3D, 12 ConeTwist-джойнтов;
 ##   2) кости в физике: грудь получает скорость залёта;
 ##   3) смерть манекена спавнит куклу-труп, меш скрывается;
-##   4) масштаб импульса ∝ урону (формула BASE + урон*3);
+##   4) масштаб импульса ∝ урону (формула 15 + урон*0.4, Q30 рендер-проба);
 ##   5) кукла удаляется после lifetime (утоп);
 ##   6) dummy.tscn содержит Ragdoll-компонент.
 
@@ -45,8 +45,8 @@ func _run() -> void:
 	var comp = RagdollComponent.new()
 	_check(comp.impulse_magnitude(60) > comp.impulse_magnitude(10),
 		"гейт 4: импульс(60) > импульс(10)")
-	_check(is_equal_approx(comp.impulse_magnitude(10), 70.0),
-		"гейт 4: формула 40 + урон*3, получено %.1f" % comp.impulse_magnitude(10))
+	_check(is_equal_approx(comp.impulse_magnitude(10), 19.0),
+		"гейт 4: формула 15 + урон*0.4, получено %.1f" % comp.impulse_magnitude(10))
 	comp.free()
 
 	# ── Гейт 6 + 3: dummy.tscn содержит компонент; смерть спавнит куклу ─

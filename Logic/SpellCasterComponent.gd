@@ -11,6 +11,9 @@ extends Node
 
 const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
 
+## FFA-боты (Q10) глушат полоску каста — она игроковая (CanvasLayer поверх HUD).
+@export var show_cast_bar: bool = true
+
 var _channeling := false
 var _alt_left := false  # чередование рук для alternate_hands-скиллов
 var _bar_layer: CanvasLayer
@@ -149,7 +152,17 @@ func _aim_context(player: Node, skill_id: String, skill, hand: String) -> Dictio
 
 	if skill.requires_target:
 		var valid_target = false
-		if target_node:
+		# AIM ASSIST (Q29): сначала ПОМЕЧЕННАЯ ассистом цель — наведение рядом
+		# с целью (угол от F2-ползунка), помеченная честно получает каст.
+		# Точное попадание прицела (рейкаст) — валидация ниже по-старому.
+		var assist = player.get_node_or_null("AimAssist")
+		var marked = assist.get_marked(skill.target_type) if assist else null
+		if marked:
+			target_node = marked
+			target_point = marked.global_position + Vector3(0, 1.0, 0)
+			hit_normal = Vector3.UP
+			valid_target = true
+		elif target_node:
 			var is_target_friendly = target_node.get("is_friendly") if "is_friendly" in target_node else false
 
 			if skill.target_type == "friendly" and is_target_friendly and target_node.has_method("heal"):
@@ -214,6 +227,8 @@ static func _find_skeleton(node: Node) -> Skeleton3D:
 	return null
 
 func _cast_bar_start(duration: float, skill_name: String) -> void:
+	if not show_cast_bar:
+		return
 	_bar_label.text = skill_name
 	_bar.max_value = duration
 	_bar.value = duration

@@ -44,6 +44,7 @@ var hp_bar: ProgressBar
 var floating_sprite: Sprite3D
 
 func _ready():
+	add_to_group("aim_targets") # AIM ASSIST Q29: враг ада — цель «вражеских» скиллов
 	_configure()
 	current_health = max_health
 	spawn_pos = global_position
@@ -125,7 +126,7 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	_cd_left = maxf(0.0, _cd_left - delta)
-	_player = get_tree().get_first_node_in_group("player")
+	_player = _acquire_target()
 	if _player == null:
 		velocity.x = 0.0
 		velocity.z = 0.0
@@ -157,6 +158,10 @@ func _face(target: Vector3, delta: float) -> void:
 	if to.length_squared() < 0.01:
 		return
 	mesh_node.rotation.y = lerp_angle(mesh_node.rotation.y, atan2(to.x, to.z), delta * 10.0)
+
+## Выбор цели (Q10: переопределяется FFA-ботом — ближайший живой враг).
+func _acquire_target() -> Node:
+	return get_tree().get_first_node_in_group("player")
 
 ## Поведение в бою. База = ближний бой: сближение → удар вплотную на кулдауне.
 func _behaviour(dist: float, dir: Vector3) -> void:

@@ -9,6 +9,7 @@ var hp_bar: ProgressBar
 var floating_sprite: Sprite3D
 
 func _ready():
+    add_to_group("aim_targets") # AIM ASSIST Q29: цель наведения (фракция в is_friendly)
     current_health = max_health
     
     var mesh = get_node_or_null("MeshInstance3D")
