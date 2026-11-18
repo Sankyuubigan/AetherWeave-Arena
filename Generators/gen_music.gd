@@ -70,37 +70,71 @@ func _norm(l: PackedFloat32Array, r: PackedFloat32Array, peak: float) -> void:
 		l[i] *= k
 		r[i] *= k
 
-## ── Карта 1 (арена): тёмный дрон A-minor + ветер ────────────────────────
+## ── Карта 1 (арена): медленная музыка A-minor (Am→F→C→G) ────────────────
+## Урок 18.11.26 (вердикт юзера «сплошной гул»): статичный дрон 110/165 Гц
+## + ветер-шум на все 32с = гул, а не музыка. Теперь: аккордовая прогрессия
+## 4×8с с дышащими огибающими, бас-пульс по такту, редкая пентатоника.
+## Луп бесшовный: частоты квантованы к 1/T, границы аккордов на такте.
 func _track_map1() -> void:
 	var t_len := 32.0
 	var n := int(t_len * RATE)
 	var l := PackedFloat32Array(); l.resize(n)
 	var r := PackedFloat32Array(); r.resize(n)
-	var drone := [_qf(110.0, t_len), _qf(164.81, t_len)]
-	var pad := [_qf(220.0, t_len), _qf(261.63, t_len), _qf(329.63, t_len)]
-	var lp_l := 0.0
-	var lp_r := 0.0
+	var chord_len := 8.0
+	# Прогрессия: Am → F → C → G (триады, Гц)
+	var chords := [
+		[220.0, 261.63, 329.63],
+		[174.61, 220.0, 261.63],
+		[261.63, 329.63, 392.0],
+		[196.0, 246.94, 293.66],
+	]
+	var roots := [_qf(110.0, t_len), _qf(87.31, t_len), _qf(130.81, t_len), _qf(98.0, t_len)]
+	# A-minor пентатоника, рисунок по 2с-слотам (0 = пауза)
+	var pent := [_qf(440.0, t_len), _qf(523.25, t_len), _qf(587.33, t_len), _qf(659.26, t_len), _qf(783.99, t_len)]
+	var melody := [0, 3, 4, 2, 1, 0, 3, 2, 4, 0, 2, 1, 0, 3, 1, 2]  # индексы pent, 0=A4
+	var rests := [false, false, true, false, false, true, false, false, false, true, false, false, true, false, false, false]
+	var rms := [0.0, 0.0, 0.0, 0.0]
 	for i in n:
 		var t := float(i) / RATE
-		var wl := 0.06 + 0.05 * sin(TAU * t / t_len)                       # ветер-огибающая
-		var drone_amp := 0.16 + 0.06 * sin(TAU * t / t_len * 2.0)
 		var v_l := 0.0
 		var v_r := 0.0
-		for d in drone.size():
-			v_l += drone_amp * sin(TAU * drone[d] * t)
-			v_r += drone_amp * sin(TAU * drone[d] * t + 1.3)               # расфаза для ширины
-		for p in pad.size():                                               # медленные вспухания аккорда
-			var env := 0.5 + 0.5 * sin(TAU * t / t_len * 4.0 + TAU * p / 3.0)
-			v_l += 0.05 * env * sin(TAU * pad[p] * t + TAU * p / 3.0)
-			v_r += 0.05 * env * sin(TAU * pad[p] * t + TAU * p / 3.0 + 0.7)
-		var noise := randf() * 2.0 - 1.0
-		lp_l += 0.03 * (noise - lp_l)                                      # one-pole lowpass
-		lp_r += 0.03 * ((randf() * 2.0 - 1.0) - lp_r)
-		v_l += wl * lp_l * 2.5
-		v_r += wl * lp_r * 2.5
+		# Пэд: все 4 аккорда с окном-огибающей (1.2с взлёт/сход) — сумма весов
+		# даёт «дыхание» фразы на стыках, частоты квантованы → шов бесшовный.
+		for c in chords.size():
+			var ct := fmod(t, chord_len)
+			var atk := clampf(ct / 1.2, 0.0, 1.0)
+			var rel := clampf((chord_len - ct) / 1.2, 0.0, 1.0)
+			var env := 0.5 - 0.5 * cos(atk * PI) if atk < rel else 0.5 - 0.5 * cos(rel * PI)
+			env *= env
+			var ph := TAU * float(c) / 3.0
+			v_l += 0.075 * env * sin(TAU * _qf(chords[c][0], t_len) * t + ph)
+			v_l += 0.055 * env * sin(TAU * _qf(chords[c][1], t_len) * t + ph + 0.5)
+			v_r += 0.075 * env * sin(TAU * _qf(chords[c][0], t_len) * t + ph + 0.6)
+			v_r += 0.055 * env * sin(TAU * _qf(chords[c][1], t_len) * t + ph + 1.1)
+			v_l += 0.04 * env * sin(TAU * _qf(chords[c][2], t_len) * t + ph + 0.9)
+			v_r += 0.04 * env * sin(TAU * _qf(chords[c][2], t_len) * t + ph + 0.2)
+		# Бас-пульс: мягкий удар каждые 2с, нота = корень текущего аккорда
+		var bt := fmod(t, 2.0)
+		var ci := int(t / chord_len) % chords.size()
+		v_l += 0.13 * exp(-bt * 2.2) * (sin(TAU * roots[ci] * t) + 0.35 * sin(TAU * roots[ci] * 2.0 * t))
+		v_r += 0.13 * exp(-bt * 2.2) * (sin(TAU * roots[ci] * t) + 0.35 * sin(TAU * roots[ci] * 2.0 * t))
+		# Пентатоника: нота каждые 2с с паузами, плюк, панорама по слоту
+		var slot := int(t / 2.0) % melody.size()
+		if not rests[slot]:
+			var pt := fmod(t, 2.0)
+			var mf: float = pent[melody[slot]]
+			var amp := 0.085 * exp(-pt * 1.6)
+			var note := amp * (sin(TAU * mf * t) + 0.25 * sin(TAU * mf * 2.0 * t))
+			var pan := 0.5 + 0.35 * sin(TAU * float(slot) / 8.0)
+			v_l += note * (1.0 - pan)
+			v_r += note * pan
 		l[i] = v_l
 		r[i] = v_r
+		rms[ci] += v_l * v_l + v_r * v_r
 	_norm(l, r, 0.45)
+	for c in chords.size():
+		var seg_n := float(int(chord_len * RATE))
+		print("GEN-MUSIC: map1 chunk %d RMS=%.3f" % [c, sqrt(rms[c] / seg_n / 2.0)])
 	_save("map1_ambient", l, r)
 
 ## ── Карта 2 (поле): тёплый пэд C-major + пентатоника-арпеджио ───────────

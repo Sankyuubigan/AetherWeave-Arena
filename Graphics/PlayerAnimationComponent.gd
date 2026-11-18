@@ -51,6 +51,14 @@ var was_in_air: bool = false
 var air_frames: int = 0  # гистерезис против «мигания» is_on_floor на склонах
 var _channel: bool = false  # длительный каст (метеор/гром): движение гасится
 
+## TEMP A/B (18.11.26, раунд 23): F4 — сравнить ходьбу MotionBricks (Walk_Test)
+## со старым Run. Клип растягивается под скорость игрока (BVH-шаг ~1.09 м/с
+## против speed 5.0). После вердикта юзера блок удалить вместе с Run_MB.
+var _run_node: AnimationNodeAnimation = null  # узел "Run" в стейт-машине
+var _mb_walk_on: bool = false
+const MB_RUN_SRC := "Run_Test"  # источник Run_MB (mb_run_d: A326 94..176, луп 4.49 м/с)
+const MB_RUN_SPEED := 4.49  # м/с — средняя скорость корня BVH-лупа A326 (20f@30, +Z)
+
 func is_channeling() -> bool:
     return _channel
 
@@ -89,6 +97,18 @@ func _ready():
             var air_time: float = 2.0 * parent.jump_velocity / parent.GRAVITY
             var spd: float = clampf(flip.length / maxf(air_time, 0.1), 1.0, 3.0)
             lib.add_animation("FrontFlip_Fast", _stretched(flip, flip.length / spd))
+        # TEMP A/B: MotionBricks-БЕГ (run_loop 4.05 м/с) под скорость игрока.
+        # Луп — ЯВНО на производном клипе: вердикт 23а «затем останавливается» —
+        # loop не должен зависеть от наследования duplicate().
+        if lib.has_animation(MB_RUN_SRC):
+            var rt: Animation = lib.get_animation(MB_RUN_SRC)
+            rt.loop_mode = Animation.LOOP_LINEAR
+            var p = get_parent()
+            var spd: float = clampf(p.speed / MB_RUN_SPEED, 1.0, 6.0)
+            var mb := _stretched(rt, rt.length / spd)
+            mb.loop_mode = Animation.LOOP_LINEAR
+            lib.add_animation("Run_MB", mb)
+            print("PlayerAnimationComponent: Run_MB готов (бег x%.2f, длит. %.2f с, loop=%d)" % [spd, mb.length, mb.loop_mode])
 
     # AnimationTree: стейт-машина локомоции. Сиблинг ПОСЛЕ AnimationPlayer,
     # ДО CastPlayer (порядок записи поз за кадр: loco → cast).
@@ -143,6 +163,9 @@ func _build_loco_machine() -> AnimationNodeStateMachine:
     var sm := AnimationNodeStateMachine.new()
     _add_anim_node(sm, "Idle", "Idle")
     _add_anim_node(sm, "Run", "Run")
+    # Стоп после бега (директива юзера 18.11.26): пока бежим — луп без
+    # остановок; остановился — нейро-декель Run_Stop доигрывает в Idle.
+    _add_anim_node(sm, "Stop", "Run_Stop")
     _add_anim_node(sm, "Jump", "Jump_Launch")
     _add_anim_node(sm, "Falling", "Falling")
     _add_anim_node(sm, "Landing", "Landing_Cut")
@@ -152,6 +175,11 @@ func _build_loco_machine() -> AnimationNodeStateMachine:
     var tr := [
         ["Idle", "Run", 0.15, false],
         ["Run", "Idle", 0.2, false],
+        ["Run", "Stop", 0.15, false],
+        ["Stop", "Idle", 0.2, true],
+        ["Stop", "Run", 0.1, false],
+        ["Stop", "Jump", 0.1, false],
+        ["Stop", "Falling", 0.25, false],
         ["Idle", "Jump", 0.1, false],
         ["Run", "Jump", 0.1, false],
         ["Landing", "Jump", 0.1, false],
@@ -182,6 +210,8 @@ func _add_anim_node(sm: AnimationNodeStateMachine, node_name: String, anim: Stri
     var an := AnimationNodeAnimation.new()
     an.animation = anim
     sm.add_node(node_name, an)
+    if node_name == "Run":
+        _run_node = an  # TEMP A/B: F4 переключает Walk_Test/Run
 
 func _travel(to: String) -> void:
     if _state == to:
@@ -202,6 +232,22 @@ func play_jump(double: bool = false) -> void:
     # Falling, если ещё в воздухе. Одиночный — Jump_Launch (старт с отрыва,
     # без приседа в воздухе).
     _travel("FrontFlip" if double else "Jump")
+
+## ── TEMP A/B (раунд 23): F4 — MotionBricks-ходьба vs старый Run ──────────
+
+func _unhandled_input(event: InputEvent) -> void:
+    if event is InputEventKey and event.pressed and not event.echo \
+            and event.keycode == KEY_F4:
+        _toggle_mb_walk()
+
+func _toggle_mb_walk() -> void:
+    if _run_node == null or anim_player == null \
+            or not anim_player.has_animation("Run_MB"):
+        print("MB-WALK: Run_MB недоступен")
+        return
+    _mb_walk_on = not _mb_walk_on
+    _run_node.animation = "Run_MB" if _mb_walk_on else "Run"
+    print("MB-WALK A/B: ", "MotionBricks-бег (Run_Test)" if _mb_walk_on else "старый Run")
 
 ## ── Каст-анимации: верх тела на CastPlayer (всегда UB) ──────────────────
 
@@ -309,26 +355,42 @@ func _process(_delta):
         return
 
     if speed < 0.001:
-        if _state != "Idle":
+        if _state == "Run":
+            _travel("Stop")  # декель после бега (директива юзера), AT_END → Idle
+        elif _state != "Stop" and _state != "Idle":
             _travel("Idle")
     else:
-        if _state != "Run":
+        # В Stop разгонлся снова (микродвижение <0.5 м/с остаётся в декеле).
+        if _state == "Stop" and speed > 0.5:
+            _travel("Run")
+        elif _state != "Run" and _state != "Stop":
             _travel("Run")
 
 ## ── Производные клипы ────────────────────────────────────────────────────
 
 ## Копия клипа без отрезка [0, off): ключи ДО off удаляются, ОСТАЛЬНЫЕ
-## сдвигаются назад на off (иначе первый оставшийся ключ стоит на off и
-## сэмплинг до него держит замороженную позу 0.33с — регресс прыжка 17.11.26).
-## Квирик 4.8: track_clear нет — удаляем по индексам с хвоста.
+## сдвигаются назад на off. НЕ сдвигать ключи на месте: track_set_key_time
+## пересортировывает трек, и цикл по индексам сбивается — ключи сдвигаются
+## дважды/теряются (Jump_Launch схлопывался в 6 ключей с временами
+## 0.32–0.41 и обрывом позы вниз = «не прыгает, сразу падает», 18.11.26;
+## зонд probe_cut_range.gd: старый алгоритм 6 ключей, безопасный 26).
+## Безопасно: собрать (время, значение, transition) ДО правок, очистить
+## трек, вставить заново по возрастанию. Квирик 4.8: track_clear нет.
 func _cut_from(src: Animation, off: float) -> Animation:
     var a: Animation = src.duplicate(true)
     for i in a.get_track_count():
+        var times: Array = []
+        var payloads: Array = []
+        for k in a.track_get_key_count(i):
+            var t: float = a.track_get_key_time(i, k)
+            if t < off:
+                continue
+            times.append(t - off)
+            payloads.append([a.track_get_key_value(i, k), a.track_get_key_transition(i, k)])
         for k in range(a.track_get_key_count(i) - 1, -1, -1):
-            if a.track_get_key_time(i, k) < off:
-                a.track_remove_key(i, k)
-            else:
-                a.track_set_key_time(i, k, a.track_get_key_time(i, k) - off)
+            a.track_remove_key(i, k)
+        for j in times.size():
+            a.track_insert_key(i, times[j], payloads[j][0], payloads[j][1])
     a.length = maxf(a.length - off, 0.01)
     return a
 

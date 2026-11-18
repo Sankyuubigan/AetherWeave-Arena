@@ -12,6 +12,9 @@ const GRID_W = 15
 const GRID_D = 15
 const TERRAIN_SIZE = 200.0
 const TERRAIN_RES = 128
+## Чанк скаттера: свой MultiMeshInstance3D на чанк — иначе гигантский AABB
+## группы рисуется всегда целиком и frustum culling не отсекает ничего.
+const SCATTER_CHUNK = 32.0
 
 var _noise: FastNoiseLite
 
@@ -120,11 +123,12 @@ func _add_nature():
 	var rng = RandomNumberGenerator.new()
 
 	_add_scatter_group("Trees", tree_mesh, 200, rng, half, 0.3, 25.0)
-	_add_scatter_group("Trunks", trunk_mesh, 200, rng, half, 0.3, 25.0)
+	# Trunks — тонкие столбики 1.5 м, их тень нечитаема → cast_shadow OFF (Шаг 5.2)
+	_add_scatter_group("Trunks", trunk_mesh, 200, rng, half, 0.3, 25.0, 0.8, 1.3, false, false)
 	# Камни: всегда масштабируем (разные размеры — вопрос юзера), диапазон шире деревьев.
 	_add_scatter_group("Rocks", rock_mesh, 150, rng, half, 0.6, 20.0, 0.5, 2.5, true)
 
-func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomNumberGenerator, half: float, spacing: float, camp_radius: float, scale_lo := 0.8, scale_hi := 1.3, always_scale := false):
+func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomNumberGenerator, half: float, spacing: float, camp_radius: float, scale_lo := 0.8, scale_hi := 1.3, always_scale := false, cast_shadows := true):
 	rng.seed = randi()
 
 	# Сажаем проп за низ AABB: origin меша бывает в центре (камень trellis),
@@ -154,11 +158,6 @@ func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomN
 	if positions.is_empty():
 		return
 
-	var mm = MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.instance_count = positions.size()
-	mm.mesh = mesh
-
 	var instance_transforms: Array[Transform3D] = []
 	for i in positions.size():
 		var s := 1.0
@@ -169,13 +168,48 @@ func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomN
 		t.basis = t.basis.rotated(Vector3.UP, rng.randf_range(0, PI * 2))
 		if s != 1.0:
 			t.basis = t.basis.scaled(Vector3(s, s, s))
-		mm.set_instance_transform(i, t)
 		instance_transforms.append(t)
 
-	var mmi = MultiMeshInstance3D.new()
-	mmi.name = group_name
-	mmi.multimesh = mm
-	add_child(mmi)
+	# Чанки 32×32 (ревью спеца §4): свой MultiMeshInstance3D на чанк, culling
+	# отсекает чанки за спиной/за горизонтом. Коллизии не трогаем — один
+	# StaticBody на группу остаётся (форма дешёвая, чанкинг выигрыша не даст).
+	var chunks := {}
+	for t in instance_transforms:
+		var key := Vector2i(floori(t.origin.x / SCATTER_CHUNK), floori(t.origin.z / SCATTER_CHUNK))
+		if not chunks.has(key):
+			chunks[key] = []
+		chunks[key].append(t)
+
+	var group_root := Node3D.new()
+	group_root.name = group_name
+	add_child(group_root)
+
+	for key in chunks:
+		var list: Array = chunks[key]
+		var mm = MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.instance_count = list.size()
+		mm.mesh = mesh
+		var caabb := AABB()
+		var first := true
+		for i in list.size():
+			var t: Transform3D = list[i]
+			mm.set_instance_transform(i, t)
+			var ta: AABB = t * mesh.get_aabb()
+			caabb = ta if first else caabb.merge(ta)
+			first = false
+		# custom_aabb страховочно: у MultiMesh он считается из инстансов,
+		# но явный AABB гарантирует корректный culling чанка.
+		mm.custom_aabb = caabb.grow(2.0)
+
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "%s_%d_%d" % [group_name, key.x, key.y]
+		mmi.multimesh = mm
+		if not cast_shadows:
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		group_root.add_child(mmi)
+
+	print("[Scatter] %s: инстансов %d, чанков %d" % [group_name, instance_transforms.size(), chunks.size()])
 
 	# Коллизия: MultiMesh сам по себе не коллизится (юзер ходил сквозь
 	# деревья/камни). Один StaticBody на группу, у каждого инстанса —

@@ -53,6 +53,17 @@ const TASKS := {
 	"Cast_Enter": "cast_enter",
 	"Cast_Loop": "cast_loop",
 	"Cast_Shoot": "cast_shoot",
+	# Пилот MotionBricks (18.11.26): BVH-локомоция через tools/export_f32.py
+	# (D:/nn/motionbricks). Игрой не используется — только визуальная проверка.
+	"Walk_Test": "mb_walk_test",
+	# Бег-луп (раунд 23е): вердикт на mb_run_c (A454) — «бегает задом наперёд,
+	# как таракан, руки прижаты; цикл решён». Вернулись к расслабленному A326:
+	# find_loop.py нашёл окно 94..176 (шов 9.6°, ровная середина темпа),
+	# --yaw 180 (грудь +Z, 4°), 20f@30 (как одобренный темп 23г).
+	"Run_Test": "mb_run_d",
+	# Стоп после бега (раунд 23д, директива юзера «остановился — вот тогда
+	# стоп»): нейро-клип kimodo.cpp (40f@30, декель 4.6→0.3 м/с, финал = стойка).
+	"Run_Stop": "run_stop",
 	"Cast_Shoot_L": "cast_shoot_b",
 	"Cast_Exit": "cast_exit",
 	"Throw": "cast_push",
@@ -209,8 +220,11 @@ func _retarget_one(clip_dir: String, out_name: String) -> Animation:
 		return null
 
 	# Шов лупа: зонд показал до 43° на кисти между кадром 0 и последним.
-	# Кроссфейд хвоста на ОБРАТНУЮ голову: out[L+i] = slerp(M(L+i), M(N-1-i), w),
-	# w→1 ⇒ последний кадр = M(0) ТОЧНО (нулевой поп на завороте лупа).
+	# Cast_Loop — инплейс: хвост → ОБРАТНАЯ голова out[L+i] = slerp(M(L+i),
+	# M(N-1-i), w), w→1 ⇒ последний кадр = M(0) ТОЧНО (нулевой поп на шве).
+	# Локомоция (Run_Test/Walk_Test) — ЦИКЛИЧНАЯ: хвост → ПРЯМАЯ голова
+	# out[N-1-m] = slerp(M[N-1-m], M[m], w), w=1 на шве; движение в хвосте
+	# остаётся вперёд (реверс-хвост для бега = «бег задом» перед каждым швом).
 	if out_name == "Cast_Loop" and frames >= 12:
 		var n_fade := mini(10, frames / 4)
 		var head := frames - n_fade
@@ -230,6 +244,30 @@ func _retarget_one(clip_dir: String, out_name: String) -> Animation:
 				var dpos := (head + i) * 3 + a
 				roots[dpos] = lerpf(roots[dpos], roots[(n_fade - 1 - i) * 3 + a], w)
 		print("  LOOP FADE: хвост %d кадров → точный шов (последний кадр = кадр 0)" % n_fade)
+
+	# Локомоция (Run_Test/Walk_Test): окно лупа фазово ЗАКРЫТО конвертером
+	# (--trim из find_loop.py), остаточный шов ~9.6° (A326 94..176). Короткий
+	# кроссфейд К=3 хвоста на ПРЯМУЮ голову: последний кадр = кадр 0 ТОЧНО
+	# (нолевой поп на шве), а смешиваемые позы разнесены ≤ на K кадров фазы —
+	# движение в хвосте не умирает. Длинный К=10 на НЕзамкнутом окне (23в)
+	# смешивал позы через ~11 кадров фазы = торможение каждый круг.
+	if out_name in ["Run_Test", "Walk_Test"] and frames >= 8:
+		var n_fade := 3
+		for i in n_fade:
+			var w := (n_fade - i) / float(n_fade)
+			var dst_b := (frames - 1 - i) * nj * 4
+			var src_b := i * nj * 4
+			for j in nj:
+				var qa := Quaternion(rots[dst_b + j * 4], rots[dst_b + j * 4 + 1], rots[dst_b + j * 4 + 2], rots[dst_b + j * 4 + 3])
+				var qb := Quaternion(rots[src_b + j * 4], rots[src_b + j * 4 + 1], rots[src_b + j * 4 + 2], rots[src_b + j * 4 + 3])
+				var qs := qa.slerp(qb, w)
+				rots[dst_b + j * 4] = qs.x
+				rots[dst_b + j * 4 + 1] = qs.y
+				rots[dst_b + j * 4 + 2] = qs.z
+				rots[dst_b + j * 4 + 3] = qs.w
+			for a in 3:
+				roots[(frames - 1 - i) * 3 + a] = lerpf(roots[(frames - 1 - i) * 3 + a], roots[i * 3 + a], w)
+		print("  LOOP FADE (локомоция): хвост %d кадров → прямая голова, шов = 0" % n_fade)
 
 	# Эффективная карта: ключ = СОМЕДСКИЙ сустав в пространстве данных
 	# (side_flip свапает имена), значение = целевая кость.
@@ -252,7 +290,7 @@ func _retarget_one(clip_dir: String, out_name: String) -> Animation:
 
 	var out := Animation.new()
 	out.length = frames / FPS
-	out.loop_mode = Animation.LOOP_LINEAR if out_name == "Cast_Loop" else Animation.LOOP_NONE
+	out.loop_mode = Animation.LOOP_LINEAR if out_name in ["Cast_Loop", "Run_Test", "Walk_Test"] else Animation.LOOP_NONE
 	var rot_track: Dictionary = {}  # ключ → индекс трека
 	var pos_track := -1
 

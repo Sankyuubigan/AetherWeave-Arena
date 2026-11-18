@@ -1,10 +1,42 @@
+# Меш-пайплайн v2 по ревью спеца (18.11.26). Заменяет версию с delimit-декимацией.
+#
+# Ключевые отличия от v1 (почему):
+# - DECIMATE БЕЗ delimit: фотограмметрия имеет плотные UV-швы; delimit запрещал
+#   коллапс рёбер поперёк швов → почти не децимировал и тянул треугольники.
+#   Старые UV на LP-копии удаляются ПЕРЕД декимацией — всё равно перепекаем.
+# - Re-UV: smart_project(angle_limit=РАДИАНЫ(80), island_margin=0.004) +
+#   pack_islands(..., margin=0.005). v1 передавала 66 как «радианы» (на деле
+#   66 рад!) и margin 0.02 — раздутые атласы.
+# - Бейки LP<-HP (selected-to-active): normal + AO + roughness + diffuse(color),
+#   2048 → даунскейл 1024. Нормал/ORM сохраняются ТОЛЬКО в PNG (lossy WebP на
+#   нормалях = рябь). Диффуз — WebP.
+# - cage_extrusion = 0.03 × радиус bbox (v1: жёсткие 0.01), max_ray_distance=0.
+# - shade_smooth по углу после декимации, ПЕРЕД бейками.
+# - ORM-карта: R=AO, G=Roughness, B=Metal=0 (металл в бейк = чёрнота).
+# - REMESH(voxel) — только --remesh РЕМОНТ (дыры/нон-манifold), не для оптимизации.
+#
+# Запуск:
+# & "D:\Programs\Blender Foundation\Blender 5.1\blender.exe" --background \
+#   --python res://Generators/optimize_triangles.py -- <input_gltf|glb> \
+#   [--target N] [--out DIR] [--name NAME] [--remesh] [--no-bake] [--no-decimate]
 import bpy
 import sys
 import os
+import math
+import time
+import numpy as np
 
-TARGET_TRIANGLES = 15000
-TEXTURE_MAX_SIZE = 1024
+# УРОК (18.11.26): stdout при редиректе блочно-буферизуется — прогресс бейка
+# в логе появлялся только после выхода blender. Линейная буферизация = живой
+# прогресс (юзер: «есть прогрессбар?»).
+sys.stdout.reconfigure(line_buffering=True)
+
+TARGET_TRIANGLES = 5000     # бюджет хиро-пропа с нормал-бейком (спец: 1000-5000)
+# УРОК (18.11.26, вердикт юзера «25 минут неприемлемо»): бейк сразу в финальное
+# 1024 — в 4 раза меньше пикселей, чем 2048→даунскейл. Качество на камнях
+# проверит юзер; если не хватит — поднять точечно, не глобально.
 BAKE_IMAGE_SIZE = 1024
+FINAL_IMAGE_SIZE = 1024
 SKIP_BAKE = False
 USE_REMESH = False
 REMESH_VOXEL_SIZE = 0.035
@@ -15,158 +47,364 @@ def clear_scene():
     bpy.ops.object.delete(use_global=False)
 
 
-def delete_collection(name):
-    coll = bpy.data.collections.get(name)
-    if coll:
-        for obj in list(coll.objects):
-            bpy.data.objects.remove(obj, do_unlink=True)
-        bpy.data.collections.remove(coll)
+def tri_count(objs):
+    dg = bpy.context.evaluated_depsgraph_get()
+    return sum(len(o.evaluated_get(dg).data.loop_triangles) for o in objs)
 
 
-def resize_textures(max_size):
-    for img in bpy.data.images:
-        if img.size[0] > max_size or img.size[1] > max_size:
-            old_size = f"{img.size[0]}x{img.size[1]}"
-            ratio = min(max_size / img.size[0], max_size / img.size[1])
-            new_w = max(4, int(img.size[0] * ratio))
-            new_h = max(4, int(img.size[1] * ratio))
-            img.scale(new_w, new_h)
-            print(f"  '{img.name}': {old_size} -> {new_w}x{new_h}")
+def bbox_radius(objs):
+    xs, ys, zs = [], [], []
+    for o in objs:
+        for c in o.bound_box:
+            xs.append(c[0]); ys.append(c[1]); zs.append(c[2])
+    if not xs:
+        return 0.5
+    diag = math.dist((min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs)))
+    return max(diag / 2.0, 1e-3)
 
 
-def build_material_with_arm(lp_obj, tex_diff, tex_rough):
-    mat = bpy.data.materials.new(name=f"{lp_obj.name}_mat")
+def strip_uvs(obj):
+    while obj.data.uv_layers:
+        obj.data.uv_layers.remove(obj.data.uv_layers[0])
+
+
+def weld_verts(obj, bbox_r):
+    """Сварка совпадающих вершин ДО декимации (совет из практики): GLB хранит
+    по копии вершин на UV-остров + кастомные нормали — QEM считает рёбра швов
+    граничными и не коллапсит их (валун: 114,778 «граничных» рёбер, декимация
+    застревала на 57K). Сваривать ПОСЛЕ поздно — края уже разошлись."""
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    try:
+        bpy.ops.mesh.customdata_custom_splitnormals_clear()
+    except Exception:
+        pass
+    before = len(obj.data.vertices)
+    bpy.ops.mesh.remove_doubles(threshold=max(1e-5, 0.0002 * bbox_r))
+    after = len(obj.data.vertices)
+    print(f"    weld '{obj.name}': {before:,} -> {after:,} вершин")
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def fill_holes(obj, max_sides=64):
+    """Оставшиеся дыры после сварки (реальные пробоины скана).
+    QEM не коллапсит граничные рёбра → декимация застревает."""
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    try:
+        bpy.ops.mesh.fill_holes(sides=max_sides)
+    except Exception as e:
+        print(f"    fill_holes: {e}")
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def remake_uvs(obj):
+    """Новые UV для перепека: smart_project + pack_islands. Углы в РАДИАНАХ."""
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.smart_project(angle_limit=math.radians(80), island_margin=0.004)
+    bpy.ops.mesh.select_all(action='SELECT')
+    try:
+        bpy.ops.uv.pack_islands(angle_method='ANGLE', angle_limit=math.radians(80), margin=0.005)
+    except TypeError:
+        bpy.ops.uv.pack_islands(margin=0.005)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def recalc_normals_outside(obj):
+    """QEM-декимация вертит/портит нормали части треугольников (rock_moss:
+    чёрные осколки с рваными краями, мигрируют между ракурсами — диффуз и ORM
+    при этом чистые). Пересчёт «наружу» чинит winding+нормали перед бейками."""
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def shade_smooth_by_angle(obj, deg=30):
+    bpy.context.view_layer.objects.active = obj
+    try:
+        bpy.ops.object.shade_smooth_by_angle(angle=math.radians(deg))
+    except Exception:
+        bpy.ops.object.shade_smooth()
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def uv_island_stats(obj):
+    """Доля атласа, занятая островами (0..1), и число островов."""
+    me = obj.data
+    me.calc_loop_triangles()
+    if not me.uv_layers:
+        return 0.0, 0
+    uvl = me.uv_layers[0].data
+    if len(me.loop_triangles) == 0 or len(uvl) == 0:
+        return 0.0, 0
+    occ = 0.0
+    for tri in me.loop_triangles:
+        uvs = [uvl[li].uv for li in tri.loops]
+        (ax, ay), (bx, by), (cx, cy) = [tuple(u) for u in uvs]
+        occ += abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 2.0
+    # Число островов: связность UV-вершин (соседство через UV-рёбра).
+    import bmesh
+    from collections import defaultdict
+    bm = bmesh.new(); bm.from_mesh(me)
+    uv_layer = bm.loops.layers.uv.active
+    adj = defaultdict(set)
+    for f in bm.faces:
+        loops = f.loops
+        for i in range(len(loops)):
+            a = loops[i][uv_layer].uv.copy().freeze()
+            b = loops[(i + 1) % len(loops)][uv_layer].uv.copy().freeze()
+            if a != b:
+                adj[a].add(b)
+                adj[b].add(a)
+    seen, islands = set(), 0
+    for f in bm.faces:
+        key = f.loops[0][uv_layer].uv.copy().freeze()
+        if key in seen:
+            continue
+        stack, islands = [key], islands + 1
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            stack.extend(adj[cur] - seen)
+    bm.free()
+    return min(occ, 1.0), islands
+
+
+def hp_zero_metallic():
+    """Metallic=0 на HP перед diffuse-бейком (металл в бейк = чёрнота)."""
+    for mat in bpy.data.materials:
+        if not mat.use_nodes:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type == 'BSDF_PRINCIPLED':
+                for l in list(node.inputs['Metallic'].links):
+                    mat.node_tree.links.remove(l)
+                node.inputs['Metallic'].default_value = 0.0
+
+
+def new_bake_image(name, non_color=True, init_rgb=(0.0, 0.0, 0.0)):
+    img = bpy.data.images.new(name, width=BAKE_IMAGE_SIZE, height=BAKE_IMAGE_SIZE, alpha=False)
+    if non_color:
+        img.colorspace_settings.name = 'Non-Color'
+    # Фон атласа НЕ чёрный: вырожденные UV-треугольники (после smart_project
+    # на узких трианглах) сэмплят фон атласа → чёрные осколки на пропе
+    # (rock_moss: геометрия/нормали/карты чисты, flat-зонд белоснежный, а
+    # nonormal/noorm черны — виноват сэмпл фона). Нейтральный фон = серый
+    # камень вместо чёрных дыр. (19.11.26)
+    if init_rgb != (0.0, 0.0, 0.0):
+        w, h = img.size
+        px = np.empty(w * h * 4, dtype=np.float32)
+        px[0::4] = init_rgb[0]
+        px[1::4] = init_rgb[1]
+        px[2::4] = init_rgb[2]
+        px[3::4] = 1.0
+        img.pixels.foreach_set(px)
+    return img
+
+
+def bake_map(lp_obj, hp_obj, bake_type, img, color_only=False):
+    tex_node = lp_obj.data.materials[0].node_tree.nodes.new('ShaderNodeTexImage')
+    tex_node.image = img
+    tex_node.select = True
+    lp_obj.data.materials[0].node_tree.nodes.active = tex_node
+
+    bpy.ops.object.select_all(action='DESELECT')
+    hp_obj.select_set(True)
+    lp_obj.select_set(True)
+    bpy.context.view_layer.objects.active = lp_obj
+
+    b = bpy.context.scene.render.bake
+    b.use_selected_to_active = True
+    b.cage_extrusion = lp_obj["cage"]
+    b.max_ray_distance = 0.0
+    # use_clear=False ОБЯЗАТЕЛЕН: дефолт True стирает всю картинку (в чёрный)
+    # перед бейком — нейтральная заливка new_bake_image не доживает до рендера
+    # (3 ребейка подряд «фикс не сработал» именно поэтому). Незапечённые тексели
+    # (вырожденные UV-островки) остаются с цветом фона вместо чёрных дыр.
+    b.use_clear = False
+    b.margin = 8
+    if color_only:
+        b.use_pass_direct = False
+        b.use_pass_indirect = False
+        b.use_pass_color = True
+    try:
+        bpy.ops.object.bake(type=bake_type)
+        print(f"    {bake_type} OK")
+        return True
+    except Exception as e:
+        print(f"    {bake_type} FAILED: {e}")
+        return False
+
+
+def save_img(img, path, file_format):
+    img.filepath_raw = path
+    img.file_format = file_format
+    try:
+        img.save(filepath=path, quality=95)
+    except TypeError:
+        img.save(filepath=path)
+    img.source = 'FILE'
+    img.filepath = path
+    print(f"    saved {os.path.basename(path)} ({os.path.getsize(path) / 1024:.0f} KB)")
+
+
+def compose_orm(ao_img, rough_img, out_path, name):
+    w = h = FINAL_IMAGE_SIZE
+    ao = np.empty(w * h * 4, dtype=np.float32)
+    ao_img.pixels.foreach_get(ao)
+    ro = np.empty(w * h * 4, dtype=np.float32)
+    rough_img.pixels.foreach_get(ro)
+    orm = np.zeros(w * h * 4, dtype=np.float32)
+    orm[0::4] = ao[0::4]          # R = AO
+    orm[1::4] = ro[1::4]          # G = Roughness
+    orm[3::4] = 1.0               # A = 1
+    out = bpy.data.images.new(name, width=w, height=h, alpha=False)
+    out.colorspace_settings.name = 'Non-Color'
+    out.pixels.foreach_set(orm)
+    save_img(out, out_path, 'PNG')
+    return out
+
+
+def heal_bake_image(img, init_rgb, max_iters=512):
+    """Дозаливка незапечённого фона соседними запечёнными цветами.
+
+    Бейк не попадает по части LP-текселей (глубокие щели между камнями сета:
+    рейки из LP вдоль нормалей летят мимо HP), и эти тексели остаются с цветом
+    инициализации new_bake_image — на пропе выглядят серыми/чёрными пятнами
+    («осколки» rock_moss, 19.11.26). Нейтральный фон меняет цвет пятна, но не
+    убирает его; лечит только растяжка запечённых цветов в дыры кольцами 3x3
+    (усреднение известных соседей), пока дыры не кончатся.
+
+    Допуск 1.5/255, а не 1e-6: sRGB-картинки (diffuse) Blender прогоняет через
+    колор-менеджмент — 0.5 превращается в ~0.503, точное сравнение дыры не видит
+    (ребейк 4: «дыр нет» при сером фоне на рендере). Non-Color карты проходят
+    точно, но единый допуск покрывает оба случая; ложно-дырные запечённые
+    тексели (AO=1, нейтральные нормали) дозаливаются соседями ≈ без изменений.
+    """
+    w, h = img.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    buf = px.reshape(h, w, 4)
+    rgb = buf[..., :3].copy()
+    init = np.array(init_rgb, dtype=np.float32)
+    known = ~np.all(np.abs(rgb - init) < (1.5 / 255.0), axis=-1)
+    if known.all():
+        print(f"    heal {img.name}: дыр нет")
+        return
+    holes0 = int((~known).sum())
+    filled = known.copy()
+    it_used = 0
+    for it in range(max_iters):
+        if filled.all():
+            break
+        it_used = it + 1
+        ksum = np.zeros((h, w, 3), dtype=np.float32)
+        kcnt = np.zeros((h, w), dtype=np.float32)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dy == 0 and dx == 0:
+                    continue
+                mk = np.roll(np.roll(filled.astype(np.float32), dy, axis=0), dx, axis=1)
+                sv = np.roll(np.roll(rgb, dy, axis=0), dx, axis=1)
+                ksum += sv * mk[..., None]
+                kcnt += mk
+        newk = (kcnt > 0) & ~filled
+        rgb[newk] = ksum[newk] / kcnt[newk][..., None]
+        filled |= newk
+    buf[..., :3] = rgb
+    img.pixels.foreach_set(px)
+    print(f"    heal {img.name}: дыр {holes0}, итераций {it_used}")
+
+
+def scale_down(img):
+    if img.size[0] > FINAL_IMAGE_SIZE or img.size[1] > FINAL_IMAGE_SIZE:
+        img.scale(FINAL_IMAGE_SIZE, FINAL_IMAGE_SIZE)
+
+
+def wire_lp_material(lp_obj, diff_img, norm_img, orm_img):
+    mat = bpy.data.materials.new(name=f"{lp_obj.name}_v2mat")
     mat.use_nodes = True
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
     nodes.clear()
-
-    out = nodes.new('ShaderNodeOutputMaterial')
-    out.location = (500, 0)
-    bsdf = nodes.new('ShaderNodeBsdfPrincipled')
-    bsdf.location = (0, 0)
+    out = nodes.new('ShaderNodeOutputMaterial'); out.location = (500, 0)
+    bsdf = nodes.new('ShaderNodeBsdfPrincipled'); bsdf.location = (0, 0)
     links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
 
-    if tex_diff:
-        n = nodes.new('ShaderNodeTexImage')
-        n.image = tex_diff
-        n.location = (-400, 200)
-        links.new(n.outputs['Color'], bsdf.inputs['Base Color'])
+    n_diff = nodes.new('ShaderNodeTexImage'); n_diff.image = diff_img
+    n_diff.location = (-400, 200)
+    links.new(n_diff.outputs['Color'], bsdf.inputs['Base Color'])
 
-    if tex_rough:
-        n = nodes.new('ShaderNodeTexImage')
-        n.image = tex_rough
-        n.location = (-400, -100)
-        n.image.colorspace_settings.name = 'Non-Color'
-        name_lower = tex_rough.name.lower()
-        if 'arm' in name_lower:
-            sep = nodes.new('ShaderNodeSeparateColor')
-            sep.location = (-200, -100)
-            sep.mode = 'RGB'
-            links.new(n.outputs['Color'], sep.inputs['Color'])
-            links.new(sep.outputs['Green'], bsdf.inputs['Roughness'])
-            links.new(sep.outputs['Blue'], bsdf.inputs['Metallic'])
-        else:
-            links.new(n.outputs['Color'], bsdf.inputs['Roughness'])
+    n_norm = nodes.new('ShaderNodeTexImage'); n_norm.image = norm_img
+    n_norm.image.colorspace_settings.name = 'Non-Color'
+    n_norm.location = (-400, -100)
+    n_nm = nodes.new('ShaderNodeNormalMap'); n_nm.location = (-200, -100)
+    links.new(n_norm.outputs['Color'], n_nm.inputs['Color'])
+    links.new(n_nm.outputs['Normal'], bsdf.inputs['Normal'])
+
+    n_orm = nodes.new('ShaderNodeTexImage'); n_orm.image = orm_img
+    n_orm.image.colorspace_settings.name = 'Non-Color'
+    n_orm.location = (-400, -400)
+    sep = nodes.new('ShaderNodeSeparateColor'); sep.location = (-200, -400)
+    links.new(n_orm.outputs['Color'], sep.inputs['Color'])
+    links.new(sep.outputs['Green'], bsdf.inputs['Roughness'])
+    node_metal = bsdf.inputs['Metallic']
+    node_metal.default_value = 0.0
 
     if lp_obj.data.materials:
         lp_obj.data.materials[0] = mat
     else:
         lp_obj.data.materials.append(mat)
-    return mat, nodes, links, bsdf
 
 
-def bake_normal_map(lp_obj, hp_obj, nodes, links, bsdf):
-    img_name = f"{lp_obj.name}_baked_normal"
-    baked_img = bpy.data.images.new(
-        name=img_name, width=BAKE_IMAGE_SIZE, height=BAKE_IMAGE_SIZE, alpha=False
-    )
-    baked_img.colorspace_settings.name = 'Non-Color'
-
-    tex_node = nodes.new('ShaderNodeTexImage')
-    tex_node.location = (-400, 500)
-    tex_node.image = baked_img
-    tex_node.select = True
-    nodes.active = tex_node
-
-    norm_node = nodes.new('ShaderNodeNormalMap')
-    norm_node.location = (-200, 500)
-    links.new(tex_node.outputs['Color'], norm_node.inputs['Color'])
-    links.new(norm_node.outputs['Normal'], bsdf.inputs['Normal'])
-
+def export_gltf(lowpoly_objects, out_dir, base_name):
+    os.makedirs(out_dir, exist_ok=True)
+    out_gltf = os.path.join(out_dir, base_name + "_baked.gltf")
     bpy.ops.object.select_all(action='DESELECT')
-    hp_obj.select_set(True)
-    lp_obj.select_set(True)
-    bpy.context.view_layer.objects.active = lp_obj
-
-    bpy.context.scene.render.bake.use_selected_to_active = True
-    bpy.context.scene.render.bake.cage_extrusion = 0.01
-    bpy.context.scene.render.bake.max_ray_distance = 0.5
-    bpy.context.scene.render.bake.margin = 8
-    try:
-        bpy.ops.object.bake(type='NORMAL')
-        baked_img.pack()
-        print(f"    Baked OK")
-    except Exception as e:
-        print(f"    Bake FAILED: {e}")
-
-
-def bake_diffuse_map(lp_obj, hp_obj, nodes, links, bsdf):
-    """Diffuse-бейк (только Color) с HP на LP: альбедо для новых UV после REMESH."""
-    img_name = f"{lp_obj.name}_baked_diff"
-    baked_img = bpy.data.images.new(
-        name=img_name, width=BAKE_IMAGE_SIZE, height=BAKE_IMAGE_SIZE, alpha=False
+    for obj in lowpoly_objects:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = lowpoly_objects[0]
+    kw = dict(
+        filepath=out_gltf,
+        export_format='GLTF_SEPARATE',
+        export_texcoords=True,
+        export_normals=True,
+        export_tangents=True,
+        export_materials='EXPORT',
+        use_selection=True,
     )
-    # sRGB по умолчанию — для альбедо это правильно.
-
-    tex_node = nodes.new('ShaderNodeTexImage')
-    tex_node.location = (-400, 800)
-    tex_node.image = baked_img
-    tex_node.select = True
-    nodes.active = tex_node
-    links.new(tex_node.outputs['Color'], bsdf.inputs['Base Color'])
-
-    bpy.ops.object.select_all(action='DESELECT')
-    hp_obj.select_set(True)
-    lp_obj.select_set(True)
-    bpy.context.view_layer.objects.active = lp_obj
-
-    bpy.context.view_layer.objects.active = lp_obj
-
-    bpy.context.scene.render.bake.use_selected_to_active = True
-    bpy.context.scene.render.bake.use_pass_direct = False
-    bpy.context.scene.render.bake.use_pass_indirect = False
-    bpy.context.scene.render.bake.use_pass_color = True
-    bpy.context.scene.render.bake.cage_extrusion = 0.01
-    bpy.context.scene.render.bake.max_ray_distance = 0.5
-    bpy.context.scene.render.bake.margin = 8
     try:
-        bpy.ops.object.bake(type='DIFFUSE')
-        baked_img.pack()
-        print(f"    Diffuse baked OK")
-    except Exception as e:
-        print(f"    Diffuse bake FAILED: {e}")
+        bpy.ops.export_scene.gltf(export_image_format='NONE', **kw)
+        print("  textures: НЕ экспортированы (NONE) — берём наши файлы из папки")
+    except Exception:
+        bpy.ops.export_scene.gltf(export_image_format='AUTO', **kw)
+    return out_gltf
 
 
-def process_model(filepath, output_dir, skip_decimate=False):
-    base_name = os.path.splitext(os.path.basename(filepath))[0]
-    print(f"\n{'='*60}")
-    print(f"STEP 1: IMPORT: {filepath}")
-    print(f"{'='*60}")
+def process_model(filepath, output_dir, skip_decimate, out_name):
+    base_name = out_name or os.path.splitext(os.path.basename(filepath))[0]
+    print(f"\n{'='*60}\nV2 PIPELINE: {filepath}\n{'='*60}")
 
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=filepath)
+    if filepath.lower().endswith(".glb"):
+        bpy.ops.import_scene.gltf(filepath=filepath)
+    else:
+        bpy.ops.import_scene.gltf(filepath=filepath)
 
-    highpoly_objects = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH']
+    highpoly_objects = [o for o in bpy.context.scene.objects if o.type == 'MESH']
     if not highpoly_objects:
         print("ERROR: No mesh objects found!")
         return False
-
-    total_before = sum(
-        len(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.loop_triangles)
-        for obj in highpoly_objects
-    )
-    print(f"Total tris: {total_before:,}")
+    total_before = tri_count(highpoly_objects)
+    cage = 0.03 * bbox_radius(highpoly_objects)
+    print(f"HP tris: {total_before:,} | bbox radius: {bbox_radius(highpoly_objects):.3f} м | cage: {cage:.3f}")
 
     hp_coll = bpy.data.collections.new("HighPoly")
     bpy.context.scene.collection.children.link(hp_coll)
@@ -175,240 +413,167 @@ def process_model(filepath, output_dir, skip_decimate=False):
             coll.objects.unlink(obj)
         hp_coll.objects.link(obj)
 
-    print(f"\nSTEP 1b: RESIZE TEXTURES TO {TEXTURE_MAX_SIZE}x{TEXTURE_MAX_SIZE}")
-    resize_textures(TEXTURE_MAX_SIZE)
+    # LP-копии
+    lowpoly_objects = []
+    for obj in highpoly_objects:
+        new_obj = obj.copy()
+        new_obj.data = obj.data.copy()
+        bpy.context.scene.collection.objects.link(new_obj)
+        lowpoly_objects.append(new_obj)
+    lp_coll = bpy.data.collections.new("LowPoly")
+    bpy.context.scene.collection.children.link(lp_coll)
+    for obj in lowpoly_objects:
+        for coll in obj.users_collection:
+            coll.objects.unlink(obj)
+        lp_coll.objects.link(obj)
 
-    if skip_decimate:
-        lowpoly_objects = list(highpoly_objects)
-        lp_coll = bpy.data.collections.new("LowPoly")
-        bpy.context.scene.collection.children.link(lp_coll)
+    # РЕДУКЦИЯ: UV на LP-копиях удаляем ДО декимации (перепекаем всё равно),
+    # затем сварка швов и затыкание оставшихся дыр.
+    for obj in lowpoly_objects:
+        strip_uvs(obj)
+        weld_verts(obj, bbox_radius(highpoly_objects))
+        fill_holes(obj)
+
+    if not skip_decimate:
+        total_lp = tri_count(lowpoly_objects)
+        print(f"\nSTEP 2: {'REMESH (VOXEL)' if USE_REMESH else 'DECIMATE (no delimit)'} | {total_lp:,} -> target {TARGET_TRIANGLES:,}")
         for obj in lowpoly_objects:
-            for coll in obj.users_collection:
-                coll.objects.unlink(obj)
-            lp_coll.objects.link(obj)
-        print("DECIMATION SKIPPED")
-    else:
-        print(f"\nSTEP 2: {'REMESH (VOXEL)' if USE_REMESH else 'DECIMATE'}")
-        print(f"{'='*60}")
-
-        lowpoly_objects = []
-        for obj in highpoly_objects:
-            new_obj = obj.copy()
-            new_obj.data = obj.data.copy()
-            bpy.context.scene.collection.objects.link(new_obj)
-            lowpoly_objects.append(new_obj)
-
-        lp_coll = bpy.data.collections.new("LowPoly")
-        bpy.context.scene.collection.children.link(lp_coll)
-        for obj in lowpoly_objects:
-            bpy.context.scene.collection.objects.unlink(obj)
-            lp_coll.objects.link(obj)
-
-        bpy.ops.object.select_all(action='DESELECT')
-
-        mesh_tris = []
-        for obj in lowpoly_objects:
-            depsgraph = bpy.context.evaluated_depsgraph_get()
-            eval_obj = obj.evaluated_get(depsgraph)
-            ct = len(eval_obj.data.loop_triangles)
-            mesh_tris.append((obj, ct))
-
-        total_before_lp = sum(t for _, t in mesh_tris)
-
-        for obj, current_tris in mesh_tris:
-            if total_before_lp <= TARGET_TRIANGLES:
-                print(f"  '{obj.name}': {current_tris:,} tris — total already under budget")
+            dg = bpy.context.evaluated_depsgraph_get()
+            current = len(obj.evaluated_get(dg).data.loop_triangles)
+            if total_lp <= TARGET_TRIANGLES or current == 0:
                 continue
-            target_for_mesh = max(4, round(TARGET_TRIANGLES * current_tris / total_before_lp))
-            if current_tris <= target_for_mesh:
-                print(f"  '{obj.name}': {current_tris:,} tris — already under target")
+            target_for_mesh = max(4, round(TARGET_TRIANGLES * current / total_lp))
+            if current <= target_for_mesh:
                 continue
-
-            print(f"  '{obj.name}': {current_tris:,} -> target {target_for_mesh:,} tris")
-
             bpy.context.view_layer.objects.active = obj
             bpy.ops.object.select_all(action='DESELECT')
             obj.select_set(True)
 
+            def decimate_to(t_cur, t_target):
+                ratio = t_target / t_cur
+                mod = obj.modifiers.new(name='Decimate', type='DECIMATE')
+                mod.ratio = ratio
+                mod.use_collapse_triangulate = False
+                mod.delimit = set()  # ГЛАВНОЕ: коллапс везде, UV перепекаем
+                bpy.ops.object.modifier_apply(modifier=mod.name)
+
             if USE_REMESH:
+                # РЕМОНТ рваных сканов: воксельная перестройка даёт чистую
+                # замкнутую топологию (QEM не коллапсит рёбра нон-манifold —
+                # валун 98K застревал на 57K). Затем decimate до бюджета.
                 mod = obj.modifiers.new(name='Remesh', type='REMESH')
                 mod.mode = 'VOXEL'
                 mod.voxel_size = REMESH_VOXEL_SIZE
                 mod.adaptivity = 0.0
                 bpy.ops.object.modifier_apply(modifier=mod.name)
-
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_all(action='SELECT')
-                bpy.ops.uv.smart_project(angle_limit=66, island_margin=0.02)
-                bpy.ops.mesh.normals_make_consistent(inside=False)
-                bpy.ops.object.mode_set(mode='OBJECT')
-
-                tex_diff = tex_rough = None
-                for img in bpy.data.images:
-                    name_lower = img.name.lower()
-                    if 'diff' in name_lower and img.size[0] > 1:
-                        tex_diff = img
-                    elif ('rough' in name_lower or 'arm' in name_lower) and img.size[0] > 1:
-                        tex_rough = img
-
-                bpy.context.scene.render.engine = 'CYCLES'
-                bpy.context.scene.cycles.device = 'GPU'
-                mat, nodes, links, bsdf = build_material_with_arm(obj, tex_diff, tex_rough)
-                bake_normal_map(obj, hp_coll.objects[0], nodes, links, bsdf)
-                # REMESH создаёт НОВЫЕ UV (Smart Project) — старое альбедо на них
-                # не ложится. Переносим цвет с высокополигональника diffuse-бейком,
-                # иначе материал уходит в белый (гость: камень trellis «Mesh_0»).
-                bake_diffuse_map(obj, hp_coll.objects[0], nodes, links, bsdf)
+                cur2 = len(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.loop_triangles)
+                print(f"  '{obj.name}': remesh {current:,} -> {cur2:,}")
+                if cur2 > target_for_mesh:
+                    decimate_to(cur2, target_for_mesh)
             else:
-                ratio = target_for_mesh / current_tris
-                if ratio >= 1.0:
-                    print(f"    already at target ratio {ratio:.3f}, skipping")
-                    continue
+                decimate_to(current, target_for_mesh)
+            new_tris = len(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.loop_triangles)
+            print(f"  '{obj.name}': {current:,} -> {new_tris:,}")
 
-                mod = obj.modifiers.new(name='Decimate', type='DECIMATE')
-                mod.ratio = ratio
-                mod.use_collapse_triangulate = False
-                mod.delimit = {'NORMAL', 'UV', 'SEAM', 'SHARP'}
-                bpy.ops.object.modifier_apply(modifier=mod.name)
+    # POST: re-UV + smooth + метал-ноль
+    for obj in lowpoly_objects:
+        remake_uvs(obj)
+        recalc_normals_outside(obj)
+        shade_smooth_by_angle(obj)
+        obj["cage"] = cage
+    if not SKIP_BAKE:
+        hp_zero_metallic()
 
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_all(action='SELECT')
-                bpy.ops.mesh.normals_make_consistent(inside=False)
-                bpy.ops.object.mode_set(mode='OBJECT')
+    occ_avg, islands_avg = 0.0, 0
+    for obj in lowpoly_objects:
+        occ, isl = uv_island_stats(obj)
+        occ_avg += occ; islands_avg += isl
+        print(f"  UV '{obj.name}': островов ~{isl}, атлас занят {occ * 100:.0f}%")
+    occ_avg /= max(len(lowpoly_objects), 1)
 
-            depsgraph = bpy.context.evaluated_depsgraph_get()
-            eval_obj = obj.evaluated_get(depsgraph)
-            new_tris = len(eval_obj.data.loop_triangles)
-            reduction = 1.0 - (new_tris / current_tris) if current_tris > 0 else 0
-            print(f"    {current_tris:,} -> {new_tris:,} ({reduction*100:.1f}%)")
-            print(f"  final: {current_tris:,} -> {new_tris:,} tris (target was {target_for_mesh:,})")
-
-    if not SKIP_BAKE and not USE_REMESH:
-        print(f"\nSTEP 3: BAKE NORMAL MAPS (High-Poly -> Low-Poly)")
-        hp_list = list(hp_coll.objects)
-        lp_list = list(lp_coll.objects)
-
-        if len(hp_list) != len(lp_list):
-            print(f"WARNING: High-poly count ({len(hp_list)}) != Low-poly count ({len(lp_list)}).")
-
+    diff_img = norm_img = orm_img = None
+    if not SKIP_BAKE:
+        print(f"\nSTEP 3: BAKE {BAKE_IMAGE_SIZE}x{BAKE_IMAGE_SIZE} LP<-HP (normal/AO/rough/diffuse)")
         bpy.context.scene.render.engine = 'CYCLES'
-        bpy.context.scene.cycles.device = 'GPU'
-
+        # УРОК (18.11.26, ель 30+ мин): cycles.device='GPU' молча падает на CPU в
+        # headless-фабрике — без preferencescompute_device_type='OPTIX'/'CUDA'.
+        # И дефолтные сэмплы Cycles (4096) на плотной хвое = десятки минут на бейк.
+        gpu_found = False
+        try:
+            prefs = bpy.context.preferences.addons['cycles'].preferences
+            for dev_type in ('OPTIX', 'CUDA'):
+                prefs.compute_device_type = dev_type
+                prefs.get_devices()
+                gpus = [d for d in prefs.devices if d.type == dev_type]
+                if gpus:
+                    for d in prefs.devices:
+                        d.use = (d.type == dev_type)
+                    gpu_found = True
+                    print(f"  Cycles: GPU {dev_type} — {gpus[0].name}")
+                    break
+        except Exception as e:
+            print(f"  Cycles GPU-настройка не удалась ({e}) — рендер на CPU")
+        if not gpu_found:
+            print("  ВНИМАНИЕ: GPU не найден — бейк пойдёт на CPU (медленно!)")
+        bpy.context.scene.cycles.device = 'GPU' if gpu_found else 'CPU'
+        bpy.context.scene.cycles.samples = 64
+        bpy.context.scene.cycles.use_adaptive_sampling = False
+        hp_list, lp_list = list(hp_coll.objects), list(lp_coll.objects)
         for idx, lp_obj in enumerate(lp_list):
             hp_obj = hp_list[idx] if idx < len(hp_list) else None
             if not hp_obj:
-                print(f"  No matching high-poly for '{lp_obj.name}', skipping")
+                print(f"  нет HP для '{lp_obj.name}' — пропуск бейка")
                 continue
+            print(f"  Baking: '{lp_obj.name}' <- '{hp_obj.name}'")
+            if not lp_obj.data.materials:
+                lp_obj.data.materials.append(bpy.data.materials.new(f"{lp_obj.name}_tmp"))
+            lp_obj.data.materials[0].use_nodes = True
+            if not any(n.type == 'BSDF_PRINCIPLED' for n in lp_obj.data.materials[0].node_tree.nodes):
+                lp_obj.data.materials[0].node_tree.nodes.new('ShaderNodeBsdfPrincipled')
 
-            print(f"\n  Baking: '{lp_obj.name}' <- '{hp_obj.name}'")
+            # Мультимеш: у каждого меша СВОЙ набор карт (суффикс _m{idx}).
+            suf = f"_m{idx}" if len(lp_list) > 1 else ""
+            img_n = new_bake_image(f"{base_name}{suf}_baked_normal", init_rgb=(0.5, 0.5, 1.0))
+            img_a = new_bake_image(f"{base_name}{suf}_baked_ao", init_rgb=(1.0, 1.0, 1.0))
+            img_r = new_bake_image(f"{base_name}{suf}_baked_rough", init_rgb=(1.0, 1.0, 1.0))
+            img_d = new_bake_image(f"{base_name}{suf}_baked_diffuse", non_color=False, init_rgb=(0.5, 0.5, 0.5))
+            t_mesh = time.perf_counter()
+            ok_n = bake_map(lp_obj, hp_obj, 'NORMAL', img_n)
+            bake_map(lp_obj, hp_obj, 'AO', img_a)
+            bake_map(lp_obj, hp_obj, 'ROUGHNESS', img_r)
+            bake_map(lp_obj, hp_obj, 'DIFFUSE', img_d, color_only=True)
+            print(f"  БЕЙК '{lp_obj.name}': 4 карты за {time.perf_counter() - t_mesh:.1f} с "
+                  f"(сэмплы {bpy.context.scene.cycles.samples}, устройство {bpy.context.scene.cycles.device})")
+            # heal ДО scale_down: дыры лечим в разрешении бейка, даунскейл сгладит
+            heal_bake_image(img_n, (0.5, 0.5, 1.0))
+            heal_bake_image(img_a, (1.0, 1.0, 1.0))
+            heal_bake_image(img_r, (1.0, 1.0, 1.0))
+            heal_bake_image(img_d, (0.5, 0.5, 0.5))
+            for im in (img_n, img_a, img_r, img_d):
+                scale_down(im)
 
-            mat = lp_obj.data.materials[0] if lp_obj.data.materials else None
-            if not mat:
-                mat = bpy.data.materials.new(name=f"{lp_obj.name}_mat")
-                lp_obj.data.materials.append(mat)
-            mat.use_nodes = True
-            nodes = mat.node_tree.nodes
-            links = mat.node_tree.links
+            p = os.path.join(output_dir, "")
+            save_img(img_n, p + f"{base_name}{suf}_baked_normal.png", 'PNG')
+            orm_img = compose_orm(img_a, img_r, p + f"{base_name}{suf}_baked_orm.png", f"{base_name}{suf}_baked_orm")
+            save_img(img_d, p + f"{base_name}{suf}_baked_diffuse.webp", 'WEBP')
 
-            img_name = f"{lp_obj.name}_baked_normal"
-            baked_img = bpy.data.images.new(
-                name=img_name, width=BAKE_IMAGE_SIZE, height=BAKE_IMAGE_SIZE, alpha=False
-            )
-            baked_img.colorspace_settings.name = 'Non-Color'
-
-            tex_node = nodes.new('ShaderNodeTexImage')
-            tex_node.location = (-600, 300)
-            tex_node.image = baked_img
-            tex_node.select = True
-            nodes.active = tex_node
-
-            norm_node = None
-            for node in nodes:
-                if node.type == 'NORMAL_MAP':
-                    norm_node = node
-                    break
-            if not norm_node:
-                norm_node = nodes.new('ShaderNodeNormalMap')
-                norm_node.location = (-400, 300)
-
-            principled = None
-            for node in nodes:
-                if node.type == 'BSDF_PRINCIPLED':
-                    principled = node
-                    break
-
-            if principled:
-                try:
-                    links.new(tex_node.outputs['Color'], norm_node.inputs['Color'])
-                    links.new(norm_node.outputs['Normal'], principled.inputs['Normal'])
-                except Exception:
-                    pass
-
-            bpy.ops.object.select_all(action='DESELECT')
-            hp_obj.select_set(True)
-            lp_obj.select_set(True)
-            bpy.context.view_layer.objects.active = lp_obj
-
-            hp_coll.hide_viewport = False
-            hp_coll.hide_render = False
-            lp_coll.hide_viewport = False
-            lp_coll.hide_render = False
-
-            bpy.context.scene.render.bake.use_selected_to_active = True
-            bpy.context.scene.render.bake.cage_extrusion = 0.01
-            bpy.context.scene.render.bake.max_ray_distance = 0.5
-            bpy.context.scene.render.bake.margin = 8
-            try:
-                bpy.ops.object.bake(type='NORMAL')
-                baked_img.pack()
-                print(f"    Baked OK")
-            except Exception as e:
-                print(f"    Bake FAILED: {e}")
-
-    elif SKIP_BAKE and not USE_REMESH:
-        print(f"\nSTEP 3: SKIPPED (--no-bake)")
+            if ok_n:
+                diff_img, norm_img = img_d, img_n
+                wire_lp_material(lp_obj, img_d, img_n, orm_img)
 
     print(f"\nSTEP 4: EXPORT")
     hp_coll.hide_viewport = True
     hp_coll.hide_render = True
+    out_gltf = export_gltf(lowpoly_objects, output_dir, base_name)
 
-    bpy.ops.object.select_all(action='DESELECT')
-    for obj in lowpoly_objects:
-        obj.select_set(True)
-    bpy.context.view_layer.objects.active = lowpoly_objects[0] if lowpoly_objects else None
-
-    os.makedirs(output_dir, exist_ok=True)
-    out_gltf_path = os.path.join(output_dir, base_name + "_baked.gltf")
-
-    bpy.ops.export_scene.gltf(
-        filepath=out_gltf_path,
-        export_format='GLTF_SEPARATE',
-        export_image_format='WEBP',
-        export_texcoords=True,
-        export_normals=True,
-        export_materials='EXPORT',
-        export_keep_originals=False,
-        use_selection=True
-    )
-
-    total_after = sum(
-        len(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.loop_triangles)
-        for obj in lowpoly_objects
-    )
-
-    print(f"\n{'='*60}")
-    print(f"SUMMARY for {base_name}")
-    print(f"{'='*60}")
-    print(f"  Tris before: {total_before:,}")
-    print(f"  Tris after:  {total_after:,}")
-    print(f"  Reduction:   {(1 - total_after/total_before)*100:.1f}%")
-    print(f"  Output:      {out_gltf_path}")
-
-    out_size = 0
-    for root_dir, dirs, files in os.walk(output_dir):
-        for f in files:
-            out_size += os.path.getsize(os.path.join(root_dir, f))
-    print(f"  Output size: {out_size / (1024*1024):.1f} MB")
+    total_after = tri_count(lowpoly_objects)
+    print(f"\n{'='*60}\nSUMMARY v2 {base_name}\n{'='*60}")
+    print(f"  Tris: {total_before:,} -> {total_after:,} ({(1 - total_after / max(total_before, 1)) * 100:.1f}%)")
+    print(f"  UV атлас занят (среднее): {occ_avg * 100:.0f}%")
+    print(f"  Output: {out_gltf}")
+    out_size = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(output_dir) for f in fs
+                   if base_name in f)
+    print(f"  Size (v2 files): {out_size / (1024 * 1024):.2f} MB")
     return True
 
 
@@ -419,31 +584,30 @@ if __name__ == "__main__":
         if arg == "--":
             idx = i + 1
             break
-
     if idx >= len(argv):
-        print("Usage: blender --background --python optimize_triangles.py -- <input_gltf_path> [--no-bake] [--no-decimate] [--remesh]")
+        print("Usage: blender --background --python optimize_triangles.py -- <input> "
+              "[--target N] [--out DIR] [--name NAME] [--remesh] [--no-bake] [--no-decimate]")
         sys.exit(1)
 
-    input_path = argv[idx]
-    output_dir = os.path.join(os.path.dirname(input_path), "..", "..", "..", "..", "..", "decimated_baked")
+    args = argv[idx:]
+    input_path = args[0]
 
-    if '--no-bake' in argv:
-        SKIP_BAKE = True
-        print("Normal bake SKIPPED (--no-bake)")
-    if '--no-decimate' in argv:
-        skip_decimate = True
-        print("Decimation SKIPPED (--no-decimate)")
-    else:
-        skip_decimate = False
-    if '--remesh' in argv:
-        USE_REMESH = True
-        print("Using REMESH (Voxel) mode")
+    def opt(flag, cast=str, default=None):
+        if flag in args:
+            return cast(args[args.index(flag) + 1])
+        return default
 
-    output_dir = os.path.abspath(output_dir)
+    TARGET_TRIANGLES = opt('--target', int, TARGET_TRIANGLES)
+    out_dir = opt('--out', str, None) or os.path.dirname(os.path.abspath(input_path))
+    out_name = opt('--name', str, None)
+    SKIP_BAKE = '--no-bake' in args
+    USE_REMESH = '--remesh' in args
+    skip_decimate = '--no-decimate' in args
 
+    output_dir = os.path.abspath(out_dir)
     if not os.path.exists(input_path):
         print(f"ERROR: Input file not found: {input_path}")
         sys.exit(1)
 
-    success = process_model(input_path, output_dir, skip_decimate=skip_decimate)
+    success = process_model(input_path, output_dir, skip_decimate, out_name)
     sys.exit(0 if success else 1)

@@ -10,6 +10,28 @@ var master_volume: float = 1.0
 var sfx_volume: float = 1.0
 var music_volume: float = 1.0
 
+## Нет фокуса у окна игры (клик в другое окно, свёрнуто) → весь звук глушится
+## (директива юзера 18.11.26: музыка/звуки не должны играть вне фокуса).
+## Отдельный флаг поверх громкостей: settings.cfg НЕ трогаем, при возврате
+## фокуса звук восстанавливается ровно как был.
+var _unfocused: bool = false
+
+func _notification(what: int) -> void:
+    match what:
+        Node.NOTIFICATION_APPLICATION_FOCUS_OUT:
+            _unfocused = true
+            _apply_all_buses()
+        Node.NOTIFICATION_APPLICATION_FOCUS_IN:
+            _unfocused = false
+            _apply_all_buses()
+
+func _apply_all_buses() -> void:
+    # Шина Music может ещё не существовать (создаёт MusicDirector) — _apply_bus
+    # молча пропустит, а MusicDirector.apply_music_volume() доведёт позже.
+    _apply_bus("Master", master_volume)
+    _apply_bus("SFX", sfx_volume)
+    _apply_bus("Music", music_volume)
+
 func _ready():
     _ensure_sfx_bus()
     _load_settings()
@@ -53,7 +75,8 @@ func _apply_bus(bus_name: String, v: float) -> void:
     var idx := AudioServer.get_bus_index(bus_name)
     if idx < 0:
         return
-    AudioServer.set_bus_mute(idx, v <= 0.001)
+    # Мьют = нет фокуса ИЛИ громкость 0 (mute-флаг фокуса независим от настроек).
+    AudioServer.set_bus_mute(idx, _unfocused or v <= 0.001)
     if v > 0.001:
         AudioServer.set_bus_volume_db(idx, linear_to_db(v))
 

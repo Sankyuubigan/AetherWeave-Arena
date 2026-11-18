@@ -35,4 +35,4 @@ window/size/viewport_height=720
 
 [rendering]
 
-textures/streaming/enabled=true
+textures/streaming/enabled=false
