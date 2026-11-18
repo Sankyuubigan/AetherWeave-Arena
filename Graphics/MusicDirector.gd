@@ -55,6 +55,7 @@ func _process(delta):
     var sname := String(scene.name) if scene else ""
     if sname != _map and TRACKS.has(sname):
         _map = sname
+        _event("music_switch:" + sname)
         _switch_bg(load(TRACKS[sname]))
     if _combat_left > 0.0:
         _combat_left -= delta
@@ -63,6 +64,7 @@ func _process(delta):
 
 ## Событие «идёт бой»: боевой луп поверх фона на COMBAT_HOLD секунд
 func note_combat(seconds: float = COMBAT_HOLD) -> void:
+    _event("combat_music")
     _combat_left = seconds
     if combat.playing:
         return
@@ -110,3 +112,9 @@ func _fade(p: AudioStreamPlayer, to_db: float, dur: float) -> Tween:
     var tw := create_tween()
     tw.tween_property(p, "volume_db", to_db, dur)
     return tw
+
+## Маркер для StallLogger (ловца фризов): автолоад может отсутствовать.
+func _event(what: String) -> void:
+    var sl := get_node_or_null("/root/StallLogger")
+    if sl:
+        sl.event(what)

@@ -31,8 +31,18 @@ func _on_body_entered(body: Node):
 
     # Звук удара (meta от SpawnProjectileEffect, 17.11: взрыв метеора о землю):
     # play_sfx создаёт отдельный плеер AudioManager — release снаряда не глушит.
+    # Голое имя autoload не резолвится в -s-смоуках (Identifier not found,
+    # одобрено юзером 19.11.26) — берём через /root, runtime-поведение тот же.
     if has_meta("impact_sfx"):
-        AudioManager.play_sfx(get_meta("impact_sfx"))
+        var am := get_node_or_null("/root/AudioManager")
+        if am:
+            am.play_sfx(get_meta("impact_sfx"))
+
+    # Тряска камеры при ударе (метеорит и т.п., meta от SpawnProjectileEffect).
+    if has_meta("impact_shake"):
+        var cs := get_node_or_null("/root/CameraShake")
+        if cs:
+            cs.add_trauma(get_meta("impact_shake"))
 
     ProjectilePool.release(self)
 

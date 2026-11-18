@@ -8,9 +8,12 @@ func _init():
 	env_node.name = "WorldEnvironment"
 	var env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.4, 0.6, 1.0)
+	# 19.11.26 (верб. юзера): свет чуть темнее и контрастнее — эмиссия магических
+	# сфер (VFX) читается как сгусток энергии на тёмном фоне.
+	env.background_color = Color(0.28, 0.42, 0.75)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.3, 0.3, 0.4)
+	env.ambient_light_color = Color(0.17, 0.17, 0.24)
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.ssao_enabled = true # 4.8: multi-bounce AO
 	env_node.environment = env
 	root.add_child(env_node)
@@ -19,7 +22,8 @@ func _init():
 	var light = DirectionalLight3D.new()
 	light.name = "DirectionalLight3D"
 	light.rotation_degrees = Vector3(-35, 45, 0)
-	light.light_energy = 1.5
+	light.light_energy = 1.1
+	light.light_color = Color(1.0, 0.95, 0.88) # тёплый ключ — контраст с холодной эмиссией VFX
 	light.shadow_enabled = true
 	light.shadow_contact_shadows_allow = true # 4.8: contact shadows — объекты не «парят»
 	root.add_child(light)
@@ -93,6 +97,14 @@ func _init():
 		root.add_child(inst)
 		inst.owner = root
 		print(p_name + " placed at " + str(p.pos))
+
+	# Непись-телепортер у края арены (19.11.26, верб. юзера): пол 100×100
+	# (box 50×1×50 × scale 2), край на ±50 → угол (38, 0, 38) «ближе к краю».
+	var npc = load("res://Logic/NPCTeleporter.gd").new()
+	npc.name = "NPCTeleporter"
+	npc.position = Vector3(38, 0, 38)
+	root.add_child(npc)
+	npc.owner = root
 
 	var packed = PackedScene.new()
 	packed.pack(root)

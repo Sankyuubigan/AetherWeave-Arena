@@ -81,6 +81,8 @@ static func get_skills() -> Dictionary:
     thunder.effects.append(th_sound)
     # Длительный каст двумя руками (вердикт 17.11.26): канал 1 с.
     thunder.cast_time = 1.0
+    # Тряска камеры на взрыве (верб. юзера 19.11.26: «экран слегка трясло»).
+    thunder.shake = 0.4
     _skills["thunderclap"] = thunder
     
     var meteor = preload("res://Logic/Skills/Skill.gd").new()
@@ -94,6 +96,9 @@ static func get_skills() -> Dictionary:
     if ResourceLoader.exists("res://Scenes/fireball.tscn"):
         m_proj.projectile_scene = load("res://Scenes/fireball.tscn")
     m_proj.offset_y = 15.0  # метеор летит С НЕБА (не из руки) — канал 2 с
+    # Тряска камеры при ПАДЕНИИ метеорита (верб. юзера 19.11.26) — момент
+    # удара, не каста: impact_shake играет ProjectileComponent при попадании.
+    m_proj.impact_shake = 0.6
     # Звук УДАРА о землю (17.11.26 вердикт: метеор = свист полёта + взрыв
     # удара). SpawnProjectileEffect кладёт его в meta снаряда; играет
     # ProjectileComponent в точке попадания.

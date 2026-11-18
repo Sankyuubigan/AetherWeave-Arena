@@ -28,8 +28,14 @@ var was_space_pressed: bool = false
 var input_locked: bool = false
 
 var hud_hp: ProgressBar
+var hp_label: Label
+var is_dying: bool = false
+
+## Макс HP игрока: враги ада наносят % ОТ ЭТОГО ЧИСЛА (верб. юзера 19.11.26).
+const MAX_HP: int = 100
 
 func _ready():
+    add_to_group("player") # цель для врагов ада (HellEnemyBase)
     camera = $SpringArm3D/Camera3D
     spring_arm = $SpringArm3D
     graphics_wrapper = $GraphicsWrapper
@@ -46,7 +52,13 @@ func _ready():
     for s_id in all_skills:
         if not unlocked_skills.has(s_id):
             unlocked_skills[s_id] = false
-        
+
+    # Персист скиллов между картами (19.11.26): change_scene пересоздаёт игрока,
+    # купленные навыки/SP слетали в ноль. Восстановление из автолоада-сессии.
+    var session = get_node_or_null("/root/PlayerSession")
+    if session and session.has_state:
+        session.restore(self)
+
     setup_hud()
 
     var skill_menu = preload("res://Graphics/SkillMenu.gd").new()
@@ -55,25 +67,65 @@ func _ready():
     var action_bar = preload("res://Graphics/ActionBar.gd").new()
     add_child(action_bar)
 
+func _exit_tree():
+    # Снапшот скиллов при уходе с карты (телепорт непися / меню I / смерть).
+    # Дети к этому моменту вышли из дерева, но живы — ActionBar читается.
+    var session = get_node_or_null("/root/PlayerSession")
+    if session:
+        session.capture(self)
+
 func setup_hud():
     var hud = CanvasLayer.new()
     hud.name = "PlayerHUD"
-    
+
+    # 19.11.26 (верб. юзера): панель HP по центру снизу, НАД панелью скиллов,
+    # цифры «20/100» вместо процентов. Оффсеты явные (паттерн TeleportMenu):
+    # низ экрана, 300×28, зазор над ActionBar (слоты 55 px при y=-80).
     hud_hp = ProgressBar.new()
-    hud_hp.custom_minimum_size = Vector2(300, 30)
-    hud_hp.position = Vector2(20, 20)
-    hud_hp.max_value = 100
+    hud_hp.custom_minimum_size = Vector2(300, 28)
+    hud_hp.anchor_left = 0.5
+    hud_hp.anchor_right = 0.5
+    hud_hp.anchor_top = 1.0
+    hud_hp.anchor_bottom = 1.0
+    hud_hp.offset_left = -150
+    hud_hp.offset_right = 150
+    hud_hp.offset_top = -116
+    hud_hp.offset_bottom = -88
+    hud_hp.max_value = MAX_HP
     hud_hp.value = player_hp
-    hud_hp.show_percentage = true
+    hud_hp.show_percentage = false
     var sb = StyleBoxFlat.new()
     sb.bg_color = Color(0.2, 0.7, 0.2, 1.0)
     hud_hp.add_theme_stylebox_override("fill", sb)
     hud.add_child(hud_hp)
 
+    hp_label = Label.new()
+    hp_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+    hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    hp_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    hp_label.text = "%d/%d" % [player_hp, MAX_HP]
+    hud_hp.add_child(hp_label)
+
     add_child(hud)
 
 func update_hud():
     if hud_hp: hud_hp.value = player_hp
+    if hp_label: hp_label.text = "%d/%d" % [player_hp, MAX_HP]
+
+## Урон игроку (ад, 19.11.26): враги наносят % от MAX_HP (5% ближники, 2% дальники).
+## Смерть в аду → респавн на обычной арене, где манекены (верб. юзера).
+func take_damage(amount: int):
+    if is_dying:
+        return
+    player_hp = max(0, player_hp - amount)
+    update_hud()
+    var md = get_node_or_null("/root/MusicDirector")
+    if md:
+        md.note_combat()
+    if player_hp <= 0:
+        is_dying = true
+        get_tree().change_scene_to_file("res://Scenes/MainArena.tscn")
 
 func use_skill(skill_id: String):
     if not unlocked_skills.get(skill_id, false):

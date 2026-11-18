@@ -42,6 +42,24 @@ cd /d/nn/kimodo.cpp && PATH="/d/nn/kimodo.cpp/build/cpu/bin:/d/nn/kimodo.cpp/bui
 Всё в Godot 4.8-beta3 из корня проекта, bash-путь:
 `"/d/Programs/Godot/Godot_v4.8-beta3/Godot_v4.8-beta3_win64_console.exe"` (далее `$G`).
 
+### Быстрый путь — тул `agent-tools anim` (19.11.26)
+
+Шаги 1–4 закрыты одной командой (промпт → сиды kmd-generate ПАРАЛЛЕЛЬНО →
+гейт хореографии → победитель в neuro_soma с prompt.txt). Без PASS гейта
+в проект ничего не попадает (EXIT≠0):
+
+```bash
+D:/Projects/cross-app-plugins/bin/agent-tools.exe anim --name <clip> \
+  (--prompt "..." | --prompt-file <файл>) [--type cast_push] [--seeds 3]
+```
+
+- `--type` — тип гейта (§5): cast_push | cast_push_l | pistol_shoot |
+  pistol_shoot_l | left_bent_front | throw | none (пропустить гейт).
+- Шаги 5–7 (ретаргет/тесты/смоук) тул НЕ запускает — печатает их как next steps.
+- Лотерея хореографии никуда не делась: неудачный промпт → тюнинг (§4) и/или
+  другие сиды, повтор. RAM ~8 ГБ на процесс сидов.
+- Подробности — README `tools/agent-tools` в cross-app-plugins.
+
 1. **Промпт** → `D:\nn\kimodo.cpp\prompts\<clip>.txt` (§4 — правила написания).
 2. **Генерация 2–4 сидов** параллельно/подряд (§1 CLI). Сиды — ЛОТЕРЕЯ: один промпт даёт
    разные хореографии; победителя выбирает гейт, не глаз.

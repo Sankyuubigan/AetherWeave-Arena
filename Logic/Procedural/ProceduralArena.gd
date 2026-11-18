@@ -298,6 +298,14 @@ func _add_entities():
 		var probe := preload("res://Logic/Diagnostics/PlayerProbe.gd").new()
 		player.add_child(probe)
 
+	# Непись-телепортер у лагеря (19.11.26, верб. юзера): один и тот же на всех
+	# картах — подход → значок [Z] слева снизу → окно со списком 3 карт.
+	var NPC = preload("res://Logic/NPCTeleporter.gd")
+	var npc := NPC.new()
+	npc.name = "NPCTeleporter"
+	npc.position = Vector3(20, _height(20, 8) + 0.1, 8)
+	add_child(npc)
+
 	var dummy_scene = load("res://Scenes/dummy.tscn")
 	if not dummy_scene: return
 

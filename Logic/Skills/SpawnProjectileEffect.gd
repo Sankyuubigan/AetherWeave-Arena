@@ -9,6 +9,10 @@ const ProjectilePool = preload("res://Logic/Skills/ProjectilePool.gd")
 ## КАЖДЫЙ каст: fireball.tscn шарится скиллами (огненный шар и метеор) через
 ## пул — без стирания звук метеора «прилип» бы к огненному шару.
 @export var impact_sound: AudioStream
+## Тряска камеры при УДАРЕ снаряда (метеорит: падение после 2-с канала —
+## шейк в момент каста не нужен, верб. юзера 19.11.26). Паттерн impact_sound:
+## пул-безопасно, set/erase каждый каст (fireball.tscn шарится скиллами).
+@export var impact_shake: float = 0.0
 ## Спавн от ПРАВОЙ кисти (план 17.11.26 Шаг 3): источник — context.cast_origin
 ## (кладёт SpellCasterComponent из BoneAttachment3D RightHand/CastPoint).
 ## false — старое поведение от тела+offset_y (метеор летит с неба).
@@ -53,3 +57,8 @@ func apply(caster: Node, context: Dictionary) -> void:
         proj.set_meta("impact_sfx", impact_sound)
     else:
         proj.remove_meta("impact_sfx")
+
+    if impact_shake > 0.0:
+        proj.set_meta("impact_shake", impact_shake)
+    else:
+        proj.remove_meta("impact_shake")

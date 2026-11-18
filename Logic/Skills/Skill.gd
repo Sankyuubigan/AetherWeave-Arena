@@ -27,7 +27,17 @@ extends Resource
 ## перекрывает это поле (попеременно Л/П).
 @export var cast_hand: String = "Right"
 
+## Тряска камеры в момент ИСПОЛНЕНИЯ заклинания (19.11.26, верб. юзера:
+## громовой раскат — земля взрывается под ногами). 0 = нет. Ударная тряска
+## снарядов (метеорит падает ПОСЛЕ канала) — отдельный impact_shake у
+## SpawnProjectileEffect: там момент удара, а не каста.
+@export var shake: float = 0.0
+
 func execute(caster: Node, context: Dictionary) -> void:
     for eff in effects:
         if eff.has_method("apply"):
             eff.apply(caster, context)
+    if shake > 0.0:
+        var cs = caster.get_node_or_null("/root/CameraShake")
+        if cs:
+            cs.add_trauma(shake)

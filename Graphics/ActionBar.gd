@@ -102,6 +102,15 @@ func _ready():
         hbox.add_child(slot)
         slots.append(slot)
 
+    # Раскладка панели тоже слетала при смене карты — восстановление из
+    # автолоада PlayerSession (наполнение слотов в PlayerController._ready).
+    var session = get_node_or_null("/root/PlayerSession")
+    if session and session.has_state:
+        var bar: Array = session.bar
+        for i in slots.size():
+            var sid: String = bar[i] if i < bar.size() else ""
+            slots[i].set_skill(str(sid))
+
 func remove_skill(id: String):
     for slot in slots:
         if slot.skill_id == id:

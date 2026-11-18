@@ -230,7 +230,13 @@ func build_prop_scene(model_root: Node):
 	if first_mi and first_mi.mesh:
 		var collision = CollisionShape3D.new()
 		collision.name = "CollisionShape3D"
-		collision.shape = first_mi.mesh.create_trimesh_shape()
+		# Convex-hull вместо trimesh (19.11.26, зонд probe_boulder_fps5): упор
+		# CharacterBody3D в trimesh-коллизию валуна = move_and_slide 5-11мс НА
+		# КАЖДЫЙ тик физики (депенетрация против 4000 граней, класс Godot
+		# issue #70453) — у юзера это фризы 100-400мс у валуна. Тот же упор в
+		# convex-hull (32 точки): worst 1.7мс. Рокам/камням hull визуально не
+		# уступает (коллизия невидима), решает задача.
+		collision.shape = first_mi.mesh.create_convex_shape(true, true)
 		root.add_child(collision)
 
 	model_root.name = "Graphics"

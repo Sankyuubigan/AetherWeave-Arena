@@ -52,6 +52,14 @@ func _ready():
 	btn_proc.pressed.connect(func(): _go("res://Scenes/ProceduralArena.tscn"))
 	panel.add_child(btn_proc)
 
+	# Ад (19.11.26): список телепортов = 3 карты, как у непися-телепортера.
+	var btn_hell = Button.new()
+	btn_hell.text = "Ад"
+	btn_hell.position = Vector2(60, 170)
+	btn_hell.custom_minimum_size = Vector2(200, 40)
+	btn_hell.pressed.connect(func(): _go("res://Scenes/HellArena.tscn"))
+	panel.add_child(btn_hell)
+
 	panel.hide()
 
 ## Телепорт с защитой от петли регенераций (17.11.26, зонд поймал 6 рестартов
