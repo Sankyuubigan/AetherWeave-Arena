@@ -112,6 +112,15 @@ func _init():
 		inst.owner = root
 		print(p_name + " placed at " + str(p.pos))
 
+	# Желе-монстр (QUEUE Q6, заказ юзера: «сделай монстра желе... здоровенным,
+	# поставь на карту — посмотрю»): гигантский слизень SoftBody3D, дрожит от
+	# давления, отзывается волнами на толчки игрока (collision_mask 1).
+	var jelly = preload("res://Logic/JellyMonster.gd").new()
+	jelly.name = "JellyMonster"
+	jelly.position = Vector3(7, 2.9, -6)
+	root.add_child(jelly)
+	jelly.owner = root
+
 	# Непись-телепортер у края арены (19.11.26, верб. юзера): пол 100×100
 	# (box 50×1×50 × scale 2), край на ±50 → угол (38, 0, 38) «ближе к краю».
 	var npc = load("res://Logic/NPCTeleporter.gd").new()

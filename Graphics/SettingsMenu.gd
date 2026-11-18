@@ -14,8 +14,12 @@ var _sfx_slider: HSlider
 var _sfx_label: Label
 var _music_slider: HSlider
 var _music_label: Label
+var _quality_option: OptionButton
 
 const TEST_SOUND := "res://Audio/SFX/neural_ui_click.res"
+## Качество графики (QUEUE Q1): скрипт автолоада прелоадом — голое имя
+## автолоада в -s-режиме не резолвится (правило проекта).
+const GraphicsQualityScript = preload("res://Graphics/GraphicsQuality.gd")
 
 func _ready():
     layer = 50
@@ -68,6 +72,20 @@ func _build_ui() -> void:
     _music_slider = music[0]
     _music_label = music[1]
     _music_slider.value_changed.connect(_on_music_changed)
+
+    # Качество графики (QUEUE Q1): LOW = VRS+без SSAO/тумана, MEDIUM = базлайн,
+    # HIGH = + SDFGI (жирные видеокарты). Применяет GraphicsQuality autoload.
+    var qrow := HBoxContainer.new()
+    qrow.add_theme_constant_override("separation", 10)
+    vbox.add_child(qrow)
+    var qcaption := Label.new()
+    qcaption.text = "Качество графики:"
+    qrow.add_child(qcaption)
+    _quality_option = OptionButton.new()
+    for q_name in GraphicsQualityScript.NAMES:
+        _quality_option.add_item(q_name)
+    qrow.add_child(_quality_option)
+    _quality_option.item_selected.connect(_on_quality_changed)
 
     var test_btn := Button.new()
     test_btn.text = "Проверить звук (эффекты)"
@@ -125,7 +143,21 @@ func _sync_from_audio() -> void:
     _master_slider.set_value_no_signal(roundf(master * 100.0))
     _sfx_slider.set_value_no_signal(roundf(sfx * 100.0))
     _music_slider.set_value_no_signal(roundf(music * 100.0))
+    _sync_quality()
     _update_labels()
+
+func _gq() -> Node:
+    return get_node_or_null("/root/GraphicsQuality")
+
+func _sync_quality() -> void:
+    var gq := _gq()
+    if gq:
+        _quality_option.select(int(gq.quality))
+
+func _on_quality_changed(idx: int) -> void:
+    var gq := _gq()
+    if gq:
+        gq.set_quality(idx)
 
 func _on_master_changed(_v: float) -> void:
     var audio = get_node_or_null("/root/AudioManager")

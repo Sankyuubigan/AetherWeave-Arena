@@ -52,11 +52,24 @@ func _spawn_scorch():
         return
     var dir := direction if direction.length_squared() > 0.001 else Vector3.DOWN
     var normal := AnimatedDecalComponent.surface_normal(get_world_3d(), global_position, dir, Vector3.UP)
+    # Подпалина (QUEUE Q5, заказ юзера: «подпалины после фаерболов и метеорита»):
+    # размер — по метеору (meta decal_scale от SpawnProjectileEffect), живёт 18 с.
+    var d_scale := 1.0
+    if has_meta("decal_scale"):
+        d_scale = float(get_meta("decal_scale"))
     var frames := DecalFrames.explosion_scorch(Color(1.0, 0.45, 0.1))
     var decal := AnimatedDecalComponent.new()
-    decal.configure(frames, 12.0, 5.0, 1.6)
+    decal.configure(frames, 12.0, 18.0, 1.6 * d_scale)
     scene.add_child(decal)
     decal.place(global_position, normal)
+    # След-лужа лавы (метеор, meta lava_pool): эмиссивная декаль с пульсом
+    # прожилок, живёт дольше всех следов — «лужи лавы, оставляющие след».
+    if has_meta("lava_pool"):
+        var lava := AnimatedDecalComponent.new()
+        lava.configure(DecalFrames.lava_puddle(Color(1.0, 0.38, 0.03)), 6.0, 30.0, 2.4 * d_scale, true)
+        scene.add_child(lava)
+        lava.place(global_position, normal)
+        lava.set_emission(4.0)
 
 func pooled_reset():
     direction = Vector3.FORWARD

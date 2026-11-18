@@ -205,3 +205,84 @@ static func draw_line_px(img: Image, from: Vector2, to: Vector2, color: Color, a
                 var old := img.get_pixel(x, y)
                 if color.a * alpha > old.a:
                     img.set_pixel(x, y, Color(color.r, color.g, color.b, clampf(color.a * alpha, 0.0, 1.0)))
+
+## Кровь (труп-рэгдолл, QUEUE Q5): клякса + брызги, за первые кадры слегка
+## растекается, дальше держится (растворение делает AnimatedDecal в конце
+## lifetime). Спавнит RagdollCorpse._spawn_blood.
+static func blood_splatter(blood: Color, frames_count: int = 6) -> Array[Image]:
+    var frames: Array[Image] = []
+    var rng := RandomNumberGenerator.new()
+    rng.seed = 20260519 # детерминизм: тест и рендер-проба видят одну кляксу
+    for i in frames_count:
+        var t := float(i) / maxf(frames_count - 1, 1)
+        var grow := 0.6 + 0.4 * ease_out(minf(t * 1.8, 1.0))
+        var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+        img.fill(Color(0, 0, 0, 0))
+        for d in 10:
+            var ang := rng.randf() * TAU
+            var dist := (0.0 if d == 0 else rng.randf_range(0.12, 0.78)) * grow
+            var r := (0.36 if d == 0 else rng.randf_range(0.05, 0.15)) * grow
+            _blob(img, CENTER + cos(ang) * dist * CENTER, CENTER + sin(ang) * dist * CENTER, r * CENTER, blood)
+        frames.append(img)
+    return frames
+
+## Лава-лужа (след метеорита, QUEUE Q5): тёмная корка с рваным краем + пульс
+## светящихся прожилок (каждая в своей фазе). LOOP-кадры. Эмиссию декали даёт
+## AnimatedDecalComponent.set_emission (texture_emission = та же текстура —
+## светятся только непрозрачные тексели).
+static func lava_puddle(glow: Color, frames_count: int = 8) -> Array[Image]:
+    var crust := Color(0.11, 0.055, 0.04)
+    var frames: Array[Image] = []
+    var rng := RandomNumberGenerator.new()
+    rng.seed = 777001
+    # Рваный край кляксы: радиус по 24 угловым секторам (общий для всех кадров).
+    var edge := PackedFloat32Array()
+    for s in 24:
+        edge.append(0.62 + rng.randf_range(-0.18, 0.18))
+    # Прожилки: 7 ломаных от центра наружу.
+    var cracks := []
+    for c in 7:
+        var ang := TAU * c / 7.0 + rng.randf_range(-0.3, 0.3)
+        var pts := [Vector2(CENTER, CENTER)]
+        for s in 3:
+            var a2 := ang + rng.randf_range(-0.4, 0.4)
+            pts.append(Vector2(CENTER, CENTER) + Vector2(cos(a2), sin(a2)) * rng.randf_range(0.3, 0.82) * CENTER)
+        cracks.append(pts)
+    for i in frames_count:
+        var t := float(i) / float(frames_count)
+        var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+        img.fill(Color(0, 0, 0, 0))
+        # Корка: внутри рваного радиуса, альфа спадает к краю.
+        for y in SIZE:
+            for x in SIZE:
+                var ang := atan2(float(y - CENTER), float(x - CENTER))
+                var sector := int((ang + PI) / TAU * 24.0) % 24
+                var d := dist01(x, y)
+                var lim := edge[sector]
+                if d > lim:
+                    continue
+                var a := clampf((lim - d) / 0.18, 0.0, 1.0) * 0.95
+                var c := crust.lerp(Color.WHITE, clampf(1.0 - d * 2.2, 0.0, 1.0) * 0.12)
+                img.set_pixel(x, y, Color(c.r, c.g, c.b, a))
+        # Прожилки пульсируют вразнобой (фаза по номеру трещины).
+        for c in cracks.size():
+            var pulse := 0.45 + 0.55 * (0.5 + 0.5 * sin((t + float(c) / cracks.size()) * TAU))
+            for pi in range(cracks[c].size() - 1):
+                draw_line_px(img, cracks[c][pi], cracks[c][pi + 1], Color(glow.r, glow.g, glow.b, 0.85), pulse)
+        frames.append(img)
+    return frames
+
+## Залитая клякса с мягким краем (хелпер крови; поверх существующей картинки).
+static func _blob(img: Image, cx: float, cy: float, r: float, col: Color) -> void:
+    var r_i := int(ceil(r))
+    for y in range(maxi(0, int(cy) - r_i), mini(SIZE, int(cy) + r_i + 1)):
+        for x in range(maxi(0, int(cx) - r_i), mini(SIZE, int(cx) + r_i + 1)):
+            var dx := (float(x) + 0.5 - cx) / maxf(r, 0.5)
+            var dy := (float(y) + 0.5 - cy) / maxf(r, 0.5)
+            var d := sqrt(dx * dx + dy * dy)
+            if d > 1.0:
+                continue
+            var a := clampf(1.1 - d, 0.0, 1.0) * col.a
+            var old := img.get_pixel(x, y)
+            if a > old.a:
+                img.set_pixel(x, y, Color(col.r, col.g, col.b, a))

@@ -50,6 +50,13 @@ func place(pos: Vector3, normal: Vector3) -> void:
     global_transform.basis = Basis(x_axis, y_axis, z_axis)
     global_position = pos + y_axis * 0.02
 
+## Эмиссия декали (лава-лужа, QUEUE Q5): та же DrawableTexture2D в
+## texture_emission — светятся только непрозрачные тексели (прожилки, корка
+## почти нет). Вызывать ПОСЛЕ configure (нужна _drawable).
+func set_emission(energy: float) -> void:
+    texture_emission = _drawable
+    emission_energy = energy
+
 ## Нормаль поверхности в точке удара: одиночный луч навстречу движению.
 ## dir — направление полёта/взрыва; fallback вернётся, если луч ничего не нашёл.
 static func surface_normal(world: World3D, pos: Vector3, dir: Vector3, fallback: Vector3) -> Vector3:

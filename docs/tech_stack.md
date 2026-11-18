@@ -44,7 +44,22 @@
   в бит поверх кастуемой мелодии; берём техприёмы демо — синхронизация input↔audio
   (стабильная позиция playback, как в MusicDirector) и 1€-фильтр гладкости нот.
 
+### Взято 19.11.26 (батч качества QUEUE Q1-Q7)
+* `occlusion_culling_mesh_lod` → BoxOccluder3D на скаттерах Ада (Q2) + project setting
+  occlusion_culling/use_occlusion_culling=true.
+* `variable_rate_shading` → режим LOW автолоада GraphicsQuality (Q3): VRS_TEXTURE,
+  фовате-карта 256×144 (центр 1×1, пояс 2×2, края 4×4; R/G 0x00/0x55/0xAA).
+* `global_illumination` (SDFGI) → режим HIGH GraphicsQuality (Q4): cascades 6,
+  use_occlusion — только вручную, для жирных видеокарт.
+* `soft_body_physics` → JellyMonster (Q6): SoftBody3D r=2.6 на MainArena (7, 2.9, -6).
+  Грабли 4.8-beta3: `Environment.copy_from` НЕ существует (восстанавливать свойства
+  из duplicate-базлайна вручную); `SoftBody3D.apply_point_impulse` нет;
+  `get_point_transform(i)` → Vector3 (позиция, не Transform3D); в headless софт-физика
+  не симулируется (трансформы нулевые) — проверять рендер-пробой.
+* `navigation_mesh_chunks` → Logic/ChunkedNavMesh.gd (Q7): bake_chunk/rebake_chunk —
+  NavigationServer3D.parse_source_geometry_data парсит ТОЛЬКО поддерево чанка.
+
 ### Осознанно НЕ взято (нет геймплейной нужды / ниша)
 * audio: `device_changer`, `mic_record`, `midi_piano`, `text_to_speech` — девайсы/микрофон/MIDI/TTS.
-* 3d: `global_illumination` (SDFGI — дорого, у нас прямой свет + SSAO), `sky_shaders`, `occlusion_culling_mesh_lod` (FPS 190+ без него), `variable_rate_shading`, `antialiasing` (пресеты AA), `procedural_materials`, `material_testers`, `soft_body_physics`, `voxel`, `csg`, `sprites`, `rigidbody_character`, `platformer`, `squash_the_creeps`, `truck_town`, `physics_tests` (свой тест-раннер), `navigation_mesh_chunks` (вариант при росте мира >200×200), `physical_light_camera_units` (арт уже настроен), `kinematic_character` (свой PlayerController старше).
-* Возврат к списку — только при новой задаче (напр. GI для финального арта, чанковый навмеш для большой карты).
+* 3d: `sky_shaders`, `antialiasing` (пресеты AA), `procedural_materials`, `material_testers`, `voxel`, `csg`, `sprites`, `rigidbody_character`, `platformer`, `squash_the_creeps`, `truck_town`, `physics_tests` (свой тест-раннер), `physical_light_camera_units` (арт уже настроен), `kinematic_character` (свой PlayerController старше).
+* Возврат к списку — только при новой задаче (GI и чанковый навмеш взяты 19.11.26 — выше).

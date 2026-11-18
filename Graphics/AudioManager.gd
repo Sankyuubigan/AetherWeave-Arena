@@ -111,7 +111,10 @@ func _load_settings() -> void:
     music_volume = clampf(float(cfg.get_value("audio", "music_volume", 1.0)), 0.0, 1.0)
 
 func _save_settings() -> void:
+    # Догруз существующего файла: GraphicsQuality пишет секцию [graphics] в тот
+    # же user://settings.cfg — новая ConfigFile без load() стёрла бы её.
     var cfg := ConfigFile.new()
+    cfg.load(SETTINGS_PATH)
     cfg.set_value("audio", "master_volume", master_volume)
     cfg.set_value("audio", "sfx_volume", sfx_volume)
     cfg.set_value("audio", "music_volume", music_volume)

@@ -13,6 +13,13 @@ const ProjectilePool = preload("res://Logic/Skills/ProjectilePool.gd")
 ## шейк в момент каста не нужен, верб. юзера 19.11.26). Паттерн impact_sound:
 ## пул-безопасно, set/erase каждый каст (fireball.tscn шарится скиллами).
 @export var impact_shake: float = 0.0
+## Множитель размера следа-декали при ударе (метеор: крупная подпалина + лужа
+## лавы, QUEUE Q5). Тот же пул-безопасный паттерн impact_*: set/erase каждый
+## каст — fireball.tscn шарится скиллами.
+@export var decal_scale: float = 1.0
+## Оставить ЭМИССИВНУЮ лужу лавы в точке удара (метеор: «лужи лавы,
+## оставляющие след» — заказ юзера 19.11.26).
+@export var lava_pool: bool = false
 ## Спавн от ПРАВОЙ кисти (план 17.11.26 Шаг 3): источник — context.cast_origin
 ## (кладёт SpellCasterComponent из BoneAttachment3D RightHand/CastPoint).
 ## false — старое поведение от тела+offset_y (метеор летит с неба).
@@ -65,3 +72,13 @@ func apply(caster: Node, context: Dictionary) -> void:
         proj.set_meta("impact_shake", impact_shake)
     else:
         proj.remove_meta("impact_shake")
+
+    if decal_scale > 1.001:
+        proj.set_meta("decal_scale", decal_scale)
+    else:
+        proj.remove_meta("decal_scale")
+
+    if lava_pool:
+        proj.set_meta("lava_pool", true)
+    else:
+        proj.remove_meta("lava_pool")

@@ -104,6 +104,10 @@ static func get_skills() -> Dictionary:
     # ProjectileComponent в точке попадания.
     if ResourceLoader.exists("res://Audio/SFX/neural_meteor_impact.res"):
         m_proj.impact_sound = load("res://Audio/SFX/neural_meteor_impact.res")
+    # След на земле (QUEUE Q5, заказ юзера): крупная подпалина + лужа лавы,
+    # которую видно долго («лужи лавы, оставляющие след»).
+    m_proj.decal_scale = 2.4
+    m_proj.lava_pool = true
     meteor.effects.append(m_proj)
     var m_aoe = preload("res://Logic/Skills/AoeDamageEffect.gd").new()
     m_aoe.radius = 8.0

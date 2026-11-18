@@ -102,13 +102,14 @@ func _add_rocks():
 	var rng := RandomNumberGenerator.new()
 	var half := TERRAIN_SIZE / 2.0 - 10.0
 	_add_scatter_group("Rocks", rock_mesh, 120, rng, half, 4.0, 10.0, 0.6, 2.4, true)
-	_add_scatter_group("Spires", spire_mesh, 60, rng, half, 8.0, 10.0, 0.6, 1.8, true)
+	_add_scatter_group("Spires", spire_mesh, 60, rng, half, 8.0, 10.0, 0.6, 1.8, true, true) # +окклюдеры (Q2)
 
 ## Сокращённый скаттер из ProceduralArena (чанки MultiMesh + коллизия-цилиндры).
-func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomNumberGenerator, half: float, spacing: float, spawn_clear_radius: float, scale_lo: float, scale_hi: float, always_scale: bool) -> void:
+func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomNumberGenerator, half: float, spacing: float, spawn_clear_radius: float, scale_lo: float, scale_hi: float, always_scale: bool, with_occluders: bool = false) -> void:
 	rng.seed = randi()
 	var aabb := mesh.get_aabb()
 	var lift := -minf(aabb.position.y, 0.0) - aabb.size.y * 0.1
+	var aabb_center := aabb.position + aabb.size * 0.5
 
 	var positions := []
 	for i in count * 3:
@@ -174,6 +175,17 @@ func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomN
 		mmi.multimesh = mm
 		group_root.add_child(mmi)
 
+	# Окклюдеры (QUEUE Q2): BoxOccluder3D на инстанс — в Godot 4 авто-окклюзии
+	# без OccluderInstance3D нет; шпили — крупные укрытия, реально отсекают.
+	if with_occluders:
+		for t in instance_transforms:
+			var occ := OccluderInstance3D.new()
+			var box := BoxOccluder3D.new()
+			box.size = aabb.size * t.basis.get_scale()
+			occ.occluder = box
+			occ.transform = t * Transform3D(Basis.IDENTITY, aabb_center)
+			group_root.add_child(occ)
+
 	# Коллизия: MultiMesh сам не коллизится — один StaticBody, цилиндр на инстанс.
 	var body := StaticBody3D.new()
 	body.name = group_name + "_Body"
@@ -181,7 +193,6 @@ func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomN
 	var shape := CylinderShape3D.new()
 	shape.radius = maxf(maxf(aabb.size.x, aabb.size.z) * 0.45, 0.1)
 	shape.height = maxf(aabb.size.y * 0.9, 0.2)
-	var aabb_center := aabb.position + aabb.size * 0.5
 	for t in instance_transforms:
 		var cs := CollisionShape3D.new()
 		cs.shape = shape

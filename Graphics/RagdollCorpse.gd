@@ -8,6 +8,9 @@ extends Node3D
 ## Слои: layer 0 / mask 1 — труп сталкивается только с миром: игрока и живых
 ## сущностей не толкает, трупы не пушат друг друга.
 
+const AnimatedDecalComponent = preload("res://Graphics/AnimatedDecalComponent.gd")
+const DecalFrames = preload("res://Graphics/DecalFrames.gd")
+
 const IMPULSE_BONE := "PB_Chest"
 const CHARGE_SHARE := 0.35  # доля импульса, добиваемая в грудь сверх залёта
 
@@ -27,6 +30,7 @@ func _ready() -> void:
 	if not initial_impulse.is_zero_approx():
 		_launch_bones(sim)
 	_schedule_cleanup()
+	_spawn_blood()
 
 ## Залёт: каждому PB импульс, пропорциональный его массе (одинаковая скорость
 ## всего тела — суставы не рвутся), плюс добивочный импульс и торк в грудь.
@@ -75,3 +79,21 @@ func _schedule_cleanup() -> void:
 	tw.tween_interval(maxf(0.1, lifetime - sink_time))
 	tw.tween_property(self, "position:y", position.y - 2.5, sink_time)
 	tw.tween_callback(queue_free)
+
+## Кровь под трупом (QUEUE Q5, заказ юзера: «кровь под трупами-рэгдоллами»):
+## ждём ~0.9 с, пока тело долетит и уляжется, луч вниз — декаль-клякса там,
+## где труп РЕАЛЬНО лежит, а не в точке смерти. Живёт 14 с ≈ время трупа.
+func _spawn_blood() -> void:
+	var scene := get_tree().current_scene if get_tree() else null
+	if not scene:
+		return
+	await get_tree().create_timer(0.9).timeout
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
+	var hit := AnimatedDecalComponent.ground_hit_below(get_world_3d(), global_position)
+	if hit.is_empty():
+		return
+	var decal := AnimatedDecalComponent.new()
+	decal.configure(DecalFrames.blood_splatter(Color(0.42, 0.015, 0.015)), 8.0, 14.0, 2.4)
+	scene.add_child(decal)
+	decal.place(hit.position, hit.normal)
