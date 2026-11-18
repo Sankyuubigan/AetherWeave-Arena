@@ -23,8 +23,10 @@ func _behaviour(dist: float, dir: Vector3) -> void:
 		velocity.x = -dir.x * move_speed * 0.7
 		velocity.z = -dir.z * move_speed * 0.7
 	elif dist > STOP_RANGE or not los:
-		velocity.x = dir.x * move_speed
-		velocity.z = dir.z * move_speed
+		# Преследование по навмешу (обход камней/шпилей), как у ближника.
+		var d := _nav_dir_to(_player.global_position, get_physics_process_delta_time())
+		velocity.x = d.x * move_speed
+		velocity.z = d.z * move_speed
 	else:
 		velocity.x = 0.0
 		velocity.z = 0.0

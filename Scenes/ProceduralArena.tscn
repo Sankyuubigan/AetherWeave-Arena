@@ -1,10 +1,32 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://Logic/Procedural/ProceduralArena.gd" id="1_a2gwl"]
+[ext_resource type="Script" path="res://Logic/Procedural/ProceduralArena.gd" id="1_ky6sb"]
+[ext_resource type="Shader" path="res://Graphics/Sky/arena_sky.gdshader" id="2_03oi7"]
 
-[sub_resource type="Environment" id="Environment_ky6sb"]
-background_mode = 1
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_4rsct"]
+shader = ExtResource("2_03oi7")
+shader_parameter/u_top = Color(0.16, 0.34, 0.58, 1)
+shader_parameter/u_horizon = Color(0.62, 0.72, 0.58, 1)
+shader_parameter/u_bottom = Color(0.22, 0.26, 0.2, 1)
+shader_parameter/u_horizon_sharp = 3.0
+shader_parameter/u_sun_color = Color(1, 0.92, 0.72, 1)
+shader_parameter/u_sun_size = 0.012
+shader_parameter/u_glow = 0.3
+shader_parameter/u_cloud_color = Color(0.88, 0.92, 0.88, 1)
+shader_parameter/u_cloud_cover = 0.45
+shader_parameter/u_cloud_speed = 0.006
+shader_parameter/u_cloud_dark = 0.3
+shader_parameter/u_ember_color = Color(1, 0.42, 0.08, 1)
+shader_parameter/u_ember_amount = 0.0
+
+[sub_resource type="Sky" id="Sky_tg8ww"]
+sky_material = SubResource("ShaderMaterial_4rsct")
+process_mode = 3
+
+[sub_resource type="Environment" id="Environment_3hn36"]
+background_mode = 2
 background_color = Color(0.4, 0.6, 1, 1)
+sky = SubResource("Sky_tg8ww")
 ambient_light_source = 2
 ambient_light_color = Color(0.3, 0.3, 0.4, 1)
 tonemap_mode = 2
@@ -15,13 +37,13 @@ volumetric_fog_albedo = Color(0.78, 0.85, 1, 1)
 volumetric_fog_anisotropy = 0.3
 volumetric_fog_length = 96.0
 
-[node name="ProceduralArena" type="Node3D" unique_id=2146114932]
-script = ExtResource("1_a2gwl")
+[node name="ProceduralArena" type="Node3D" unique_id=180214624]
+script = ExtResource("1_ky6sb")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=309732487]
-environment = SubResource("Environment_ky6sb")
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1013440234]
+environment = SubResource("Environment_3hn36")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1792292263]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=874185474]
 transform = Transform3D(0.70710677, -0.4055798, 0.579228, 0, 0.81915206, 0.57357645, -0.70710677, -0.4055798, 0.579228, 0, 0, 0)
 light_energy = 1.5
 shadow_enabled = true

@@ -6,6 +6,7 @@ export_presets.cfg
 # Project specific
 /test/
 /Graphics/PlayerModel/
+/Graphics/EnemyModel/raw/
 /Graphics/Animations
 /Audio
 /Graphics/Environment

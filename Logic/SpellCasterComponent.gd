@@ -39,6 +39,14 @@ func _ready():
 	box.add_child(_bar)
 	_bar_layer.visible = false
 
+	# IK-доводка кастов (заказ юзера 18.11.26): Graphics-компонент создаётся
+	# рантайм, скелет задаём свойством (без регена player.tscn и без цикла preload).
+	var ik := Node.new()
+	ik.name = "CastIK"
+	ik.set_script(load("res://Graphics/CastIKComponent.gd"))
+	ik.set("skeleton", _find_skeleton(get_parent().get_node_or_null("GraphicsWrapper/PlayerModel")))
+	add_child(ik)
+
 func is_channeling() -> bool:
 	return _channeling
 
@@ -79,6 +87,11 @@ func cast_skill(skill_id: String):
 		_channeling = true
 		if anim_comp and anim_comp.has_method("play_channel"):
 			anim_comp.play_channel()
+			# IK-доводка на всё окно канала + выброс (длина Cast_Shoot_UB).
+			var shoot_len: float = 0.0
+			if anim_comp.has_method("cast_clip_length"):
+				shoot_len = anim_comp.cast_clip_length("Cast_Shoot")
+			_ik_begin(player, hand, skill, skill.cast_time + shoot_len + 0.15)
 		_cast_bar_start(skill.cast_time, skill.skill_name)
 		await get_tree().create_timer(skill.cast_time).timeout
 		_channeling = false
@@ -99,6 +112,9 @@ func cast_skill(skill_id: String):
 	else:
 		if cast_anim_name != "" and anim_comp and anim_comp.has_method("play_cast_anim"):
 			anim_comp.play_cast_anim(cast_anim_name)
+			# IK-доводка на длину UB-клипа (окно = сам каст).
+			if anim_comp.has_method("cast_clip_length"):
+				_ik_begin(player, hand, skill, anim_comp.cast_clip_length(cast_anim_name))
 		skill.execute(player, context)
 
 ## Прицел + валидация цели → контекст execute. Пустой Dictionary = каст
@@ -154,6 +170,28 @@ func _aim_context(player: Node, skill_id: String, skill, hand: String) -> Dictio
 		"cast_origin": _hand_pos(player, hand),
 		"hand": hand,  # для отложенного спавна из живой кисти (spawn_delay)
 	}
+
+## Окно IK-доводки: инста — длина UB-клипа; канал — cast_time + выброс.
+## Провайдер — лямбда: каждый кадр окна свежая точка прицела.
+func _ik_begin(player: Node, hand: String, skill, duration: float) -> void:
+	if duration <= 0.0:
+		return
+	var ik := get_node_or_null("CastIK")
+	if ik == null:
+		return
+	ik.begin(hand, func() -> Vector3: return _aim_point(player, skill.max_range), duration)
+
+## Лёгкий прицел для IK (без валидации цели и принтов): точка под камерой-рейкастом.
+func _aim_point(player: Node, max_range: float) -> Vector3:
+	var camera = player.get_node_or_null("SpringArm3D/Camera3D")
+	if camera == null:
+		return player.global_position + Vector3(0, 1.2, 0)
+	var forward = -camera.global_transform.basis.z
+	var end_pos = camera.global_position + forward * max_range
+	var query = PhysicsRayQueryParameters3D.create(camera.global_position, end_pos)
+	query.exclude = [player.get_rid()]
+	var result = player.get_world_3d().direct_space_state.intersect_ray(query)
+	return result.get("position", end_pos)
 
 ## Глобальная позиция кости кисти (для спавна снарядов из руки).
 func _hand_pos(player: Node, side: String) -> Vector3:

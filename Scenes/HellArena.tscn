@@ -1,24 +1,47 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://Logic/HellArena.gd" id="1_l75sx"]
+[ext_resource type="Script" path="res://Logic/HellArena.gd" id="1_oyabs"]
+[ext_resource type="Shader" path="res://Graphics/Sky/arena_sky.gdshader" id="2_p1vee"]
 
-[sub_resource type="Environment" id="Environment_oyabs"]
-background_mode = 1
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_n5wrv"]
+shader = ExtResource("2_p1vee")
+shader_parameter/u_top = Color(0.03, 0.005, 0.005, 1)
+shader_parameter/u_horizon = Color(0.36, 0.05, 0.02, 1)
+shader_parameter/u_bottom = Color(0.08, 0.02, 0.01, 1)
+shader_parameter/u_horizon_sharp = 2.2
+shader_parameter/u_sun_color = Color(0.9, 0.25, 0.08, 1)
+shader_parameter/u_sun_size = 0.02
+shader_parameter/u_glow = 0.8
+shader_parameter/u_cloud_color = Color(0.16, 0.05, 0.03, 1)
+shader_parameter/u_cloud_cover = 0.5
+shader_parameter/u_cloud_speed = 0.02
+shader_parameter/u_cloud_dark = 0.75
+shader_parameter/u_ember_color = Color(1, 0.42, 0.08, 1)
+shader_parameter/u_ember_amount = 1.0
+
+[sub_resource type="Sky" id="Sky_m7se7"]
+sky_material = SubResource("ShaderMaterial_n5wrv")
+process_mode = 3
+
+[sub_resource type="Environment" id="Environment_lnit4"]
+background_mode = 2
 background_color = Color(0.05, 0.015, 0.015, 1)
+sky = SubResource("Sky_m7se7")
 ambient_light_source = 2
 ambient_light_color = Color(0.36, 0.12, 0.09, 1)
 ssao_enabled = true
 fog_enabled = true
 fog_light_color = Color(0.3, 0.06, 0.04, 1)
 fog_density = 0.008
+fog_sky_affect = 0.15
 
-[node name="HellArena" type="Node3D" unique_id=1315888777]
-script = ExtResource("1_l75sx")
+[node name="HellArena" type="Node3D" unique_id=561393389]
+script = ExtResource("1_oyabs")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=756789074]
-environment = SubResource("Environment_oyabs")
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=2057226985]
+environment = SubResource("Environment_lnit4")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1787815625]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1018616725]
 transform = Transform3D(0.8660254, -0.3213938, 0.38302222, 0, 0.76604444, 0.6427876, -0.5, -0.55667037, 0.66341394, 0, 0, 0)
 light_color = Color(1, 0.45, 0.35, 1)
 light_energy = 0.5

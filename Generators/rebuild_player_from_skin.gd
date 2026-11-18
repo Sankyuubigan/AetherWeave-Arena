@@ -1,16 +1,20 @@
 extends SceneTree
 
 var skin_name: String
+var mode := "player"  # player | enemy (скины врагов, заказ юзера 18.11.26)
 var skin_dir: String
 var raw_fbx: String
 var godot_exe: String
 var tex_count: int = 0
+var model_parent := "res://Graphics/PlayerModel/"
 
 func _init():
 	parse_args()
 
-	skin_dir = "res://Graphics/PlayerModel/%s/" % skin_name
-	raw_fbx = "res://Graphics/PlayerModel/raw/%s.fbx" % skin_name
+	if mode == "enemy":
+		model_parent = "res://Graphics/EnemyModel/"
+	skin_dir = "%s%s/" % [model_parent, skin_name]
+	raw_fbx = "%sraw/%s.fbx" % [model_parent, skin_name]
 	godot_exe = OS.get_executable_path()
 
 	ensure_skin_dir()
@@ -36,7 +40,10 @@ func _init():
 				print("ERROR: cannot reload %s" % raw_fbx)
 				quit(1)
 
-	build_player_scene(model_root)
+	if mode == "enemy":
+		build_enemy_scene(model_root)
+	else:
+		build_player_scene(model_root)
 	clean_old_png()
 	print("Done! Skin '%s' ready." % [skin_name])
 	quit()
@@ -44,8 +51,9 @@ func _init():
 
 func parse_args():
 	skin_name = "Ch24_nonPBR"
-	var args = OS.get_cmdline_args()
-	for arg in args:
+	mode = "player"
+	var positional: Array[String] = []
+	for arg in OS.get_cmdline_args():
 		var trimmed = arg.trim_suffix(".fbx").strip_edges()
 		if trimmed.is_empty() or trimmed.length() < 2:
 			continue
@@ -55,12 +63,15 @@ func parse_args():
 			continue
 		if trimmed.to_lower() in ["headless", "editor"]:
 			continue
-		skin_name = trimmed
-		return
+		positional.append(trimmed)
+	if positional.size() > 0:
+		skin_name = positional[0]
+	if positional.size() > 1 and positional[1] in ["player", "enemy"]:
+		mode = positional[1]
 
 
 func ensure_skin_dir():
-	var parent = DirAccess.open("res://Graphics/PlayerModel/")
+	var parent = DirAccess.open(model_parent)
 	if parent and not parent.dir_exists(skin_name):
 		parent.make_dir(skin_name)
 		print("Created: %s" % skin_dir)
@@ -182,7 +193,7 @@ func dump_node_tree(node: Node, indent: String):
 # ─── Очистка ────────────────────────────────────────────────────────
 
 func clean_old_png():
-	var dir = DirAccess.open("res://Graphics/PlayerModel/")
+	var dir = DirAccess.open(model_parent)
 	if not dir:
 		return
 	dir.list_dir_begin()
@@ -324,6 +335,79 @@ func set_owner_recursive(node: Node, owner_node: Node):
 	node.owner = owner_node
 	for child in node.get_children():
 		set_owner_recursive(child, owner_node)
+
+
+# ─── Сборка enemy_<skin>.tscn (режим enemy) ─────────────────────────
+# Тело врага: CharacterBody3D БЕЗ скрипта — поведение (HellMeleeEnemy/
+# HellRangedEnemy) вешает HellArena при спавне set_script'ом: одно поведение
+# = один скин (заказ юзера 18.11.26). Капсула r=0.45/h=1.8 c офсетом 0.9 —
+# как у капсульного фолбэка HellEnemyBase (рэгдолл-кукла считает низ по ней же).
+# Камера/крестик/SpellCaster игроку — НЕ копируем.
+
+func build_enemy_scene(model_root: Node):
+	var mesh_instance = find_first_mesh_instance(model_root)
+	var mesh_path = skin_dir + skin_name + "_mesh.res"
+	var skin_path = skin_dir + skin_name + "_skin.res"
+
+	if mesh_instance and mesh_instance.mesh:
+		ResourceSaver.save(mesh_instance.mesh, mesh_path)
+		mesh_instance.mesh = load(mesh_path)
+		print("  MESH -> " + mesh_path)
+
+	if mesh_instance and mesh_instance.skin:
+		ResourceSaver.save(mesh_instance.skin, skin_path)
+		mesh_instance.skin = load(skin_path)
+		print("  SKIN -> " + skin_path)
+
+	var lib = load("res://Graphics/Animations/shared_animations.res")
+	if not lib:
+		print("  ERROR: shared_animations.res not found! Run build_animations.gd first.")
+		quit(1)
+
+	var fbx_ap = find_animation_player(model_root)
+	if fbx_ap and fbx_ap.get_parent():
+		fbx_ap.get_parent().remove_child(fbx_ap)
+		fbx_ap.queue_free()
+
+	var root = CharacterBody3D.new()
+	root.name = "EnemySkin"
+
+	var collision = CollisionShape3D.new()
+	collision.name = "CollisionShape3D"
+	var shape = CapsuleShape3D.new()
+	shape.radius = 0.45
+	shape.height = 1.8
+	collision.shape = shape
+	collision.position.y = 0.9
+	root.add_child(collision)
+
+	var wrapper = Node3D.new()
+	wrapper.name = "GraphicsWrapper"
+	root.add_child(wrapper)
+
+	model_root.name = "EnemyModel"
+	if model_root.get_parent():
+		model_root.get_parent().remove_child(model_root)
+	wrapper.add_child(model_root)
+
+	var ap = AnimationPlayer.new()
+	ap.name = "AnimationPlayer"
+	wrapper.add_child(ap)
+	ap.root_node = NodePath("../EnemyModel")
+	ap.add_animation_library("", lib)
+
+	var anim_comp = Node.new()
+	anim_comp.name = "EnemyAnimComponent"
+	anim_comp.set_script(load("res://Graphics/EnemyAnimComponent.gd"))
+	root.add_child(anim_comp)
+
+	set_owner_recursive(root, root)
+
+	var packed = PackedScene.new()
+	packed.pack(root)
+	var scene_path = "res://Scenes/enemy_%s.tscn" % skin_name.replace(" ", "_")
+	ResourceSaver.save(packed, scene_path)
+	print("Enemy scene saved: " + scene_path)
 
 
 static func find_skeleton_node(node: Node) -> Skeleton3D:

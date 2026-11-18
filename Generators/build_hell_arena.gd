@@ -4,6 +4,8 @@ extends SceneTree
 ## враги) генерирует рантайм-скрипт Logic/HellArena.gd — паттерн ProceduralArena.
 ## Запуск: --headless -s res://Generators/build_hell_arena.gd
 
+const ArenaSky = preload("res://Graphics/ArenaSky.gd")
+
 func _init():
 	var root = Node3D.new()
 	root.name = "HellArena"
@@ -19,7 +21,10 @@ func _init():
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.30, 0.06, 0.04)
 	env.fog_density = 0.008
+	env.fog_sky_affect = 0.15 # туман почти не красит небо — иначе плоская заливка,
+	                         # градиент/эмберы/тучи шейдера не видны (поймано пробой PNG)
 	env.ssao_enabled = true
+	ArenaSky.apply(env, "hell") # небо: багровый апокалипсис с эмберами (мастер-план 18.11.26)
 	env_node.environment = env
 	root.add_child(env_node)
 	env_node.owner = root

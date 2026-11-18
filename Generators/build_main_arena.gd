@@ -1,5 +1,7 @@
 extends SceneTree
 
+const ArenaSky = preload("res://Graphics/ArenaSky.gd")
+
 func _init():
 	var root = Node3D.new()
 	root.name = "MainArena"
@@ -22,6 +24,7 @@ func _init():
 	env.volumetric_fog_albedo = Color(0.72, 0.78, 0.92)
 	env.volumetric_fog_anisotropy = 0.35
 	env.volumetric_fog_length = 64.0
+	ArenaSky.apply(env, "main") # небо: один шейдер на 3 карты (мастер-план 18.11.26)
 	env_node.environment = env
 	root.add_child(env_node)
 	env_node.owner = root

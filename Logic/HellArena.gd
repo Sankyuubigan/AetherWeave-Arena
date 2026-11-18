@@ -14,6 +14,12 @@ const HellMeleeEnemy = preload("res://Logic/Enemies/HellMeleeEnemy.gd")
 const HellRangedEnemy = preload("res://Logic/Enemies/HellRangedEnemy.gd")
 const NPCTeleporter = preload("res://Logic/NPCTeleporter.gd")
 
+## Скины врагов (заказ юзера 18.11.26: одно поведение = один скин):
+## мили-брут — Demon T Wiezzorek, кастер фаерболов — Ganfaul M Aure.
+## Нет сцены скина (тесты/чистый headless) — фолбэк на красную капсулу.
+const MELEE_SKIN := "res://Scenes/enemy_Demon_T_Wiezzorek.tscn"
+const RANGED_SKIN := "res://Scenes/enemy_Ganfaul_M_Aure.tscn"
+
 var _noise: FastNoiseLite
 var _loading_layer: CanvasLayer
 var _loading_label: Label
@@ -37,6 +43,7 @@ func _generate_async() -> void:
 	await get_tree().process_frame
 	await _gen_step("Рельеф ада...", _add_terrain)
 	await _gen_step("Шпили и камни...", _add_rocks)
+	await _gen_step("Навигация мобов...", _add_navmesh)
 	await _gen_step("Лава и свет...", _add_lava)
 	await _gen_step("Существа и игрок...", _add_entities)
 
@@ -181,6 +188,27 @@ func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomN
 		cs.transform = t * Transform3D(Basis.IDENTITY, aabb_center)
 		body.add_child(cs)
 
+## Навмеш мобов: СИНХРОННЫЙ бейк из статических коллайдеров (чанки TerrainBuilder —
+## trimesh рельефа; камни/шпили — цилиндры). Мобы HellEnemyBase ходят путями
+## NavigationAgent3D: обходят препятствия вместо упора «лбом в стену».
+func _add_navmesh() -> void:
+	var region := NavigationRegion3D.new()
+	region.name = "NavRegion"
+	add_child(region)
+	var nm := NavigationMesh.new()
+	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS  # 4.8-beta: префикс geometry_*
+	nm.agent_radius = 0.6   # капсула моба r=0.45 + запас
+	nm.agent_height = 2.1  # кратен cell_height 0.3 — иначе recast-варнинг точности
+	nm.agent_max_climb = 0.6
+	nm.agent_max_slope = 46.0  # рельеф до 5 м амплитуды
+	nm.cell_size = 0.3
+	nm.cell_height = 0.3
+	region.navigation_mesh = nm
+	var data := NavigationMeshSourceGeometryData3D.new()
+	NavigationServer3D.parse_source_geometry_data(nm, data, self)
+	NavigationServer3D.bake_from_source_geometry_data(nm, data)
+	print("Runtime: navmesh baked: %d polygons" % nm.get_polygon_count())
+
 ## Лава-лужи: эмиссивные диски + оранжевые OmniLight — «хаос в аду».
 func _add_lava():
 	var rng := RandomNumberGenerator.new()
@@ -235,19 +263,33 @@ func _add_entities():
 	npc.position = Vector3(6, _height(6, 6) + 0.1, 6)
 	add_child(npc)
 
-	# 5 ближних кольцом r=16, 5 дальних r=26 (верб. юзера).
+	# 5 ближних кольцом r=16, 5 дальних r=26 (верб. юзера). Скин по поведению:
+	# мили — Demon, дальний — Ganfaul; без сцены скина — капсульный фолбэк.
+	var melee_skin: PackedScene = load(MELEE_SKIN) if ResourceLoader.exists(MELEE_SKIN) else null
+	var ranged_skin: PackedScene = load(RANGED_SKIN) if ResourceLoader.exists(RANGED_SKIN) else null
+	if melee_skin == null or ranged_skin == null:
+		print("Runtime: скины врагов не найдены — красные капсулы (фолбэк)")
 	for i in 5:
 		var ang := TAU * i / 5.0
 		var mx := cos(ang) * 16.0
 		var mz := sin(ang) * 16.0
-		var m = HellMeleeEnemy.new()
+		var m = _spawn_enemy(HellMeleeEnemy, melee_skin)
 		m.name = "Melee_%d" % i
 		m.position = Vector3(mx, _height(mx, mz) + 0.2, mz)
 		add_child(m)
 
 		var rx := cos(ang + PI / 5.0) * 26.0
 		var rz := sin(ang + PI / 5.0) * 26.0
-		var r = HellRangedEnemy.new()
+		var r = _spawn_enemy(HellRangedEnemy, ranged_skin)
 		r.name = "Ranged_%d" % i
 		r.position = Vector3(rx, _height(rx, rz) + 0.2, rz)
 		add_child(r)
+
+## Враг скина: сцена (CharacterBody3D + модель) получает поведенческий скрипт
+## ДО add_child — _ready отработает уже на скиннутом теле.
+func _spawn_enemy(behavior: GDScript, skin: PackedScene) -> CharacterBody3D:
+	if skin:
+		var e = skin.instantiate()
+		e.set_script(behavior)
+		return e
+	return behavior.new()

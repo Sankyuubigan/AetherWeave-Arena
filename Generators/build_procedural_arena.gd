@@ -1,6 +1,8 @@
 extends SceneTree
 
-# Теперь этот генератор создает только ПУСТУЮ сцену с прикрепленным скриптом, 
+const ArenaSky = preload("res://Graphics/ArenaSky.gd")
+
+# Теперь этот генератор создает только ПУСТУЮ сцену с прикрепленным скриптом,
 # который сгенерирует карту в момент запуска игры. Это решает проблему 1МБ файла.
 
 func _init():
@@ -23,6 +25,7 @@ func _init():
 	env.volumetric_fog_albedo = Color(0.78, 0.85, 1.0)
 	env.volumetric_fog_anisotropy = 0.3
 	env.volumetric_fog_length = 96.0
+	ArenaSky.apply(env, "forest") # небо: свежее утро с мглой (мастер-план 18.11.26)
 	env_node.environment = env
 	root.add_child(env_node)
 	env_node.owner = root

@@ -45,4 +45,3 @@ common/physics_interpolation=true
 [rendering]
 
 textures/decals/filter=5
-textures/streaming/enabled=false

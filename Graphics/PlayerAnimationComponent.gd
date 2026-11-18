@@ -269,6 +269,12 @@ func play_cast_anim(anim_name: String) -> void:
     cast_player.play(ub, 0.1)
     cast_player.capture(ub, 0.1)
 
+## Длина UB-варианта каст-клипа (окно IK-доводки в SpellCasterComponent).
+func cast_clip_length(anim_name: String) -> float:
+    if cast_player == null or not cast_player.has_animation(anim_name + "_UB"):
+        return 0.0
+    return cast_player.get_animation(anim_name + "_UB").length
+
 ## Старт канала: Enter (0.53с) → сигнал сам подхватит Loop. stop() — та же
 ## отмена предыдущего каста, что и в play_cast_anim.
 func play_channel() -> void:
