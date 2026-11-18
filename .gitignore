@@ -21,3 +21,4 @@ export_presets.cfg
 /tools/
 /game_live*.log
 /game_live*.err.log
+__pycache__/

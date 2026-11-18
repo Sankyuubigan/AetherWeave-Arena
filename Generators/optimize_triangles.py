@@ -10,7 +10,11 @@
 # - Бейки LP<-HP (selected-to-active): normal + AO + roughness + diffuse(color),
 #   2048 → даунскейл 1024. Нормал/ORM сохраняются ТОЛЬКО в PNG (lossy WebP на
 #   нормалях = рябь). Диффуз — WebP.
-# - cage_extrusion = 0.03 × радиус bbox (v1: жёсткие 0.01), max_ray_distance=0.
+# - cage_extrusion 0.05–0.08 (кламп 0.03×радиус), max_ray_distance 0.15–0.3
+#   (v1: 0.0 = без лимита — в мульти-сетах лучи ловили соседние камни).
+# - Пасс-спец 19.11.26: island_margin 0.003; bake margin=16 EXTEND; сэмплы
+#   normal/diffuse/roughness=4, AO=64; соседние HP скрываются на бейк
+#   (hide_render) — лучи не ловят соседние камни сета; orphans_purge после модели.
 # - shade_smooth по углу после декимации, ПЕРЕД бейками.
 # - ORM-карта: R=AO, G=Roughness, B=Metal=0 (металл в бейк = чёрнота).
 # - REMESH(voxel) — только --remesh РЕМОНТ (дыры/нон-манifold), не для оптимизации.
@@ -105,12 +109,14 @@ def remake_uvs(obj):
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.smart_project(angle_limit=math.radians(80), island_margin=0.004)
+    # Спец (19.11.26): island_margin=0.003 — 0.02 съедал атлас; 0.004/0.005 близко,
+    # берём точное значение спеца.
+    bpy.ops.uv.smart_project(angle_limit=math.radians(80), island_margin=0.003)
     bpy.ops.mesh.select_all(action='SELECT')
     try:
-        bpy.ops.uv.pack_islands(angle_method='ANGLE', angle_limit=math.radians(80), margin=0.005)
+        bpy.ops.uv.pack_islands(angle_method='ANGLE', angle_limit=math.radians(80), margin=0.003)
     except TypeError:
-        bpy.ops.uv.pack_islands(margin=0.005)
+        bpy.ops.uv.pack_islands(margin=0.003)
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
@@ -210,7 +216,10 @@ def new_bake_image(name, non_color=True, init_rgb=(0.0, 0.0, 0.0)):
     return img
 
 
-def bake_map(lp_obj, hp_obj, bake_type, img, color_only=False):
+def bake_map(lp_obj, hp_obj, bake_type, img, color_only=False, samples=4):
+    # Спец (19.11.26): normal/diffuse/roughness детерминированы — 1–4 сэмплов
+    # достаточно (дефолт 64 зря ×16 время); шумной только AO — ей 64–128.
+    bpy.context.scene.cycles.samples = samples
     tex_node = lp_obj.data.materials[0].node_tree.nodes.new('ShaderNodeTexImage')
     tex_node.image = img
     tex_node.select = True
@@ -224,13 +233,22 @@ def bake_map(lp_obj, hp_obj, bake_type, img, color_only=False):
     b = bpy.context.scene.render.bake
     b.use_selected_to_active = True
     b.cage_extrusion = lp_obj["cage"]
-    b.max_ray_distance = 0.0
+    # Спец (19.11.26): max_ray_distance 0.15–0.3 (v1: 0.0 = без лимита — лучи
+    # улетали через весь сет и ловили СМЕЖНЫЕ камни). Не ниже cage × 2 — луч
+    # короче вылета клетки срезает бейк у швов.
+    b.max_ray_distance = lp_obj.get("max_ray", 0.15)
     # use_clear=False ОБЯЗАТЕЛЕН: дефолт True стирает всю картинку (в чёрный)
     # перед бейком — нейтральная заливка new_bake_image не доживает до рендера
     # (3 ребейка подряд «фикс не сработал» именно поэтому). Незапечённые тексели
     # (вырожденные UV-островки) остаются с цветом фона вместо чёрных дыр.
     b.use_clear = False
-    b.margin = 8
+    # Спец: margin=16 + EXTEND — краевые тексели растягиваются наружу,
+    # мипмапы не тянут чёрную кайму с фона атласа.
+    b.margin = 16
+    try:
+        b.margin_type = 'EXTEND'
+    except Exception:
+        pass
     if color_only:
         b.use_pass_direct = False
         b.use_pass_indirect = False
@@ -403,8 +421,11 @@ def process_model(filepath, output_dir, skip_decimate, out_name):
         print("ERROR: No mesh objects found!")
         return False
     total_before = tri_count(highpoly_objects)
-    cage = 0.03 * bbox_radius(highpoly_objects)
-    print(f"HP tris: {total_before:,} | bbox radius: {bbox_radius(highpoly_objects):.3f} м | cage: {cage:.3f}")
+    # Спец (19.11.26): cage_extrusion 0.05–0.08 для камней 1–3 м (v1: 0.03×radius
+    # = 0.015–0.045 — клетка тоньше рельефа скана, лучи срезали рельеф).
+    cage = min(0.08, max(0.05, 0.03 * bbox_radius(highpoly_objects)))
+    max_ray = min(0.3, max(0.15, cage * 3.0))
+    print(f"HP tris: {total_before:,} | bbox radius: {bbox_radius(highpoly_objects):.3f} м | cage: {cage:.3f} | max_ray: {max_ray:.3f}")
 
     hp_coll = bpy.data.collections.new("HighPoly")
     bpy.context.scene.collection.children.link(hp_coll)
@@ -481,6 +502,7 @@ def process_model(filepath, output_dir, skip_decimate, out_name):
         recalc_normals_outside(obj)
         shade_smooth_by_angle(obj)
         obj["cage"] = cage
+        obj["max_ray"] = max_ray
     if not SKIP_BAKE:
         hp_zero_metallic()
 
@@ -538,10 +560,19 @@ def process_model(filepath, output_dir, skip_decimate, out_name):
             img_r = new_bake_image(f"{base_name}{suf}_baked_rough", init_rgb=(1.0, 1.0, 1.0))
             img_d = new_bake_image(f"{base_name}{suf}_baked_diffuse", non_color=False, init_rgb=(0.5, 0.5, 0.5))
             t_mesh = time.perf_counter()
+            # Спец (19.11.26): соседние HP СКРЫВАТЬ на время бейка — лучи из LP
+            # камня A долетали до HP камня B (мульти-сет), атлас заливался
+            # соседом (hide_render альтернатива раздвиганию объектов на +10м X).
+            for other in hp_list:
+                if other is not hp_obj:
+                    other.hide_render = True
             ok_n = bake_map(lp_obj, hp_obj, 'NORMAL', img_n)
-            bake_map(lp_obj, hp_obj, 'AO', img_a)
+            bake_map(lp_obj, hp_obj, 'AO', img_a, samples=64)
             bake_map(lp_obj, hp_obj, 'ROUGHNESS', img_r)
-            bake_map(lp_obj, hp_obj, 'DIFFUSE', img_d, color_only=True)
+            bake_map(lp_obj, hp_obj, 'DIFFUSE', img_d, color_only=True, samples=4)
+            for other in hp_list:
+                if other is not hp_obj:
+                    other.hide_render = False
             print(f"  БЕЙК '{lp_obj.name}': 4 карты за {time.perf_counter() - t_mesh:.1f} с "
                   f"(сэмплы {bpy.context.scene.cycles.samples}, устройство {bpy.context.scene.cycles.device})")
             # heal ДО scale_down: дыры лечим в разрешении бейка, даунскейл сгладит
@@ -574,6 +605,12 @@ def process_model(filepath, output_dir, skip_decimate, out_name):
     out_size = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(output_dir) for f in fs
                    if base_name in f)
     print(f"  Size (v2 files): {out_size / (1024 * 1024):.2f} MB")
+    # Спец (19.11.26): RAM-гигиена между моделями (пайплайн гоняет сканы по
+    # очереди) — рекурсивная чистка data-blockов без юзеров.
+    try:
+        bpy.data.orphans_purge(do_recursive=True)
+    except Exception:
+        pass
     return True
 
 
