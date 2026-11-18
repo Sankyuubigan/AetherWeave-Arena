@@ -7,15 +7,21 @@ background_mode = 1
 background_color = Color(0.4, 0.6, 1, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.3, 0.3, 0.4, 1)
+tonemap_mode = 2
 ssao_enabled = true
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.012
+volumetric_fog_albedo = Color(0.78, 0.85, 1, 1)
+volumetric_fog_anisotropy = 0.3
+volumetric_fog_length = 96.0
 
-[node name="ProceduralArena" type="Node3D" unique_id=1645639781]
+[node name="ProceduralArena" type="Node3D" unique_id=2146114932]
 script = ExtResource("1_a2gwl")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=658085151]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=309732487]
 environment = SubResource("Environment_ky6sb")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1832345968]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1792292263]
 transform = Transform3D(0.70710677, -0.4055798, 0.579228, 0, 0.81915206, 0.57357645, -0.70710677, -0.4055798, 0.579228, 0, 0, 0)
 light_energy = 1.5
 shadow_enabled = true

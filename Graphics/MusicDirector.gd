@@ -18,12 +18,25 @@ const FADE_OUT := 2.0
 const BG_DB := 0.0
 const BG_DUCK_DB := -12.0
 const COMBAT_HOLD := 12.0
+## Синхронизация боевого лупа с тактовой сеткой (фишка из демо audio/bpm_sync):
+## gen_music.gd пишет combat_loop на 120 BPM (16 с = 8 тактов × 2 с), и бас-пульс
+## фона map1 стоит на тех же 2 с. Старт боевого лупа на границе такта фона →
+## удары совпадают всегда (лупы 32 с и 16 с сходятся на сетке 2 с).
+const COMBAT_BPM := 120.0
+const BAR_SEC := 240.0 / COMBAT_BPM  # такт = 2.0 с
+const FRAME_HZ := 60.0
+const POS_SMOOTH_FRAMES := 2
 
 var bg: AudioStreamPlayer
 var combat: AudioStreamPlayer
 var _map: String = ""
 var _combat_left: float = 0.0
 var _combat_tween: Tween
+var _combat_pending: bool = false    # бой активен, луп ждёт границы такта
+var _stall_time: float = 0.0         # позиция фона не растёт (headless) — fallback
+var _pos_last: float = -1.0
+var _combat_stream: AudioStream
+var last_start_synced: bool = false  # для теста: старт синхронный (не fallback)
 
 func _ready():
     _ensure_bus()
@@ -34,6 +47,9 @@ func _ready():
         audio.apply_music_volume()
     bg = _make_player()
     combat = _make_player()
+    # Стрим боевого лупа грузим один раз на старте — в бою без хиккапа.
+    if ResourceLoader.exists(COMBAT_TRACK):
+        _combat_stream = load(COMBAT_TRACK)
     process_mode = Node.PROCESS_MODE_ALWAYS
 
 func _ensure_bus() -> void:
@@ -57,22 +73,55 @@ func _process(delta):
         _map = sname
         _event("music_switch:" + sname)
         _switch_bg(load(TRACKS[sname]))
+    if _combat_pending:
+        _try_start_combat(delta)
     if _combat_left > 0.0:
         _combat_left -= delta
         if _combat_left <= 0.0:
+            _combat_pending = false
             _combat_release()
 
-## Событие «идёт бой»: боевой луп поверх фона на COMBAT_HOLD секунд
+## Событие «идёт бой»: боевой луп поверх фона на COMBAT_HOLD секунд.
+## Старт не мгновенный: pending до ближайшей границы такта фона (BAR_SEC),
+## чтобы удары боевого лупа легли в пульс фона. Нет фона — старт сразу.
 func note_combat(seconds: float = COMBAT_HOLD) -> void:
     _event("combat_music")
     _combat_left = seconds
-    if combat.playing:
+    if combat.playing or _combat_pending:
         return
-    var s = load(COMBAT_TRACK)
-    if s == null:
+    if _combat_stream == null:
         print("MusicDirector: нет ", COMBAT_TRACK)
         return
-    combat.stream = s
+    _combat_pending = true
+    _stall_time = 0.0
+    _pos_last = -1.0
+
+func _try_start_combat(delta: float) -> void:
+    if not bg.playing:
+        _start_combat_now(false)
+        return
+    var pos := _stable_pos(bg)
+    # Страховка: позиция фона не растёт (headless-драйвер без времени) —
+    # синхронизацию не ждём, стартуем сразу.
+    if absf(pos - _pos_last) < 0.00001:
+        _stall_time += delta
+        if _stall_time >= 0.5:
+            _start_combat_now(false)
+            return
+    else:
+        _stall_time = 0.0
+    _pos_last = pos
+    var to_bar := fmod(BAR_SEC - fmod(pos, BAR_SEC), BAR_SEC)
+    # Стартуем заранее ровно на столько, чтобы звук вышел из колонок у границы:
+    # до следующего микса + латентность вывода.
+    if to_bar <= AudioServer.get_time_to_next_mix() + AudioServer.get_output_latency():
+        _start_combat_now(true)
+
+func _start_combat_now(synced: bool) -> void:
+    _combat_pending = false
+    last_start_synced = synced
+    _event("combat_music_synced" if synced else "combat_music_fallback")
+    combat.stream = _combat_stream
     combat.volume_db = -40.0
     combat.play()
     if _combat_tween:
@@ -80,6 +129,12 @@ func note_combat(seconds: float = COMBAT_HOLD) -> void:
     _combat_tween = create_tween()
     _combat_tween.tween_property(combat, "volume_db", BG_DB, FADE_IN)
     _fade(bg, BG_DUCK_DB, FADE_IN)
+
+## Стабильная позиция дорожки (приём из демо audio/bpm_sync):
+## playback_position + время с последнего микса - латентность вывода.
+func _stable_pos(p: AudioStreamPlayer) -> float:
+    return p.get_playback_position() + AudioServer.get_time_since_last_mix() \
+            - AudioServer.get_output_latency() + (1.0 / FRAME_HZ) * POS_SMOOTH_FRAMES
 
 func _combat_release() -> void:
     if _combat_tween:

@@ -16,6 +16,13 @@ func _init():
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.3, 0.3, 0.4)
 	env.ssao_enabled = true # 4.8: multi-bounce AO (включается здесь,_multibounce встроен в 4.8)
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# Лёгкая дымка глубины (демо 3d/volumetric_fog): поле читается объёмнее
+	env.volumetric_fog_enabled = true
+	env.volumetric_fog_density = 0.012
+	env.volumetric_fog_albedo = Color(0.78, 0.85, 1.0)
+	env.volumetric_fog_anisotropy = 0.3
+	env.volumetric_fog_length = 96.0
 	env_node.environment = env
 	root.add_child(env_node)
 	env_node.owner = root

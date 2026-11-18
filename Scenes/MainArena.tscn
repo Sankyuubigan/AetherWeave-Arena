@@ -1,73 +1,80 @@
 [gd_scene format=3]
 
-[ext_resource type="PackedScene" path="res://Scenes/arena.tscn" id="1_tayer"]
-[ext_resource type="PackedScene" path="res://Scenes/player.tscn" id="2_o1lbq"]
-[ext_resource type="Script" path="res://Logic/PlayerController.gd" id="3_jmama"]
-[ext_resource type="PackedScene" path="res://Scenes/dummy.tscn" id="4_inhny"]
-[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="5_upbp4"]
-[ext_resource type="Script" path="res://Logic/MovingDummy.gd" id="6_hwi6t"]
-[ext_resource type="Script" path="res://Logic/FriendlyDummy.gd" id="7_je2ms"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/boulder_01/boulder_01.tscn" id="8_fosf5"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/rock_moss_set_01/rock_moss_set_01.tscn" id="9_geo7j"]
-[ext_resource type="Script" path="res://Logic/NPCTeleporter.gd" id="10_ikkee"]
+[ext_resource type="PackedScene" path="res://Scenes/arena.tscn" id="1_o1lbq"]
+[ext_resource type="PackedScene" path="res://Scenes/player.tscn" id="2_jmama"]
+[ext_resource type="Script" path="res://Logic/PlayerController.gd" id="3_inhny"]
+[ext_resource type="PackedScene" path="res://Scenes/dummy.tscn" id="4_upbp4"]
+[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="5_hwi6t"]
+[ext_resource type="Script" path="res://Logic/MovingDummy.gd" id="6_je2ms"]
+[ext_resource type="Script" path="res://Logic/FriendlyDummy.gd" id="7_fosf5"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/boulder_01/boulder_01.tscn" id="8_geo7j"]
+[ext_resource type="Script" path="res://Graphics/PropHLOD.gd" id="9_ikkee"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/rock_moss_set_01/rock_moss_set_01.tscn" id="10_2qnjy"]
+[ext_resource type="Script" path="res://Logic/NPCTeleporter.gd" id="11_0xrw4"]
 
-[sub_resource type="Environment" id="Environment_2qnjy"]
+[sub_resource type="Environment" id="Environment_31h3b"]
 background_mode = 1
 background_color = Color(0.28, 0.42, 0.75, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.17, 0.17, 0.24, 1)
 tonemap_mode = 2
 ssao_enabled = true
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.02
+volumetric_fog_albedo = Color(0.72, 0.78, 0.92, 1)
+volumetric_fog_anisotropy = 0.35
 
-[node name="MainArena" type="Node3D" unique_id=876105941]
+[node name="MainArena" type="Node3D" unique_id=1794906798]
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1427188822]
-environment = SubResource("Environment_2qnjy")
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=75708109]
+environment = SubResource("Environment_31h3b")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=896897240]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1698240086]
 transform = Transform3D(0.70710677, -0.4055798, 0.579228, 0, 0.81915206, 0.57357645, -0.70710677, -0.4055798, 0.579228, 0, 0, 0)
 light_color = Color(1, 0.95, 0.88, 1)
 light_energy = 1.1
 shadow_enabled = true
 
-[node name="Arena" type="StaticBody3D" parent="." unique_id=1504988106 instance=ExtResource("1_tayer")]
+[node name="Arena" type="StaticBody3D" parent="." unique_id=1504988106 instance=ExtResource("1_o1lbq")]
 transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0)
 
-[node name="Player" type="CharacterBody3D" parent="." unique_id=1648716075 instance=ExtResource("2_o1lbq")]
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1648716075 instance=ExtResource("2_jmama")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
-script = ExtResource("3_jmama")
+script = ExtResource("3_inhny")
 
-[node name="Dummy" type="StaticBody3D" parent="." unique_id=1967745289 instance=ExtResource("4_inhny")]
+[node name="Dummy" type="StaticBody3D" parent="." unique_id=1967745289 instance=ExtResource("4_upbp4")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -5)
-script = ExtResource("5_upbp4")
+script = ExtResource("5_hwi6t")
 
-[node name="DummyLine" type="StaticBody3D" parent="." unique_id=1543432064 instance=ExtResource("4_inhny")]
+[node name="DummyLine" type="StaticBody3D" parent="." unique_id=700695449 instance=ExtResource("4_upbp4")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 1, -15)
-script = ExtResource("6_hwi6t")
+script = ExtResource("6_je2ms")
 
-[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=1202362833 instance=ExtResource("4_inhny")]
+[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=1006654576 instance=ExtResource("4_upbp4")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, -10)
-script = ExtResource("6_hwi6t")
+script = ExtResource("6_je2ms")
 move_type = "complex_polygon"
 move_speed = 16.0
 
-[node name="FriendlyDummy" type="StaticBody3D" parent="." unique_id=327119335 instance=ExtResource("4_inhny")]
+[node name="FriendlyDummy" type="StaticBody3D" parent="." unique_id=1377078392 instance=ExtResource("4_upbp4")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 1, 10)
-script = ExtResource("7_je2ms")
+script = ExtResource("7_fosf5")
 move_type = "triangle"
 move_speed = 12.0
 
-[node name="FriendlyDummyStill" type="StaticBody3D" parent="." unique_id=272805637 instance=ExtResource("4_inhny")]
+[node name="FriendlyDummyStill" type="StaticBody3D" parent="." unique_id=1706025835 instance=ExtResource("4_upbp4")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11, 1, 10)
-script = ExtResource("7_je2ms")
+script = ExtResource("7_fosf5")
 walks = false
 
-[node name="Boulder 01" type="StaticBody3D" parent="." unique_id=367569854 instance=ExtResource("8_fosf5")]
+[node name="Boulder 01" type="StaticBody3D" parent="." unique_id=367569854 instance=ExtResource("8_geo7j")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -3)
+script = ExtResource("9_ikkee")
 
-[node name="Rock Moss Set 01" type="StaticBody3D" parent="." unique_id=998932147 instance=ExtResource("9_geo7j")]
+[node name="Rock Moss Set 01" type="StaticBody3D" parent="." unique_id=998932147 instance=ExtResource("10_2qnjy")]
 transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, -5, 0, -3)
+script = ExtResource("9_ikkee")
 
-[node name="NPCTeleporter" type="StaticBody3D" parent="." unique_id=243341966]
+[node name="NPCTeleporter" type="StaticBody3D" parent="." unique_id=545054720]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 38, 0, 38)
-script = ExtResource("10_ikkee")
+script = ExtResource("11_0xrw4")

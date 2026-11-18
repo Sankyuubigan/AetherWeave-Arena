@@ -244,6 +244,7 @@ func build_prop_scene(model_root: Node):
 		model_root.get_parent().remove_child(model_root)
 	root.add_child(model_root)
 
+	_apply_visibility_ranges(model_root)
 	set_owner_recursive(root, root)
 
 	var packed = PackedScene.new()
@@ -273,3 +274,17 @@ func set_owner_recursive(node: Node, owner_node: Node):
 	node.owner = owner_node
 	for child in node.get_children():
 		set_owner_recursive(child, owner_node)
+
+
+## HLOD-фейк из демо 3d/visibility_ranges: проп плавно гаснет с дистанции.
+## Диапазон от диагонали AABB меша: мелкие (фон) короче, хиро длиннее.
+func _apply_visibility_ranges(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mi := node as MeshInstance3D
+		if mi.mesh:
+			var diag := mi.get_aabb().size.length()
+			mi.visibility_range_end = clampf(diag * 50.0, 120.0, 350.0)
+			mi.visibility_range_end_margin = mi.visibility_range_end * 0.08
+			mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	for c in node.get_children():
+		_apply_visibility_ranges(c)

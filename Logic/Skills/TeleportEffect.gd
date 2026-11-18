@@ -31,6 +31,10 @@ func apply(caster: Node, context: Dictionary) -> void:
         caster.global_position = target_pos
         if "velocity" in caster:
             caster.set("velocity", Vector3.ZERO)
+        # Физ-интерполяция включена проектно: вне-физический телепорт без
+        # сброса дал бы рывок-дотягивание от старой позиции.
+        if caster is Node3D:
+            caster.reset_physics_interpolation()
 
     if vfx_scene:
         var tree = caster.get_tree()
@@ -96,6 +100,7 @@ func _sweep(player: Node3D, target: Vector3) -> void:
     if not is_instance_valid(player):
         return
     player.global_position = target
+    player.reset_physics_interpolation()
     player.collision_layer = layer_keep
     player.collision_mask = mask_keep
     if "velocity" in player:

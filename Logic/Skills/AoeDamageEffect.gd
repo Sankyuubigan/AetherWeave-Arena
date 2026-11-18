@@ -39,7 +39,12 @@ func apply(caster: Node, context: Dictionary) -> void:
     for res in results:
         var collider = res.collider
         if collider.has_method("take_damage"):
-            collider.take_damage(damage)
+            # Отброс рэгдолла: от центра взрыва к жертве.
+            var from_blast := Vector3.ZERO
+            var c3d := collider as Node3D
+            if c3d:
+                from_blast = c3d.global_position - target_pos
+            collider.take_damage(damage, from_blast)
 
 ## Кольцо ударной волны: ищем поверхность под точкой (прицел мог быть на
 ## стене — тогда кольцо ляжет на неё), диаметр = 2 * radius AoE.

@@ -46,7 +46,7 @@ func _ready():
     floating_sprite.position.y = 2.5
     add_child(floating_sprite)
 
-func take_damage(amount: int):
+func take_damage(amount: int, impulse_dir: Vector3 = Vector3.ZERO):
     if is_dead:
         return
 
@@ -56,11 +56,16 @@ func take_damage(amount: int):
         md.note_combat()
 
     current_health -= amount
-    
+
+    # Цифры урона: Graphics-автолоад (в -s-смоках его нет — молча пропускаем)
+    var dn = get_node_or_null("/root/DamageNumbers")
+    if dn:
+        dn.spawn_at(global_position + Vector3(0, 2.2, 0), amount, false)
+
     if current_health <= 0:
         current_health = 0
         hp_bar.value = current_health
-        die()
+        die(impulse_dir, amount)
     else:
         hp_bar.value = current_health
         
@@ -71,12 +76,24 @@ func heal(amount: int):
     current_health += amount
     if current_health > max_health:
         current_health = max_health
-        
+
     hp_bar.value = current_health
+
+    # Цифры лечения: зелёные, с плюсом (Graphics-автолоад)
+    var dn = get_node_or_null("/root/DamageNumbers")
+    if dn:
+        dn.spawn_at(global_position + Vector3(0, 2.2, 0), amount, true)
+
     print("Получено лечение! ХП: ", current_health)
 
-func die():
+func die(impulse_dir: Vector3 = Vector3.ZERO, amount: int = max_health):
     is_dead = true
+
+    # Рэгдолл-смерть (PhysicalBones3D, заказ юзера 18.11.26): компонент вешается
+    # генератором сцены (build_dummy.gd). Отброс ∝ смертельному урону.
+    var rag = get_node_or_null("Ragdoll")
+    if rag:
+        rag.activate(amount, impulse_dir)
     
     var mesh = get_node_or_null("MeshInstance3D")
     if mesh:

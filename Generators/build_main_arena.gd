@@ -15,6 +15,13 @@ func _init():
 	env.ambient_light_color = Color(0.17, 0.17, 0.24)
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.ssao_enabled = true # 4.8: multi-bounce AO
+	# Объёмный туман (Forward+; фишка из демо 3d/volumetric_fog): лёгкая дымка
+	# глубины — эмиссия магических сфер на её фоне читается контрастнее.
+	env.volumetric_fog_enabled = true
+	env.volumetric_fog_density = 0.02
+	env.volumetric_fog_albedo = Color(0.72, 0.78, 0.92)
+	env.volumetric_fog_anisotropy = 0.35
+	env.volumetric_fog_length = 64.0
 	env_node.environment = env
 	root.add_child(env_node)
 	env_node.owner = root
@@ -94,6 +101,10 @@ func _init():
 		var inst = load(p.path).instantiate()
 		inst.position = p.pos
 		inst.scale = p.scale
+		# HLOD-фейк (демо 3d/visibility_ranges): апликатор на инстанс — pack()
+		# не сериализует настройки вложенных узлов префаба, а префабы камней
+		# одобрены юзером (не перегенерируем). Диапазоны ставит _ready скрипта.
+		inst.set_script(load("res://Graphics/PropHLOD.gd"))
 		root.add_child(inst)
 		inst.owner = root
 		print(p_name + " placed at " + str(p.pos))

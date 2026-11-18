@@ -48,4 +48,5 @@ func _physics_process(delta):
 func respawn():
     super.respawn()
     global_position = start_pos
+    reset_physics_interpolation()
     current_wp_index = 0

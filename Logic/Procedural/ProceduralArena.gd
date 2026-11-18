@@ -207,6 +207,12 @@ func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomN
 		mmi.multimesh = mm
 		if not cast_shadows:
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# HLOD-фейд (демо 3d/visibility_ranges): чанк гаснет с дистанции,
+		# дальние группы не рисуются. Деревья видимы дальше камней.
+		var far := 200.0 if group_name == "Rocks" else 240.0
+		mmi.visibility_range_end = far
+		mmi.visibility_range_end_margin = far * 0.15
+		mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 		group_root.add_child(mmi)
 
 	print("[Scatter] %s: инстансов %d, чанков %d" % [group_name, instance_transforms.size(), chunks.size()])

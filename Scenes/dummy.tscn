@@ -1,21 +1,25 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="1_x66xh"]
+[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="1_5d6mj"]
+[ext_resource type="Script" path="res://Graphics/RagdollComponent.gd" id="2_s0uyp"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5d6mj"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3clv1"]
 albedo_color = Color(1, 0, 0, 1)
 
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_s0uyp"]
-material = SubResource("StandardMaterial3D_5d6mj")
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_2tnuu"]
+material = SubResource("StandardMaterial3D_3clv1")
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_3clv1"]
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_5uy75"]
 
-[node name="Dummy" type="StaticBody3D" unique_id=1967745289]
-script = ExtResource("1_x66xh")
+[node name="Dummy" type="StaticBody3D" unique_id=413260237]
+script = ExtResource("1_5d6mj")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1453795091]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=192330741]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
-mesh = SubResource("CapsuleMesh_s0uyp")
+mesh = SubResource("CapsuleMesh_2tnuu")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1680698290]
-shape = SubResource("CapsuleShape3D_3clv1")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=21468005]
+shape = SubResource("CapsuleShape3D_5uy75")
+
+[node name="Ragdoll" type="Node" parent="." unique_id=1008860806]
+script = ExtResource("2_s0uyp")

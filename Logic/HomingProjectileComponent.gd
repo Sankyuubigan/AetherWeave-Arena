@@ -99,7 +99,7 @@ func _on_body_entered(body: Node):
         return
 
     if body.has_method("take_damage"):
-        body.take_damage(damage)
+        body.take_damage(damage, current_velocity)
 
     # Электрический прожог (аним. декаль 4.8): мигающие дуги -> угасание.
     # Спавн ДО release — декаль живёт в current_scene независимо от пула.

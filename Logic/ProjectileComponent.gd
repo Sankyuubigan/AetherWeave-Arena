@@ -23,7 +23,7 @@ func _on_body_entered(body: Node):
     # ИСПРАВЛЕНИЕ: Так как HealthComponent прикреплен прямо на корень Манекена,
     # body и является носителем функции take_damage
     if body.has_method("take_damage"):
-        body.take_damage(25)
+        body.take_damage(25, direction)
 
     # Пятно взрыва на поверхности (аним. декаль 4.8): спавн ДО release —
     # узел ещё в дереве, декаль живёт в current_scene независимо от пула.

@@ -46,6 +46,9 @@ func apply(caster: Node, context: Dictionary) -> void:
     if spawn_from_hand and context.has("cast_origin"):
         origin = context["cast_origin"]
     proj.global_position = origin
+    # Телепорт снаряда из пула: сброс физ-интерполяции (иначе полёт «дотягивает»
+    # от старой позиции прошлой жизни узла).
+    proj.reset_physics_interpolation()
 
     var target_pos = context.get("target_pos", proj.global_position + Vector3.FORWARD)
     var direction = proj.global_position.direction_to(target_pos)

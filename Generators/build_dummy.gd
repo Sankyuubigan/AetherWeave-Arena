@@ -29,6 +29,14 @@ func _init():
     var health_script = load("res://Logic/HealthComponent.gd")
     root.set_script(health_script)
 
+    # Рэгдолл-смерть (PhysicalBones3D): при смерти компонент спавнит куклу-труп,
+    # отброс ∝ смертельному урону (заказ юзера 18.11.26).
+    var ragdoll = Node.new()
+    ragdoll.name = "Ragdoll"
+    ragdoll.set_script(load("res://Graphics/RagdollComponent.gd"))
+    root.add_child(ragdoll)
+    ragdoll.owner = root
+
     var packed = PackedScene.new()
     packed.pack(root)
     ResourceSaver.save(packed, "res://Scenes/dummy.tscn")

@@ -46,7 +46,7 @@ func apply(caster: Node, context: Dictionary) -> void:
     var target_node: Node = context.get("target_node")
 
     if target_node and target_node.has_method("take_damage"):
-        target_node.take_damage(damage)
+        target_node.take_damage(damage, end - start)
 
     _spawn_beam(parent, start, end)
     _spawn_impact(parent, end, normal)

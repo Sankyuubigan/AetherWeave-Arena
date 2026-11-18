@@ -24,6 +24,8 @@ var body_color := Color(0.55, 0.08, 0.06)
 
 var _cd_left := 0.0
 var _player: Node = null
+var _last_hit_amount := 0
+var _last_hit_dir := Vector3.ZERO
 
 var mesh_node: MeshInstance3D
 var hp_bar: ProgressBar
@@ -35,6 +37,12 @@ func _ready():
 	spawn_pos = global_position
 	_build_body()
 	_build_hp_bar()
+	# Рэгдолл-смерть (PhysicalBones3D, заказ юзера 18.11.26): кукла в цвет сущности.
+	var rag := Node.new()
+	rag.name = "Ragdoll"
+	rag.set_script(load("res://Graphics/RagdollComponent.gd"))
+	rag.set("tint", body_color)
+	add_child(rag)
 
 func _build_body() -> void:
 	mesh_node = MeshInstance3D.new()
@@ -123,9 +131,11 @@ func _attack() -> void:
 func _damage_amount() -> int:
 	return ceili(_player.MAX_HP * damage_pct / 100.0)
 
-func take_damage(amount: int) -> void:
+func take_damage(amount: int, impulse_dir: Vector3 = Vector3.ZERO) -> void:
 	if is_dead:
 		return
+	_last_hit_amount = amount
+	_last_hit_dir = impulse_dir
 	# Боевой музон: урон по врагу — сигнал MusicDirector (как у манекенов).
 	var md = get_node_or_null("/root/MusicDirector")
 	if md:
@@ -137,6 +147,10 @@ func take_damage(amount: int) -> void:
 
 func die() -> void:
 	is_dead = true
+	# Кукла-труп в месте смерти, отброс ∝ смертельному урону (заказ 18.11.26).
+	var rag := get_node_or_null("Ragdoll")
+	if rag:
+		rag.activate(_last_hit_amount, _last_hit_dir)
 	mesh_node.hide()
 	floating_sprite.hide()
 	var col := get_node_or_null("CollisionShape3D")

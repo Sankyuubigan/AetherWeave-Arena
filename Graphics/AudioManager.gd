@@ -34,10 +34,24 @@ func _apply_all_buses() -> void:
 
 func _ready():
     _ensure_sfx_bus()
+    _ensure_master_limiter()
     _load_settings()
     _apply_bus("Master", master_volume)
     _apply_bus("SFX", sfx_volume)
     _apply_bus("Music", music_volume)
+
+## Предохранитель от клипа на выходе (фишка из демо audio/audio_effects):
+## ассеты нормированы K-LUFS по отдельности, но Music + боевой луп + SFX на
+## пике вместе могут превысить 0 dBFS. Лимитер прижимает только пики,
+## при обычных уровнях звук не меняет.
+func _ensure_master_limiter() -> void:
+    for i in AudioServer.get_bus_effect_count(0):
+        if AudioServer.get_bus_effect(0, i) is AudioEffectLimiter:
+            return
+    var lim := AudioEffectLimiter.new()
+    lim.threshold_db = -3.0
+    lim.ceiling_db = -0.8
+    AudioServer.add_bus_effect(0, lim)
 
 func play_sfx(stream: AudioStream, volume_db: float = 0.0):
     if not stream:
