@@ -45,6 +45,10 @@ const TASKS := {
 	# Двуручный толчок для лазера (beam). ОТДЕЛЬНОЕ имя, чтобы не задевать
 	# сердечки: они играют "Cast_Push" (SOMA) — юзер подберёт анимацию сам.
 	"Beam_Push": [UAL1, "Armature|Push_Loop", false],
+	# Мечевые свинги для Энергетического клинка (Q19): UAL2 Sword_Regular_A/B —
+	# короткие праворукие взмахи (0.43/0.53 с); Blade_Swing_A — базовый удар.
+	"Blade_Swing_A": [UAL2, "Armature|Sword_Regular_A", false],
+	"Blade_Swing_B": [UAL2, "Armature|Sword_Regular_B", false],
 }
 const LOOPED := ["Cast_Loop"]
 

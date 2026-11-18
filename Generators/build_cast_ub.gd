@@ -20,6 +20,7 @@ const TAIL := 0.2
 const TAIL_CLIPS := [
 	"Throw", "Cast_Shoot", "Heart_Cast", "Heart_Cast_L",
 	"Pistol_Shoot", "Beam_Push", "Cast_Exit",
+	"Blade_Swing_A", "Blade_Swing_B",
 ]
 const LEG_BONES := [
 	"mixamorig_LeftUpLeg", "mixamorig_RightUpLeg",

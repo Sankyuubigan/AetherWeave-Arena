@@ -212,5 +212,21 @@ static func get_skills() -> Dictionary:
     beam_sound.volume_db = 0.0  # громкость выровнена K-нормализацией (LUFS)
     beam.effects.append(beam_sound)
     _skills["beam"] = beam
-    
+
+    # Энергетический клинок (Q19, план спец-батча, одобрен юзером 19.11.26:
+    # «Материализация / Энергетический клинок, как в Elden Ring / Devil May Cry»).
+    # Одно действие: нет клинка — материализация, есть — взмах (урон).
+    var bl = preload("res://Logic/Skills/Skill.gd").new()
+    bl.id = "energy_blade"
+    bl.skill_name = "Энергетический клинок"
+    bl.description = "Материализация клинка в руке (8 с).
+Повторный каст — взмах, 35 урона."
+    bl.icon = "🗡"
+    bl.price = 2
+    bl.max_range = 200.0
+    # Анимации играет SpawnBladeEffect (режимы требуют разных жестов).
+    bl.cast_anim = ""
+    bl.effects.append(preload("res://Logic/Skills/SpawnBladeEffect.gd").new())
+    _skills["energy_blade"] = bl
+
     return _skills
