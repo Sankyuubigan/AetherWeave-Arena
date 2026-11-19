@@ -190,7 +190,21 @@ func _init():
 	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	lbl.position = Vector3(0, 16.2, 0)
 	q22_root.add_child(lbl)
-	for n in [tree_a, lbl]:
+	# Q22-B (20.11.26): ель с атласом из CC0-фотоскана иголок (ambientCG
+	# PineNeedles001, журнал в docs/asset_sources.md) — тот же скелет/карточки,
+	# отлична только текстура: 3 пучка тонированы в хвойный зелёный + 1 «сухой».
+	var tree_b = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v3_stock.tscn").instantiate()
+	tree_b.name = "TreeB_StockScanCards"
+	tree_b.position = Vector3(4.5, 0, 0)
+	q22_root.add_child(tree_b)
+	var lbl_b := Label3D.new()
+	lbl_b.text = "B: CC0-фотоскан иголок"
+	lbl_b.font_size = 220
+	lbl_b.pixel_size = 0.01
+	lbl_b.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl_b.position = Vector3(4.5, 16.2, 0)
+	q22_root.add_child(lbl_b)
+	for n in [tree_a, tree_b, lbl, lbl_b]:
 		n.owner = root
 	q22_root.owner = root
 

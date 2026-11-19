@@ -17,7 +17,11 @@ PROP = os.path.normpath(os.path.join(HERE, "..", "Graphics", "Environment",
                                      "Props", "pine_tree_01"))
 SRC_GLTF = os.path.join(PROP, "pine_tree_01_4k_baked.gltf")
 SRC_BIN = os.path.join(PROP, "pine_tree_01_4k_baked.bin")
-OUT_BASE = "pine_tree_01_v2_foliage"
+# Q22-B (CC0-сток): переопределения через env — дефолты = метод A не тронут.
+OUT_BASE = os.environ.get("TREE_OUT_BASE", "pine_tree_01_v2_foliage")
+DIFF_PNG = os.environ.get("TREE_FOLIAGE_DIFF", "pine_tree_01_foliage_diff.png")
+ORM_PNG = os.environ.get("TREE_FOLIAGE_ORM", "pine_tree_01_foliage_orm.png")
+MAT_NAME = os.environ.get("TREE_MAT_NAME", "foliage_atlas_A")
 TREE_KEY = "_b_"       # узел дерева b (единственного, ок для слота сравнения)
 VOXEL = 0.32
 Y_MIN_FRAC = 0.22      # крона ниже: голый низ = «мёртвое дерево»
@@ -170,9 +174,9 @@ def main():
     js["accessors"].append({"bufferView": av + 3, "componentType": 5125,
         "count": len(idx), "type": "SCALAR"})
     img_d = len(js["images"])
-    js["images"].append({"uri": "pine_tree_01_foliage_diff.png"})
+    js["images"].append({"uri": DIFF_PNG})
     img_o = len(js["images"])
-    js["images"].append({"uri": "pine_tree_01_foliage_orm.png"})
+    js["images"].append({"uri": ORM_PNG})
     sam = len(js.get("samplers", []))
     js.setdefault("samplers", []).append(
         {"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497})
@@ -182,7 +186,7 @@ def main():
     js["textures"].append({"sampler": sam, "source": img_o})
     mat_i = len(js["materials"])
     js["materials"].append({
-        "name": "foliage_atlas_A",
+        "name": MAT_NAME,
         "pbrMetallicRoughness": {
             "baseColorTexture": {"index": tex_d},
             "metallicFactor": 0.0,
