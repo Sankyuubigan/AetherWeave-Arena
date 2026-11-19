@@ -1,10 +1,13 @@
 extends Node3D
-## Крылья-скилл (Q20, 19.11.26): процедурные светящиеся крылья на Spine2
-## (224 триса, 2×14×4 сетка, unshaded+ADD — без внешних ассетов). Состояния
-## FLAP (на земле) / GLIDE (в воздухе — крылья назад + слабая амплитуда).
-## Пока активны: speed_mult 1.35 игроку, camera.fov 75→88 (tween 0.28с),
-## SpeedLinesOverlay (линии скорости + хроматическая аберрация), трейлы
-## за кончиками (GPUParticles3D world-space). Конец — dissolve 0.4с + искры.
+## Крылья-скилл Q20 v9 (19.11.26, вердикт юзера: «лист бумаги А4, видны
+## только с 1 ракурса, полёта нет»): перьевой ВЕЕР — 8 изогнутых перьев на
+## крыло, развеска по yaw 0.12→1.18 рад и roll −0.35→+0.6 — часть перьев
+## всегда почти фронтальна камере → крыло видно с ЛЮБОГО ракурса (v8: 2
+## плоские ленты 2×14×4, сбоку ребро, спереди перекрыты в проекции).
+## Мах с фазовым сдвигом перьев (концевые отстают и машут сильнее — вторичная
+## анимация). Полёт: activate ставит player.wings_fly=true (PlayerController:
+## удержание Space в воздухе = тяга 4.2 м/с, без Space глайд −2.0). При наборе
+## высоты — энергичный мах (визуальная связь «машу → лечу»).
 ## Скелет ищется ОТ РОДИТЕЛЯ (грабля Q19): компонент — ребёнок игрока.
 
 const EffectDB = preload("res://Logic/Skills/Effect.gd")
@@ -17,16 +20,18 @@ const BASE_FOV := 75.0
 const BOOST_FOV := 88.0
 const GLOW := 1.8
 
-const SEG := 14      # сегментов по размаху
-const ROWS := 5      # слоёв по хорде (2×14×4 квада = 112 триса на крыло)
+const FEATHERS := 8   # перьев на крыло (8×16 = 128 трис/крыло, 256 всего)
+const SEG := 8        # сегментов по длине пера (8 quad = 16 трис/перо)
 
 var _active := false
 var _life_left := 0.0
 var _flap_phase := 0.0
 var _sweep := 0.0
-var _root: Node3D          # автоориентация по скелету (out/up/fwd)
-var _wing_l: MeshInstance3D
-var _wing_r: MeshInstance3D
+var _root: Node3D          # WingsRoot на GraphicsWrapper (не кость — грабля 4.8)
+var _wing_l: Node3D        # пивоты целого крыла (sweep + общий мах)
+var _wing_r: Node3D
+var _feathers_l: Array = []  # пивоты отдельных перьев (фазовый мах)
+var _feathers_r: Array = []
 var _mats: Array = []
 var _light: OmniLight3D
 var _trail_l: GPUParticles3D
@@ -36,12 +41,9 @@ var _camera: Camera3D
 var _tween: Tween
 
 func _ready() -> void:
-	# v8 (финал Q20): WingsRoot — ребёнок GraphicsWrapper, НЕ кости Spine2.
-	# Бон-аттач с ориентацией «на кадр позже» дал FPS-зависимую лотерею:
-	# базис кости в момент съёма бывал дегенеративным → transform с NaN →
-	# крыло то рисуется, то исчезает (пробы 02:41-02:45: валидные вершины/
-	# AABB, маркеры в пустоте). GW — чистый yaw scale 1, базис всегда валиден;
-	# крылья следуют фейсингу игрока (за позой позвоночника не едут — ок v1).
+	# WingsRoot — ребёнок GraphicsWrapper, НЕ кости Spine2: бон-аттач с
+	# ориентацией «на кадр позже» давал NaN-базисы → крылья то рисуются, то
+	# исчезают (пробы 02:41-02:45). GW — чистый yaw, базис всегда валиден.
 	var gw := get_parent().get_node_or_null("GraphicsWrapper") as Node3D
 	if gw == null:
 		push_warning("WingsComponent: GraphicsWrapper не найден")
@@ -49,15 +51,14 @@ func _ready() -> void:
 	_root = Node3D.new()
 	_root.name = "WingsRoot"
 	gw.add_child(_root)
-	# Уровень лопаток: Spine2 глобально ~1.76 (игрок y=0.2, GW -0.8 → локаль
-	# 2.56) — проба 02:46 показала крылья НАД макушкой. Опуск до 1.95.
-	_root.position = Vector3(0, 1.95, -0.18)
+	# Корень на лопатках (модель 1.8: плечи ~1.45-1.5). Веер v9 раскрывается
+	# ВВЕРХ-НАЗАД — massa крыла над плечами, корень низко (проба v9: корень
+	# 1.95 = «рога на макушке», веер горизонтальный = линия сбоку).
+	_root.position = Vector3(0, 1.5, -0.28)
 	_wing_l = _build_wing(1)
 	_wing_r = _build_wing(-1)
 	_root.add_child(_wing_l)
 	_root.add_child(_wing_r)
-	_trail_l = _make_trail(_wing_l, Vector3(1.35, 1.2, -1.0))
-	_trail_r = _make_trail(_wing_r, Vector3(1.35, 1.2, -1.0))
 	_light = OmniLight3D.new()
 	_light.light_color = WING_COLOR
 	_light.omni_range = 4.5
@@ -92,6 +93,9 @@ func activate(duration: float = LIFETIME) -> void:
 	if _trail_r: _trail_r.emitting = true
 	var player := get_parent()
 	player.set("speed_mult", SPEED_MULT)
+	# Полёт (Q20 v2): пока крылья активны — PlayerController держит тягу
+	# по Space в воздухе и глайд вместо свободного падения.
+	player.set("wings_fly", true)
 	if _camera:
 		_tween.parallel().tween_property(_camera, "fov", BOOST_FOV, 0.28) \
 			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -103,6 +107,7 @@ func deactivate() -> void:
 	_active = false
 	var player := get_parent()
 	player.set("speed_mult", 1.0)
+	player.set("wings_fly", false)
 	if _light: _light.visible = false
 	if _trail_l: _trail_l.emitting = false
 	if _trail_r: _trail_r.emitting = false
@@ -129,20 +134,38 @@ func _process(delta: float) -> void:
 		return
 	var player := get_parent()
 	var airborne: bool = player is CharacterBody3D and not player.is_on_floor()
-	# FLAP на земле (сильная амплитуда, чаще), GLIDE в воздухе (крылья назад).
-	_flap_phase += delta * (0.9 if airborne else 3.4)
-	var amp := 0.16 if airborne else 0.5
-	_sweep = lerpf(_sweep, 0.5 if airborne else 0.0, delta * 6.0)
+	var vy := 0.0
+	if player is CharacterBody3D:
+		vy = player.velocity.y
+	# Три режима: IDLE-флап на земле; POWER-мах при наборе высоты (держит
+	# Space — «машу → лечу», проба v9); GLIDE в воздухе без набора (вперёд-
+	# развеска → назад, слабая амплитуда — v8-наследование).
+	var amp := 0.5
+	var speed := 3.4
+	var sweep_target := 0.0
+	if airborne:
+		if vy > 1.0:
+			amp = 0.75
+			speed = 7.0
+			sweep_target = 0.15
+		else:
+			amp = 0.16
+			speed = 0.9
+			sweep_target = 0.9
+	_flap_phase += delta * speed
+	_sweep = lerpf(_sweep, sweep_target, delta * 6.0)
 	var fl := sin(_flap_phase) * amp
-	# Базовый развыск ∓0.55 рад: v5-парус висит вертикально, со спины виден
-	# ребром-«палкой» (проба 02:39). Знаки «от камеры»: левое (+X extent) yaw<0
-	# уводит кончик в +Z назад, правое зеркально yaw>0. Проба 02:41 с yaw «к
-	# камере» дала крылья-в-одном (перекрылись в проекции).
-	# Базовый развыск ±0.55 «к камере» (со спины видна плоскость мембраны;
-	# проба 02:41 — лучший вид). «От камеры» (∓0.55, проба 02:42) прячет
-	# мембраны за телом игрока.
-	_wing_l.rotation = Vector3(0.0, _sweep + 0.55, fl)
-	_wing_r.rotation = Vector3(0.0, -_sweep - 0.55, -fl)
+	# Целое крыло: лёгкий общий мах вокруг Z + sweep по Y (назад = ∓).
+	_wing_l.rotation = Vector3(0.0, _sweep + 0.3, fl * 0.7)
+	_wing_r.rotation = Vector3(0.0, -_sweep - 0.3, -fl * 0.7)
+	# Фазовый мах перьев: концевые (ti→1) машут сильнее и с запаздыванием
+	# фазы — вторичная анимация, крыло «волнуется», а не лопатка.
+	for i in FEATHERS:
+		var ti := float(i) / float(FEATHERS - 1)
+		var k := 0.45 + 0.6 * ti
+		var fli := sin(_flap_phase - 0.55 * ti) * amp
+		(_feathers_l[i] as Node3D).rotation.z = fli * k
+		(_feathers_r[i] as Node3D).rotation.z = -fli * k
 	# Оверлей — только когда игрок реально разгоняется (как спринт Minecraft).
 	var hvel := 0.0
 	if player is CharacterBody3D:
@@ -150,33 +173,85 @@ func _process(delta: float) -> void:
 	_overlay.call("set_strength", clampf(hvel / 6.0, 0.0, 1.0))
 
 ## Свечение 0..1: эмиссия материалов + альбедо-альфа (ADD-блендинг = яркость).
+## База 0.35 (см. материал) — слоёное сложение 8 перьев не климпится в белое.
 func _set_glow(g: float) -> void:
 	for m in _mats:
-		m.emission_energy_multiplier = GLOW * g
-		m.albedo_color.a = g
+		m.emission_energy_multiplier = 0.35 * GLOW * g
+		m.albedo_color.a = 0.55 * g
 	if _light:
 		_light.light_energy = 1.3 * g
 
-## Вершина крыла: t — по размаху (0 корень → 1 кончик), u — по хорде
-## (0 передняя кромка → 1 задняя). Размах 2.05 м, взмывает до ~74°,
-## уводит назад и мочет кончик (droop).
-func _wing_vertex(t: float, u: float) -> Vector3:
-	# v4 (рендер-пробы v1-v3): мембрана с chord НАЗАД смотрится ребром
-	# (нормаль вверх → сзади виден росчерк). Парус должен висеть ВНИЗ от
-	# дуги: chord (0,-1,-0.35) — вертикальный парус за спиной, видимый сзади.
-	# v5 (доказано пробами: рендерится; v7-мембрана в 4.8-beta НЕ рисуется
-	# при валидных вершинах/AABB — глючная, выброшена). Дуга-парус: радиус
-	# растёт от позвоночника, хорда висит вниз-назад.
-	var phi := lerpf(0.1, 0.85, t)
-	var r := 2.05 * (0.12 + 0.88 * t)
-	var lead := Vector3(cos(phi), sin(phi) * 0.85, -0.2 - 0.45 * sin(phi)) * r
-	var chord_dir := Vector3(0.0, -1.0, -0.35).normalized()
-	var chord_len := (0.35 + 0.55 * t) * 0.95
-	var p := lead + chord_dir * (chord_len * u)
-	p.y -= 0.14 * u * t
-	return p
+## Параметры пера ti (0 внутреннее → 1 концевое). Веер v9.1: азимут от +X
+## ЗА СПИНУ (−Z: модель смотрит +Z — проба вскрыла, что +Z-веер торчит в
+## лицо сквозь голову) и элевация ВВЕРХ (вертикальный раскрыл — иначе сбоку
+## веер-в-одну-линию). Roll наклоняет плоскость ленты — ловит камеру с любых
+## ракурсов.
+func _feather_params(ti: float) -> Dictionary:
+	return {
+		"yaw": lerpf(0.15, 0.85, ti),
+		"elev": lerpf(0.10, 1.05, ti),
+		"roll": lerpf(-0.35, 0.6, ti),
+		"length": lerpf(1.5, 2.2, ti),
+		"width": lerpf(0.30, 0.17, ti),
+	}
 
-func _build_wing(side: int) -> MeshInstance3D:
+## Направление хребта пера: азимут от +X к −Z (спина), подъём elev вверх.
+func _spine_dir(p: Dictionary) -> Vector3:
+	var cy: float = cos(p.yaw)
+	var sy: float = sin(p.yaw)
+	var ce: float = cos(p.elev)
+	var se: float = sin(p.elev)
+	return Vector3(cy * ce, se, -sy * ce)
+
+## Хребет пера при s (0 корень → 1 кончик): луч по хребту + прогиб вниз.
+func _feather_spine(p: Dictionary, s: float) -> Vector3:
+	var v: Vector3 = _spine_dir(p) * (p.length * s)
+	v.y -= 0.22 * p.length * s * s
+	return v
+
+## Направление ширины ленты: UP спроецированный ⊥ хребту, roll вокруг оси
+## хребта валит плоскость — перья ловят камеру с любых ракурсов.
+func _feather_width_dir(p: Dictionary) -> Vector3:
+	var d: Vector3 = _spine_dir(p)
+	var w: Vector3 = Vector3.UP - d * Vector3.UP.dot(d)
+	if w.length() < 0.05:
+		w = Vector3(0, 0, -1) + d * d.z
+	return w.normalized().rotated(d, p.roll)
+
+## Полуширина «пера»: узкий корень → широкая середина → остриё (sin-профиль).
+func _feather_halfwidth(p: Dictionary, s: float) -> float:
+	var t := clampf(pow(s, 0.7), 0.02, 0.98)
+	return p.width * 0.5 * maxf(sin(PI * t), 0.10)
+
+## Меш одного пера: лента SEG-сегментов вдоль хребта. Зеркало правого крыла
+## В ГЕОМЕТРИИ (node scale(-1) в 4.8-beta не рисуется — проба 02:43).
+func _feather_mesh(p: Dictionary, side: int, ti: float) -> ArrayMesh:
+	var wd := _feather_width_dir(p)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for seg in SEG:
+		var s0 := float(seg) / SEG
+		var s1 := float(seg + 1) / SEG
+		var a0 := _feather_spine(p, s0)
+		var a1 := _feather_spine(p, s1)
+		var h0 := _feather_halfwidth(p, s0)
+		var h1 := _feather_halfwidth(p, s1)
+		var quad := [a0 - wd * h0, a0 + wd * h0, a1 + wd * h1, a1 - wd * h1]
+		var ss := [s0, s0, s1, s1]
+		for oi in [0, 1, 2, 0, 2, 3]:
+			var v: Vector3 = quad[oi]
+			if side < 0:
+				v.x = -v.x
+			# Ярче к кончикам пера и у концевых перьев (HDR>1 клампится в белое).
+			var c: Color = WING_COLOR * (0.7 + 0.8 * ss[oi]) * (0.85 + 0.15 * ti)
+			c.a = 1.0
+			st.set_color(c)
+			st.add_vertex(v)
+	return st.commit()
+
+## Крыло: пивот + FEATHERS перьев-детей (ось маха каждого — своё вращение Z).
+## У концевого пера — трейл (GPUParticles3D world-space у кончика).
+func _build_wing(side: int) -> Node3D:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -186,42 +261,46 @@ func _build_wing(side: int) -> MeshInstance3D:
 	mat.albedo_color = Color(1, 1, 1, 1)
 	mat.emission_enabled = true
 	mat.emission = WING_COLOR
-	mat.emission_energy_multiplier = 1.6
+	# 8 перьев перекрываются у корня — ADD складывает эмиссию СЛОЯМИ (проба
+	# v9: 8×1.6 ≈ 13× = сплошной белый «лист А4»). 0.35/перо ≈ 2.8 у корня.
+	mat.emission_energy_multiplier = 0.35
 	mat.no_shadow = true
 	mat.disable_receive_shadows = true
 	_mats.append(mat)
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for seg in SEG:
-		var t0 := float(seg) / SEG
-		var t1 := float(seg + 1) / SEG
-		for row in ROWS - 1:
-			var u0 := float(row) / (ROWS - 1)
-			var u1 := float(row + 1) / (ROWS - 1)
-			var quad := [_wing_vertex(t0, u0), _wing_vertex(t1, u0),
-				_wing_vertex(t1, u1), _wing_vertex(t0, u1)]
-			for vi in [quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]]:
-				var v: Vector3 = vi
-				if side < 0:
-					v.x = -v.x  # зеркало В ГЕОМЕТРИИ: node scale(-1) на правом
-					# крыле в 4.8-beta не рисуется (проба 02:43 — маркеры левого
-					# крыла в пустоте, рисуется только зеркальное)
-				var t: float = v.length() / 2.05
-				var c := WING_COLOR * (1.45 - 0.4 * t - 0.2 * u0)  # HDR>1 в ADD клампится в белое
-				c.a = 1.0
-				st.set_color(c)
-				st.add_vertex(v)
-	var mi := MeshInstance3D.new()
-	mi.mesh = st.commit()
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return mi
+	var pivot := Node3D.new()
+	var feathers: Array = []
+	for i in FEATHERS:
+		var ti := float(i) / float(FEATHERS - 1)
+		var p := _feather_params(ti)
+		var fp := Node3D.new()
+		pivot.add_child(fp)
+		var mi := MeshInstance3D.new()
+		mi.mesh = _feather_mesh(p, side, ti)
+		# БЕЗ override перья рисуются ДЕФОЛТНЫМ материалом (белый «лист А4» +
+		# cull BACK → крыло видно с одной стороны — вердикт юзера про v8;
+		# найдено изо-пробой 19.11: AABB валиден, меш серый).
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		fp.add_child(mi)
+		feathers.append(fp)
+		if i == FEATHERS - 1:
+			var tr := _make_trail(mi, _feather_spine(p, 1.0))
+			if side > 0:
+				_trail_l = tr
+			else:
+				_trail_r = tr
+	if side > 0:
+		_feathers_l = feathers
+	else:
+		_feathers_r = feathers
+	return pivot
 
 ## Трейл за кончиком крыла: GPUParticles3D world-space (не local) — точка
 ## движется с махом, частицы остаются в мире = шлейф.
-func _make_trail(wing: MeshInstance3D, tip_local: Vector3) -> GPUParticles3D:
+func _make_trail(host: Node3D, tip_local: Vector3) -> GPUParticles3D:
 	var tip := Node3D.new()
 	tip.position = tip_local
-	wing.add_child(tip)
+	host.add_child(tip)
 	var p := GPUParticles3D.new()
 	p.amount = 40
 	p.lifetime = 0.55

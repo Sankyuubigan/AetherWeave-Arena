@@ -1,7 +1,9 @@
 extends SceneTree
-## Гейт Q20 (крылья-скилл): статика SkillDB/аним-либы + рантайм на player.tscn
-## (активация, speed_mult, fov, оверлей, трейлы, deactivate). Паттерн
-## test_energy_blade: моки через root.add_child (current_scene == null в -s).
+## Гейт Q20 v9 (крылья-скилл): статика SkillDB + рантайм на player.tscn
+## (активация, wings_fly, speed_mult, fov, оверлей, ПЕРЬЕВОЙ веер 8 перьев,
+## трейл концевого пера, deactivate). + ФИЗИКА ПОЛЁТА: удержание Space в
+## воздухе = тяга вверх (WINGS_LIFT), отпускание = глайд (WINGS_GLIDE),
+## снятие крыльев = свободное падение. Паттерн test_energy_blade.
 
 var _fails := 0
 
@@ -47,80 +49,133 @@ func _init() -> void:
 	_ck(wings.is_active(), "wings is_active после activate")
 	_ck(wings.visible, "wings видимы")
 	_ck(player.get("speed_mult") == 1.35, "speed_mult == 1.35")
+	_ck(player.get("wings_fly") == true, "wings_fly == true (полёт разрешён)")
 
 	var cam = player.get_node_or_null("SpringArm3D/Camera3D")
 	_ck(cam != null, "камера игрока найдена")
 	await create_timer(0.5).timeout
 	_ck(cam and cam.fov > 82.0, "fov бустится (текущий %.1f)" % cam.fov)
 
-	# v8: WingsRoot на GraphicsWrapper (не кости — FPS-зависимая лотерея
-	# бон-базиса, пробы 02:41-02:45); чистый yaw, позиция уровня лопаток.
+	# WingsRoot на GraphicsWrapper (не кости — FPS-зависимая лотерея
+	# бон-базиса, пробы 02:41-02:45); позиция уровня лопаток.
 	var gw = player.get_node_or_null("GraphicsWrapper")
 	_ck(gw != null, "GraphicsWrapper найден")
 	var wroot = gw.get_node_or_null("WingsRoot") if gw else null
 	_ck(wroot != null and wroot.get_child_count() >= 3,
-		"WingsRoot на GraphicsWrapper: крылья+свет+искры (%d детей)"
+		"WingsRoot: 2 пивота крыльев + свет (%d детей)"
 			% (wroot.get_child_count() if wroot else -1))
-	_ck(wroot != null and wroot.position.is_equal_approx(Vector3(0, 1.95, -0.18)),
-		"WingsRoot на уровне лопаток (0,1.95,-0.18)")
+	_ck(wroot != null and wroot.position.is_equal_approx(Vector3(0, 1.5, -0.28)),
+		"WingsRoot на лопатках (0,1.5,-0.28)")
 	var ovs = wings.get_children().filter(func(c): return c is CanvasLayer)
 	_ck(ovs.size() == 1, "SpeedLinesOverlay (CanvasLayer) на игроке")
 
-	# FLAP-анимация крыльев: фаза крутится, поворот ненулевой на пике.
+	# v9 перьевой веер: 8 перьев на крыло, 16 MeshInstance3D всего,
+	# 256 трис (8 сегментов × 2 триса на перо). Перья — ВНУКИ WingsRoot.
+	var feathers := []
+	if wroot:
+		_all_meshes(wroot, feathers)
+	var feather_meshes = feathers.filter(func(n): return n is MeshInstance3D)
+	_ck(feather_meshes.size() == 16, "16 мешей перьев (8 на крыло): %d"
+		% feather_meshes.size())
+	var tri_count := 0
+	for mi in feather_meshes:
+		if mi.mesh:
+			var arrs = mi.mesh.surface_get_arrays(0)
+			var idx = arrs[Mesh.ARRAY_INDEX]
+			if idx != null:
+				tri_count += idx.size() / 3
+			else:
+				tri_count += arrs[Mesh.ARRAY_VERTEX].size() / 3
+	_ck(tri_count >= 240 and tri_count <= 280,
+		"трисы перьевого веера 240-280 (%d)" % tri_count)
+
+	# FLAP-анимация: перья вращаются на своих пивотах (фаза с запаздыванием).
 	await create_timer(0.45).timeout
-	var wl = wroot.get_children().filter(func(c): return c is MeshInstance3D) if wroot else []
-	if wl.size() != 2:
-		print("WINGS GATE: FAIL (мешей крыльев %d)" % wl.size())
-		quit(1)
-		return
-	_ck(wl.size() == 2, "2 меша крыльев")
-	if wl.size() == 2:
-		var tri_count := 0
-		for mi in wl:
-			if mi.mesh:
-				# ArrayMesh 4.8: get_face_count нет, меш не-индексированный —
-				# трисы = вершины / 3.
-				var arrs = mi.mesh.surface_get_arrays(0)
-				var idx = arrs[Mesh.ARRAY_INDEX]
-				if idx != null:
-					tri_count += idx.size() / 3
-				else:
-					tri_count += arrs[Mesh.ARRAY_VERTEX].size() / 3
-		_ck(tri_count >= 200 and tri_count <= 500,
-			"трисы крыльев в норме 200-500 (%d)" % tri_count)
-		var rotated: bool = abs(wl[0].rotation.z) > 0.01 or abs(wl[0].rotation.y) > 0.01
-		_ck(rotated, "FLAP: крылья анимируются")
+	var flap_ok := false
+	for fp in feathers:
+		if not is_instance_valid(fp):
+			continue  # transient-искры _burst успевают освободиться (таймер 0.8с)
+		if fp is Node3D and fp.get_parent() != wroot:
+			if absf(fp.rotation.z) > 0.01:
+				flap_ok = true
+				break
+	_ck(flap_ok, "FLAP: перья анимируются на пивотах")
 
-	# Трейлы за кончиками: GPUParticles3D — внук крыла (Tip-нода между ними).
-	var tip = wl[0].get_child(0) if wl[0].get_child_count() > 0 else null
-	var trails = []
-	if tip:
-		trails = tip.get_children().filter(func(c): return c is GPUParticles3D)
-	_ck(trails.size() == 1 and trails[0].emitting, "трейл левого крыла emitит")
+	# Трейл концевого пера: перо-пивот → MeshInstance → Tip → GPUParticles3D.
+	var trail: GPUParticles3D = null
+	for fp in feathers:
+		if not is_instance_valid(fp):
+			continue  # transient-искры _burst успевают освободиться (таймер 0.8с)
+		if fp is Node3D and fp.get_parent() != wroot and fp.get_child_count() > 0:
+			var mi = fp.get_child(0)
+			if mi is MeshInstance3D and mi.get_child_count() > 0:
+				var tip = mi.get_child(0)
+				for ch in tip.get_children():
+					if ch is GPUParticles3D:
+						trail = ch
+	_ck(trail != null and trail.emitting, "трейл концевого пера emitит")
 
-	# Деактивация: speed_mult и fov возвращаются, крылья гаснут.
+	# --- ФИЗИКА ПОЛЁТА (Q20 v2): пол 24×0.5×24, верх y=0 ---
+	var floor_body := StaticBody3D.new()
+	var fcs := CollisionShape3D.new()
+	var fbox := BoxShape3D.new()
+	fbox.size = Vector3(24, 0.5, 24)
+	fcs.shape = fbox
+	floor_body.add_child(fcs)
+	floor_body.position = Vector3(0, -0.25, 0)
+	root.add_child(floor_body)
+	await physics_frame
+
+	# Тяга: игрок в воздухе, Space зажат → взлёт (v → WINGS_LIFT 4.2).
+	player.global_position = Vector3(0, 3.0, 0)
+	await physics_frame
+	await physics_frame
+	_press_space(true)
+	await create_timer(0.6).timeout
+	var vy_up: float = player.velocity.y
+	_ck(vy_up > 3.0, "тяга: Space в воздухе → взлёт (vy=%.2f)" % vy_up)
+	_ck(player.global_position.y > 3.2, "высота растёт (y=%.2f)"
+		% player.global_position.y)
+
+	# Глайд: Space отпущен, крылья активны → падение зажато на WINGS_GLIDE.
+	_press_space(false)
+	await create_timer(1.2).timeout
+	var vy_glide: float = player.velocity.y
+	_ck(vy_glide <= 0.0 and vy_glide >= -2.5,
+		"глайд: падение зажато -2.0 (vy=%.2f)" % vy_glide)
+
+	# Свободное падение: крылья сняты → обычная гравитация. Подъём на 12 м —
+	# за 0.8с окна замера глайд-высота уже съедена, игрок у пола (vy=0 на земле).
+	player.global_position = Vector3(0, 12.0, 0)
 	wings.call("deactivate")
 	await create_timer(0.8).timeout
 	_ck(not wings.is_active(), "deactivate снял активность")
 	_ck(player.get("speed_mult") == 1.0, "speed_mult вернулся к 1.0")
+	_ck(player.get("wings_fly") == false, "wings_fly == false (полёт закрыт)")
+	var vy_fall: float = player.velocity.y
+	_ck(vy_fall < -4.0, "свободное падение после deactivate (vy=%.2f)" % vy_fall)
 	_ck(not wings.visible, "dissolve скрыл крылья")
 	_ck(cam and absf(cam.fov - 75.0) < 1.0, "fov вернулся к 75 (%.1f)" % cam.fov)
 
 	print("WINGS GATE: " + ("ALL PASS" if _fails == 0 else "FAIL %d" % _fails))
 	quit(0 if _fails == 0 else 1)
 
-func _watchdog() -> void:
-	await create_timer(20.0).timeout
-	print("[WDT] TIMEOUT 20с — тест завис")
-	quit(1)
+## Зажатие Space: parse_input_event (headless-симуляция клавиатуры —
+## PlayerController читает Input.is_key_pressed(KEY_SPACE)).
+func _press_space(pressed: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = KEY_SPACE
+	ev.physical_keycode = KEY_SPACE
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
 
-func _find_skeleton(node: Node) -> Skeleton3D:
-	if not node:
-		return null
-	if node is Skeleton3D:
-		return node
-	for c in node.get_children():
-		var r = _find_skeleton(c)
-		if r:
-			return r
-	return null
+func _all_meshes(n: Node, out: Array) -> void:
+	out.append(n)
+	for c in n.get_children():
+		_all_meshes(c, out)
+
+func _watchdog() -> void:
+	await create_timer(30.0).timeout
+	print("[WDT] TIMEOUT 30с — тест завис")
+	quit(1)

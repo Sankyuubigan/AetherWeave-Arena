@@ -41,11 +41,14 @@ func build(color: Color, seed_off: float) -> void:
 	add_child(cs)
 
 func _on_body_entered(body: Node3D) -> void:
-	# Телепортируем только движущиеся тела. StaticBody3D (пол, арена) игнорим:
-	# box-коллизия портала нижней гранью примыкает к поверхности пола — без
-	# фильтра Area «ловит» пол и телепортирует ЕГО (проба 19.11: пол улетел
-	# на выход портала, игрок проваливался в пустоту).
-	if not (body is CharacterBody3D or body is RigidBody3D):
+	# Телепортируем ТОЛЬКО игроков и FFA-ботов (вердикт юзера 19.11.26:
+	# «через портал телепортируются ВСЕ мобы, манекены и предметы — не
+	# должны»). Портал A ставится ЗА СПИНОЙ кастера (BEHIND_DIST 1.7) —
+	# манекены-мишени у спавна, мобы ада и RigidBody-пропы попадают в
+	# box-зону и улетали в выход. Старый фильтр is CharacterBody/RigidBody
+	# пропускал их всех; также он «телепортировал» пол (StaticBody ловился
+	# гранью зоны — проба 19.11, игрок проваливался в пустоту).
+	if not (body.is_in_group("player") or body.is_in_group("ffa_bot")):
 		return
 	if partner == null or not is_instance_valid(partner):
 		return

@@ -79,8 +79,9 @@ func _init() -> void:
 	var meshes_a = _all_meshes(pa)
 	_ck(meshes_a.size() >= 2, "визуал PortalA (мембрана+рамка): %d мешей" % meshes_a.size())
 
-	# --- Телепорт тела A→B ---
+	# --- Телепорт тела A→B (тело БОТА: группа ffa_bot — фильтр Q21 v2) ---
 	var dummy := CharacterBody3D.new()
+	dummy.add_to_group("ffa_bot")
 	dummy.velocity = Vector3(2, 0, 0)
 	var dcs := CollisionShape3D.new()
 	var dbox := BoxShape3D.new()
@@ -123,6 +124,26 @@ func _init() -> void:
 		dummy.global_position.z - exp_out_a.z).length()
 	_ck(dxz2 < 0.45, "двусторонность: B→выход A (%.2f м)" % dxz2)
 
+	# --- Фильтр Q21 v2: тело БЕЗ групп player/ffa_bot НЕ телепортируется ---
+	# (вердикт юзера: «телепортируются ВСЕ мобы, манекены и предметы — не
+	# должны»). Манекены/мобы/пропы не состоят в группах → ранний return.
+	var stranger := CharacterBody3D.new()
+	var scs := CollisionShape3D.new()
+	var sbox := BoxShape3D.new()
+	sbox.size = Vector3(0.5, 0.5, 0.5)
+	scs.shape = sbox
+	stranger.add_child(scs)
+	root.add_child(stranger)
+	stranger.global_position = pa.global_position
+	stranger.move_and_slide()
+	await physics_frame
+	await physics_frame
+	await physics_frame
+	var dxz_s := Vector2(stranger.global_position.x - pa.global_position.x,
+		stranger.global_position.z - pa.global_position.z).length()
+	_ck(dxz_s < 0.45, "тело без групп (манекен/моб) НЕ телепортируется (%.2f м)"
+		% dxz_s)
+
 	# --- Перенос снаряда (Area3D с current_velocity) ---
 	var proj := _Proj.new()
 	proj.current_velocity = Vector3(0, 0, 10)
@@ -153,8 +174,49 @@ func _init() -> void:
 	_ck(pb2 != null and Vector2(pb2.global_position.x + 5,
 		pb2.global_position.z - 3).length() < 0.5, "ре-каст перенёс пару")
 
+	# --- Склон Q21 v3 (вердикт юзера «наполовину под землёй»): кольцо
+	# ВЕРТИКАЛЬНО, низ кромки 0.30 над полом под центром — на плоскости всё
+	# сходится; зарывание даёт ПОПЕРЕЧНЫЙ склон: земля под краем кольца выше
+	# точки прицела. Клин 15° вдоль +X вне плоского пола (x>12): _slope_lift
+	# обязан поднять центр над высоким краем. Пороги — из живых рейкастов
+	# (само-верифицирующийся чек, не хардкод).
+	var slope := StaticBody3D.new()
+	var slcs := CollisionShape3D.new()
+	var slbox := BoxShape3D.new()
+	slbox.size = Vector3(3, 0.5, 6)
+	slcs.shape = slbox
+	slope.add_child(slcs)
+	slope.rotation.z = deg_to_rad(15.0)  # подъём вдоль +X
+	slope.position = Vector3(14, 0, 0)
+	root.add_child(slope)
+	await physics_frame
+	await physics_frame
+	effect.apply(player, {"target_pos": Vector3(14, 0, 0)})
+	await process_frame
+	await physics_frame
+	var pair3 = player.get_meta("portal_pair") if player.has_meta("portal_pair") else null
+	var pb3 = pair3.get_node_or_null("PortalB") if pair3 else null
+	_ck(pb3 != null, "склон: PortalB создан")
+	if pb3:
+		var g_c: Vector3 = _ray_y(14.0, 0.0)
+		var g_e: Vector3 = _ray_y(15.15, 0.0)
+		var want: float = g_c.y + 1.45 + maxf(0.0, g_e.y - g_c.y)
+		_ck(absf(pb3.global_position.y - want) < 0.05,
+			"склон: центр поднят над высоким краем (хотим %.2f, факт %.2f)"
+				% [want, pb3.global_position.y])
+
 	print("PORTALS GATE: " + ("ALL PASS" if _fails == 0 else "FAIL %d" % _fails))
 	quit(0 if _fails == 0 else 1)
+
+## Вертикальный рейкаст вниз для само-верификации порогов склон-чека.
+func _ray_y(x: float, z: float) -> Vector3:
+	var space := root.world_3d.direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(
+		Vector3(x, 6.0, z), Vector3(x, -6.0, z))
+	var r = space.intersect_ray(q)
+	if r and r.has("position"):
+		return r["position"] as Vector3
+	return Vector3(x, 999.0, z)
 
 ## Мок боевого снаряда (HomingProjectileComponent: скриптовое свойство
 ## current_velocity — именно его проверяет PortalNode через `in`).

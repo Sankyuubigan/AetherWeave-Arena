@@ -7,6 +7,16 @@ const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
 @export var jump_velocity: float = 4.5
 var speed_mult: float = 1.0  # буст-скиллы (Q20 крылья) ставят 1.35 на окно действия
 
+## Полёт на крыльях (Q20 v2, вердикт юзера: «скилл активен — не летает,
+## просто ускорение»): ставит true/false WingsComponent.activate/deactivate.
+## Пока крылья активны: удержание Space в воздухе = тяга вверх, без Space
+## падение глайдом (медленное), на земле Space = обычный прыжок.
+var wings_fly: bool = false
+
+## Тяга крыльев вверх и скорость планирования (м/с).
+const WINGS_LIFT: float = 4.2
+const WINGS_GLIDE: float = -2.0
+
 const GRAVITY: float = 9.8
 
 ## Общий бюджет очков навыков (механика добора SP пока не введена).
@@ -255,12 +265,20 @@ func _physics_process(delta):
     velocity.x = global_dir.x * speed * speed_mult
     velocity.z = global_dir.z * speed * speed_mult
 
+    var space_pressed = (not locked) and Input.is_key_pressed(KEY_SPACE)
+
     if not is_on_floor():
         velocity.y -= GRAVITY * delta
+        # Полёт на крыльях (Q20 v2): удержание Space — тяга вверх (плавный
+        # разгон), отпущено — планирование (медленное падение вместо обрыва).
+        if wings_fly:
+            if space_pressed:
+                velocity.y = move_toward(velocity.y, WINGS_LIFT, delta * 24.0)
+            elif velocity.y < WINGS_GLIDE:
+                velocity.y = WINGS_GLIDE
     else:
         can_double_jump = unlocked_skills.get("double_jump", false)
 
-    var space_pressed = (not locked) and Input.is_key_pressed(KEY_SPACE)
     if space_pressed and not was_space_pressed:
         var anim_comp = get_node_or_null("PlayerAnimationComponent")
         if is_on_floor():
