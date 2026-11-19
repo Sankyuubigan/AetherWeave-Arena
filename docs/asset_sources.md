@@ -200,6 +200,7 @@
 | 19.11.26 | training_dummy (нейро-проп, 5000 трис) | собственная генерация: Blender-концепт → trellis-cli image→3D → optimize_triangles v2 | своя (лицензия не нужна) | Graphics/Environment/Props/training_dummy/ | стоячие мишени MainArena (Q37) |
 | 19.11.26 | enchant_table (нейро-проп, 4999 трис) | собственная генерация: Blender-концепт → trellis-cli image→3D → optimize_triangles v2 | своя (лицензия не нужна) | Graphics/Environment/Props/enchant_table/ | стол зачарований MainArena (Q37, объект Q36) |
 | 20.11.26 | PineNeedles001 (Color/Opacity/Normal/Roughness 2K) | [ambientCG](https://ambientcg.com/view?id=PineNeedles001) | CC0 | tasks/261117_2355-089dca89/stock/ambientcg_pine_needles_001/ → Graphics/Environment/Props/pine_tree_01/foliage_diff_B.png + _orm_B.png (атлас 1024², pine_atlas_stock.py) | ель B «CC0-фотоскан иголок» у спавна MainArena (Q22-B, слот TreeB_StockScanCards) |
+| 20.11.26 | modular_tree (MTree) 5.6.0 — Blender-аддон генерации деревьев | [GoodPie/modular_tree](https://github.com/GoodPie/modular_tree) | GPL-3.0 (ИНСТРУМЕНТ: выходной меш наш, лицензия аддона на генерат не распространяется) | tasks/261117_2355-089dca89/stock/modular_tree_560/ → Generators/build_mtree_spruce_cards2.py | ель C «MTree живой скелет» (Q22-C, слот TreeC_MTree, 3830 трис) |
 
 *(Новая строка на каждый скачанный файл. Пример: `19.11.26 | anvil.glb |
 polyhaven.com/models/anvil | CC0 | Graphics/Environment/Props/forge/ | кузница MainArena`)*

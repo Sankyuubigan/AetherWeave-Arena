@@ -178,33 +178,49 @@ func _init():
 	# не тронуты; удаляется целиком одним движением.
 	var q22_root := Node3D.new()
 	q22_root.name = "Q22TreeCompare"
-	q22_root.position = Vector3(-5, 0, -9)
+	# Q22-сравнение у КРАЯ КАРТЫ (юзер 20.11.26: «деревья на краю карты, там
+	# дохуя места»). Кромка пола z≈-50 (рекасты: грунт до -50, пустота на -60;
+	# дальше декоративные горы y≈14). z=-45 = край пола, вокруг пусто.
+	q22_root.position = Vector3(0, 0, -45)
 	root.add_child(q22_root)
 	var tree_a = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v2_foliage.tscn").instantiate()
 	tree_a.name = "TreeA_AtlasCards"
 	q22_root.add_child(tree_a)
 	var lbl := Label3D.new()
 	lbl.text = "A: процедурный атлас (карточки)"
-	lbl.font_size = 220
+	lbl.font_size = 96
 	lbl.pixel_size = 0.01
 	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	lbl.position = Vector3(0, 16.2, 0)
+	lbl.position = Vector3(0, 17.2, 0)
 	q22_root.add_child(lbl)
 	# Q22-B (20.11.26): ель с атласом из CC0-фотоскана иголок (ambientCG
 	# PineNeedles001, журнал в docs/asset_sources.md) — тот же скелет/карточки,
 	# отлична только текстура: 3 пучка тонированы в хвойный зелёный + 1 «сухой».
 	var tree_b = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v3_stock.tscn").instantiate()
 	tree_b.name = "TreeB_StockScanCards"
-	tree_b.position = Vector3(4.5, 0, 0)
+	tree_b.position = Vector3(20, 0, 0)
 	q22_root.add_child(tree_b)
 	var lbl_b := Label3D.new()
 	lbl_b.text = "B: CC0-фотоскан иголок"
-	lbl_b.font_size = 220
+	lbl_b.font_size = 96
 	lbl_b.pixel_size = 0.01
 	lbl_b.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	lbl_b.position = Vector3(4.5, 16.2, 0)
+	lbl_b.position = Vector3(20, 17.2, 0)
 	q22_root.add_child(lbl_b)
-	for n in [tree_a, tree_b, lbl, lbl_b]:
+	# Q22-C (20.11.26): ель целиком из аддона MTree (живой скелет ветвления,
+	# атлас хвои тот же CC0 B) — 3830 трис, легче A/B. Спектр сравнения полный.
+	var tree_c = load("res://Graphics/Environment/Props/spruce_mtree/spruce_mtree.tscn").instantiate()
+	tree_c.name = "TreeC_MTree"
+	tree_c.position = Vector3(40, 0, 0)
+	q22_root.add_child(tree_c)
+	var lbl_c := Label3D.new()
+	lbl_c.text = "C: MTree (живой скелет)"
+	lbl_c.font_size = 96
+	lbl_c.pixel_size = 0.01
+	lbl_c.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl_c.position = Vector3(40, 17.2, 0)
+	q22_root.add_child(lbl_c)
+	for n in [tree_a, tree_b, tree_c, lbl, lbl_b, lbl_c]:
 		n.owner = root
 	q22_root.owner = root
 
