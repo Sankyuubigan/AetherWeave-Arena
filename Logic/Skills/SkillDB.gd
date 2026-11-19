@@ -229,4 +229,37 @@ static func get_skills() -> Dictionary:
     bl.effects.append(preload("res://Logic/Skills/SpawnBladeEffect.gd").new())
     _skills["energy_blade"] = bl
 
+    # Крылья ускорения (Q20, спец-батч 19.11.26): светящиеся крылья на 10 с,
+    # пока активны — скорость x1.35 (fov + линии скорости как спринт Minecraft).
+    # Жест Cast_Enter играет SpawnWingsEffect: IK-доводка руки крыльям не нужна.
+    var wg = preload("res://Logic/Skills/Skill.gd").new()
+    wg.id = "wings"
+    wg.skill_name = "Крылья ускорения"
+    wg.description = "Светящиеся крылья на 10 с.
+Пока раскрыты — скорость +35% и рывок обзора."
+    wg.icon = "🪽"
+    wg.price = 2
+    wg.max_range = 200.0
+    wg.cast_anim = ""
+    wg.effects.append(preload("res://Logic/Skills/SpawnWingsEffect.gd").new())
+    _skills["wings"] = wg
+
+    # Порталы (Q21, юзер 19.11.26): первый — всегда рядом с персонажем,
+    # второй — точка прицела; двусторонний туннель-проход между ними.
+    var ptl = preload("res://Logic/Skills/Skill.gd").new()
+    ptl.id = "portals"
+    ptl.skill_name = "Порталы"
+    ptl.description = "Портал у ног и портал в точке прицела.
+Зашёл в один — вышел из другого."
+    ptl.icon = "🌀"
+    ptl.price = 2
+    ptl.max_range = 40.0
+    ptl.cast_anim = ""
+    ptl.effects.append(preload("res://Logic/Skills/SpawnPortalsEffect.gd").new())
+    var pts = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
+    pts.audio_stream = load("res://Audio/SFX/neural_teleport.res")
+    pts.volume_db = 0.0
+    ptl.effects.append(pts)
+    _skills["portals"] = ptl
+
     return _skills
