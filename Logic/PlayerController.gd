@@ -5,6 +5,7 @@ const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
 @export var speed: float = 5.0
 @export var mouse_sensitivity: float = 0.002
 @export var jump_velocity: float = 4.5
+var speed_mult: float = 1.0  # буст-скиллы (Q20 крылья) ставят 1.35 на окно действия
 
 const GRAVITY: float = 9.8
 
@@ -129,6 +130,14 @@ func update_hud():
     if hud_hp: hud_hp.value = player_hp
     if hp_label: hp_label.text = "%d/%d" % [player_hp, MAX_HP]
 
+## Q35 (юзер 19.11.26): игрок — дружественная цель сердечек, лечится и
+## инициатор каста. Без heal() сердечко игрока пролетало насквозь.
+var is_friendly: bool = true
+
+func heal(amount: int):
+    player_hp = mini(MAX_HP, player_hp + amount)
+    update_hud()
+
 ## Урон игроку (ад, 19.11.26): враги наносят % от MAX_HP (5% ближники, 2% дальники).
 ## Смерть в аду → респавн на обычной арене, где манекены (верб. юзера).
 func take_damage(amount: int):
@@ -241,8 +250,10 @@ func _physics_process(delta):
 
     var global_dir = (global_transform.basis * local_dir)
 
-    velocity.x = global_dir.x * speed
-    velocity.z = global_dir.z * speed
+    # Множитель ускорения (Q20 крылья: 1.35 на окно активности, ставит
+    # WingsComponent.activate/deactivate; остальные скиллы не трогают).
+    velocity.x = global_dir.x * speed * speed_mult
+    velocity.z = global_dir.z * speed * speed_mult
 
     if not is_on_floor():
         velocity.y -= GRAVITY * delta

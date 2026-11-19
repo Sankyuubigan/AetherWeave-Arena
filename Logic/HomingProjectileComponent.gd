@@ -8,6 +8,10 @@ const AnimatedDecalComponent = preload("res://Graphics/AnimatedDecalComponent.gd
 @export var speed: float = 6.0
 @export var damage: int = 35
 
+## Q34 (юзер 19.11.26): ретаргет мёртвой цели — ближайшая живая цель в этом
+## радиусе от снаряда; никого — полёт дальше по инерции (не висим над трупом).
+const RETARGET_RADIUS := 25.0
+
 var target: Node3D
 var caster: Node3D
 var current_velocity: Vector3
@@ -44,7 +48,7 @@ func _physics_process(delta):
             return
         scale = base_scale * (1.0 - shrink_progress)
     else:
-        if is_instance_valid(target):
+        if is_instance_valid(target) and not _target_dead():
             var aim_pos = target.global_position + Vector3(0, 1.0, 0)
             var desired_dir = global_position.direction_to(aim_pos)
 
@@ -52,8 +56,62 @@ func _physics_process(delta):
             desired_dir = (desired_dir + avoidance * 1.5).normalized()
 
             current_velocity = current_velocity.lerp(desired_dir * speed, delta * 3.0)
-            
+        else:
+            # Q34: цель умерла (нода трупа валидна — is_instance_valid не
+            # ловит смерть) → ближайшая живая цель в большом радиусе; нет
+            # цели — current_velocity сохраняется, снаряд летит по инерции.
+            var nxt = _retarget()
+            if nxt:
+                set_target(nxt)
+
     global_position += current_velocity * delta
+
+## Q34: жива ли цель. Нода мёртвого врага остаётся в дереве (труп, респавн) —
+## проверяем флаги смерти: is_dead у мобов, is_dying у игрока.
+func _target_dead() -> bool:
+    if not is_instance_valid(target):
+        return true
+    if "is_dead" in target and target.is_dead:
+        return true
+    if "is_dying" in target and target.is_dying:
+        return true
+    return false
+
+## Q34: ближайшая живая цель с take_damage в радиусе RETARGET_RADIUS.
+## Молния игрока не перебивается на союзников; молния бота (FFA) — на любого
+## живого кроме кастера (игрок и другие боты — его враги). Кандидаты:
+## aim_targets + группа player (игрок в aim_targets не входит).
+func _retarget() -> Node3D:
+    var tree := get_tree()
+    if tree == null:
+        return null
+    var caster_friendly: bool = is_instance_valid(caster) and caster.get("is_friendly") == true
+    var cands := tree.get_nodes_in_group("aim_targets")
+    for p in tree.get_nodes_in_group("player"):
+        cands.append(p)
+    var best: Node3D = null
+    var best_d: float = RETARGET_RADIUS
+    for n in cands:
+        if not is_instance_valid(n) or n == caster:
+            continue
+        if caster_friendly and n.get("is_friendly") == true:
+            continue
+        if not n.has_method("take_damage"):
+            continue
+        if _is_dead_node(n):
+            continue
+        var d: float = global_position.distance_to(n.global_position)
+        if d < best_d:
+            best_d = d
+            best = n
+    return best
+
+func _is_dead_node(n: Node) -> bool:
+    if "is_dead" in n and n.is_dead:
+        return true
+    if "is_dying" in n and n.is_dying:
+        return true
+    return false
 
 func _calculate_avoidance() -> Vector3:
     var avoidance = Vector3.ZERO

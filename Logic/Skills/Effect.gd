@@ -8,7 +8,13 @@ func apply(_caster: Node, _context: Dictionary) -> void:
 ## на момент вызова — при отложенном спавне (spawn_delay) даёт точку выброса
 ## из анимации, а не из позы нажатия.
 static func hand_pos(caster: Node, side: String) -> Vector3:
+    if caster == null:
+        return Vector3.ZERO
     var skel := find_skeleton(caster.get_node_or_null("GraphicsWrapper/PlayerModel"))
+    if not skel:
+        # Враги/FFA-боты: скин не под GraphicsWrapper/PlayerModel (латент Q10,
+        # вскрыт смоуком MainArena 19.11.26) — ищем скелет по всему поддереву.
+        skel = find_skeleton(caster)
     if skel:
         var bi := skel.find_bone("mixamorig_%sHand" % side)
         if bi >= 0:
@@ -16,6 +22,8 @@ static func hand_pos(caster: Node, side: String) -> Vector3:
     return caster.global_position + Vector3(0, 1.2, 0)  # фолбэк — центр тела
 
 static func find_skeleton(node: Node) -> Skeleton3D:
+    if node == null:
+        return null
     if node is Skeleton3D:
         return node
     for c in node.get_children():

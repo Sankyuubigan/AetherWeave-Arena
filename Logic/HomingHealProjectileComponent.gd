@@ -7,6 +7,10 @@ const AnimatedDecalComponent = preload("res://Graphics/AnimatedDecalComponent.gd
 @export var speed: float = 10.0
 @export var heal_amount: int = 5
 
+## Q35 (юзер 19.11.26): ретаргет сытой цели — другая дружественная с неполным
+## HP в этом радиусе (включая кастера); все сыты — сердечко останавливается.
+const RETARGET_RADIUS := 20.0
+
 var target: Node3D
 var caster: Node3D
 var current_velocity: Vector3
@@ -45,15 +49,67 @@ func _physics_process(delta):
             return
         scale = base_scale * (1.0 - shrink_progress)
     else:
-        if is_instance_valid(target):
+        if is_instance_valid(target) and not _hp_full(target):
             var aim_pos = target.global_position + Vector3(0, 1.0, 0)
             var desired_dir = global_position.direction_to(aim_pos)
-            
+
             var avoidance = _calculate_avoidance()
             desired_dir = (desired_dir + avoidance * 1.5).normalized()
             current_velocity = current_velocity.lerp(desired_dir * speed, delta * 3.0)
-            
+        else:
+            # Q35: у цели полное HP → другая дружественная с неполным HP в
+            # радиусе (включая кастера — он дружественная цель). Все сыты —
+            # сердечко останавливается и висит на месте (скорость → 0).
+            var nxt = _find_hurt_ally()
+            if nxt:
+                set_target(nxt)
+            else:
+                current_velocity = current_velocity.lerp(Vector3.ZERO, delta * 4.0)
+
     global_position += current_velocity * delta
+
+## Q35: полное HP у цели? Игрок: player_hp/MAX_HP; мобы: current_health/max_health.
+## Незнакомый узел (нет полей HP) — не перебиваем цель (false).
+func _hp_full(n: Node) -> bool:
+    if not is_instance_valid(n):
+        return true
+    if "player_hp" in n:
+        var mx: int = 100
+        if "MAX_HP" in n:
+            mx = n.MAX_HP
+        return n.player_hp >= mx
+    if "current_health" in n:
+        return n.current_health >= n.max_health
+    return false
+
+## Q35: ближайшая дружественная с неполным HP в радиусе RETARGET_RADIUS.
+## Кандидаты: aim_targets (HealthComponent-дружественные) + группа player +
+## сам caster — по заказу юзера сердечко летит и в инициатора каста.
+func _find_hurt_ally() -> Node3D:
+    var tree := get_tree()
+    if tree == null:
+        return null
+    var cands := tree.get_nodes_in_group("aim_targets")
+    for p in tree.get_nodes_in_group("player"):
+        cands.append(p)
+    if is_instance_valid(caster) and not cands.has(caster):
+        cands.append(caster)
+    var best: Node3D = null
+    var best_d: float = RETARGET_RADIUS
+    for n in cands:
+        if not is_instance_valid(n) or n == self:
+            continue
+        if not n.has_method("heal") or n.get("is_friendly") != true:
+            continue
+        if ("is_dead" in n and n.is_dead) or ("is_dying" in n and n.is_dying):
+            continue
+        if _hp_full(n):
+            continue
+        var d: float = global_position.distance_to(n.global_position)
+        if d < best_d:
+            best_d = d
+            best = n
+    return best
 
 func _calculate_avoidance() -> Vector3:
     var avoidance = Vector3.ZERO

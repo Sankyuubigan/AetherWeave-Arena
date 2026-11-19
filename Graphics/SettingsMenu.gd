@@ -45,7 +45,12 @@ func _build_ui() -> void:
 
     _panel = PanelContainer.new()
     _panel.name = "SettingsPanel"
-    _panel.set_anchors_preset(Control.PRESET_CENTER)
+    # Q33 (юзер 19.11.26): панель прижата к ВЕРХУ экрана — у PRESET_CENTER
+    # при росте контента низ вылезал за кадр. Выезд сверху при открытии (_slide_in).
+    _panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+    _panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+    _panel.grow_vertical = Control.GROW_DIRECTION_END
+    _panel.offset_top = 48
     _panel.custom_minimum_size = Vector2(380, 0)
     _root.add_child(_panel)
 
@@ -150,6 +155,18 @@ func _add_volume_row(vbox: VBoxContainer, caption_text: String) -> Array:
     vbox.add_child(slider)
     return [slider, value_label]
 
+## Q33: выезд панели сверху при открытии (после кадра лейаута панель знает
+## свой размер; рисуем старт за верхней кромкой и доводим tween'ом).
+func _slide_in() -> void:
+    await get_tree().process_frame
+    if not is_open or _root == null:
+        return
+    var target_y := _panel.position.y
+    _panel.position.y = -_panel.size.y - 24.0
+    var tw := create_tween()
+    tw.tween_property(_panel, "position:y", target_y, 0.22) \
+        .set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
 ## _unhandled_input: не сработает, пока GUI занят событиями (печать текста).
 func _unhandled_input(event):
     if event is InputEventKey and event.pressed and event.keycode == KEY_F2:
@@ -157,6 +174,7 @@ func _unhandled_input(event):
         if is_open:
             _sync_from_audio()
             _root.show()
+            _slide_in()
             # МЫШЬ ССОТ (docs/ui_input_rules.md): открытие UI делает мышь
             # видимой; закрытие её НЕ трогает — клик по миру вернёт захват.
             Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
