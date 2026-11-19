@@ -45,5 +45,4 @@ common/physics_interpolation=true
 [rendering]
 
 textures/decals/filter=5
-; QUEUE Q2: окклюзия — фиксируем явно (без OccluderInstance3D окклюзии и так нет)
 occlusion_culling/use_occlusion_culling=true

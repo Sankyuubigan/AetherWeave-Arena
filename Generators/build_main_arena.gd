@@ -58,6 +58,19 @@ func _init():
 	root.add_child(dummy)
 	dummy.owner = root
 
+	# Стоячим мишеням — нейро-манекен (Q37, заказ юзера «только стоячих заменить,
+	# у движущихся будет другая модель»): красная капсула скрыта, хитбокс и
+	# HealthComponent не тронуты — логика урона/рэгдолла работает как раньше.
+	# Манекен-префаб trellis высотой 1.0 юнита → scale 2 = рост капсулы.
+	# Скрытие капсулы/глушение дубль-хитбокса — NeuroDummyProp._ready: pack() не
+	# сериализует переопределения узлов инстанс-подсцены, инлайн-правки терялись.
+	if true: # NEURO_DUMMIES
+		var dummy_prop = load("res://Graphics/Environment/Props/training_dummy/training_dummy.tscn").instantiate()
+		dummy_prop.scale = Vector3(2, 2, 2)
+		dummy_prop.set_script(load("res://Graphics/NeuroDummyProp.gd"))
+		dummy.add_child(dummy_prop)
+		dummy_prop.owner = root
+
 	var dummy_line = dummy_scene.instantiate()
 	dummy_line.position = Vector3(-10, 1, -15)
 	dummy_line.name = "DummyLine"
@@ -94,16 +107,29 @@ func _init():
 	friendly_still.set("walks", false)
 	root.add_child(friendly_still)
 	friendly_still.owner = root
+	# Тоже нейро-манекен, но с зелёным tint — заявка 17.11.26 «зелёная
+	# стоячая мишень для отхила» сохраняет читаемость цвета.
+	var fstill_prop = load("res://Graphics/Environment/Props/training_dummy/training_dummy.tscn").instantiate()
+	fstill_prop.scale = Vector3(2, 2, 2)
+	fstill_prop.set_script(load("res://Graphics/NeuroDummyProp.gd"))
+	fstill_prop.set("tint", Color(0.6, 1.0, 0.6))
+	friendly_still.add_child(fstill_prop)
+	fstill_prop.owner = root
 
 	var prop_paths = {
 		"Boulder": { "path": "res://Graphics/Environment/Props/boulder_01/boulder_01.tscn", "pos": Vector3(5, 0, -3), "scale": Vector3(1, 1, 1) },
-		"RockMoss": { "path": "res://Graphics/Environment/Props/rock_moss_set_01/rock_moss_set_01.tscn", "pos": Vector3(-5, 0, -3), "scale": Vector3(0.8, 0.8, 0.8) }
+		"RockMoss": { "path": "res://Graphics/Environment/Props/rock_moss_set_01/rock_moss_set_01.tscn", "pos": Vector3(-5, 0, -3), "scale": Vector3(0.8, 0.8, 0.8) },
+		# Стол зачарований (Q37): у непись-телепортера на углу карты (верб. юзера
+		# 19.11.26 «недалеко от синей капсулы на углу, не в середине»). Scale 1.7.
+		"EnchantTable": { "path": "res://Graphics/Environment/Props/enchant_table/enchant_table.tscn", "pos": Vector3(35.5, 0, 35.5), "scale": Vector3(1.7, 1.7, 1.7), "rot_y": -45.0 }
 	}
 	for p_name in prop_paths:
 		var p = prop_paths[p_name]
 		var inst = load(p.path).instantiate()
 		inst.position = p.pos
 		inst.scale = p.scale
+		if p.has("rot_y"):
+			inst.rotation_degrees.y = p.rot_y
 		# HLOD-фейк (демо 3d/visibility_ranges): апликатор на инстанс — pack()
 		# не сериализует настройки вложенных узлов префаба, а префабы камней
 		# одобрены юзером (не перегенерируем). Диапазоны ставит _ready скрипта.
@@ -153,6 +179,44 @@ func _init():
 		b.position = Vector3(cos(ang) * 12.0, 0.2, sin(ang) * 12.0)
 		root.add_child(b)
 		b.owner = root
+
+	# --- Q22 слоты сравнения деревьев (юзер 19.11.26: «поставишь рядом
+	# деревья на мейн карте и я сравню. начнем с процедурного атласа»).
+	# A = префаб карточек по процедурному атласу хвои (14.4 м); рядом конус
+	# старого метода ТОЙ ЖЕ высоты — честное сравнение при равном размере.
+	# Блок атомарный: Q37-агент параллельно правит этот файл, его блоки
+	# не тронуты; удаляется целиком одним движением.
+	var q22_root := Node3D.new()
+	q22_root.name = "Q22TreeCompare"
+	q22_root.position = Vector3(-5, 0, -9)
+	root.add_child(q22_root)
+	var tree_a = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v2_foliage.tscn").instantiate()
+	tree_a.name = "TreeA_AtlasCards"
+	q22_root.add_child(tree_a)
+	var cone := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.0
+	cm.bottom_radius = 2.16
+	cm.height = 14.4
+	cm.radial_segments = 24
+	var cmat := StandardMaterial3D.new()
+	cmat.albedo_color = Color(0.08, 0.5, 0.08)
+	cm.material = cmat
+	cone.mesh = cm
+	cone.name = "TreeA_ReferenceCone"
+	cone.position = Vector3(3.5, 7.2, 0)  # конус центрируется по высоте
+	q22_root.add_child(cone)
+	for lbl_i in 2:
+		var lbl := Label3D.new()
+		lbl.text = "A: процедурный атлас (карточки)" if lbl_i == 0 else "Конус (старый метод)"
+		lbl.font_size = 220
+		lbl.pixel_size = 0.01
+		lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lbl.position = Vector3(0 if lbl_i == 0 else 3.5, 16.2, 0)
+		q22_root.add_child(lbl)
+	for n in [tree_a, cone, q22_root.get_child(2), q22_root.get_child(3)]:
+		n.owner = root
+	q22_root.owner = root
 
 	var packed = PackedScene.new()
 	packed.pack(root)
