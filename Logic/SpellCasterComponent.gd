@@ -164,10 +164,17 @@ func _aim_context(player: Node, skill_id: String, skill, hand: String) -> Dictio
 			valid_target = true
 		elif target_node:
 			var is_target_friendly = target_node.get("is_friendly") if "is_friendly" in target_node else false
+			# Дружественность ОТНОСИТЕЛЬНА к кастеру: enemy-скилл не бьёт только
+			# «своих» (и кастер friendly, и цель friendly). Регресс Q35 (19.11.26,
+			# репорт юзера «боты меня не трогают, только друг друга»): после
+			# добавления is_friendly ИГРОКУ (сердечки) боты и мобы ада теряли
+			# валидацию enemy-цели в игроке — casts в игрока молча отменялись.
+			var caster_friendly: bool = player.get("is_friendly") == true
 
 			if skill.target_type == "friendly" and is_target_friendly and target_node.has_method("heal"):
 				valid_target = true
-			elif skill.target_type == "enemy" and not is_target_friendly and target_node.has_method("take_damage"):
+			elif skill.target_type == "enemy" and target_node.has_method("take_damage") \
+					and not (caster_friendly and is_target_friendly):
 				valid_target = true
 
 		if not valid_target:

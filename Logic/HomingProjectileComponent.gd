@@ -157,7 +157,19 @@ func _on_body_entered(body: Node):
         return
 
     if body.has_method("take_damage"):
-        body.take_damage(damage, current_velocity)
+        # Сигнатуры take_damage разнятся: PlayerController — (amount),
+        # HealthComponent/HellEnemyBase — (amount, impulse_dir). Вызываем
+        # по фактическому числу аргументов метода (иначе молния бота в
+        # игрока = SCRIPT ERROR и урон не применяется).
+        var _td_args: int = 1
+        for m in body.get_method_list():
+            if m.name == "take_damage":
+                _td_args = m.args.size()
+                break
+        if _td_args >= 2:
+            body.take_damage(damage, current_velocity)
+        else:
+            body.take_damage(damage)
 
     # Электрический прожог (аним. декаль 4.8): мигающие дуги -> угасание.
     # Спавн ДО release — декаль живёт в current_scene независимо от пула.
