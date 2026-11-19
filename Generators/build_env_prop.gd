@@ -14,6 +14,7 @@ func _init():
 
 	var candidates = [
 		prop_dir + prop_name + "_v2_baked.gltf",
+		prop_dir + prop_name + "_baked.gltf", # выход optimize_triangles.py v2 (нейро-пропы)
 		prop_dir + prop_name + "_4k_baked.gltf",
 		prop_dir + prop_name + "_4k_optimized.gltf",
 		prop_dir + prop_name + ".gltf",
@@ -24,6 +25,20 @@ func _init():
 		if FileAccess.file_exists(c):
 			raw_gltf = c
 			break
+
+	if raw_gltf == "":
+		# Q22: проп в ЧУЖОЙ папке (ель-v2 живёт в pine_tree_01/ — кора и
+		# атлас хвои рядом, изображения gltf резолвятся относительно gltf).
+		# Сканируем Props/*/ на <name>.gltf и берём ту папку как prop_dir.
+		var props_root := "res://Graphics/Environment/Props/"
+		var da := DirAccess.open(props_root)
+		if da:
+			for d in da.get_directories():
+				var c := props_root.path_join(d.path_join(prop_name + ".gltf"))
+				if FileAccess.file_exists(c):
+					prop_dir = props_root.path_join(d) + "/"
+					raw_gltf = c
+					break
 
 	if raw_gltf == "":
 		print("ERROR: No glTF found for '%s' in %s" % [prop_name, prop_dir])
@@ -49,6 +64,7 @@ func _init():
 		replace_textures_in_state(state)
 		print("  Материал: legacy-путь (замена текстур по URI)")
 
+	_ensure_foliage_materials(state)
 	build_prop_scene(scene_root)
 	print("Done! Prop '%s' ready in %s" % [prop_name, prop_dir])
 	quit()
@@ -192,6 +208,31 @@ func replace_tex_in_material(mat: BaseMaterial3D, old_tex: Texture2D, new_tex: T
 		var current = mat.get(slot) as Texture2D
 		if current == old_tex:
 			mat.set(slot, new_tex)
+
+
+## Foliage-поверхности (Q22, метод A «процедурный атлас»): gltf alphaMode
+## MASK → ALPHA_SCISSOR + cull DISABLED. Godot-импортёр обычно сам мапит
+## MASK/doubleSided; пасс-страховка по JSON — на случай дрейфа импортёра
+## (трогает ТОЛЬКО transparency/cull/metallic — v2-ORM-флоу не ломает).
+func _ensure_foliage_materials(state: GLTFState) -> void:
+	var json_text = FileAccess.get_file_as_string(raw_gltf)
+	var gltf_data = JSON.parse_string(json_text)
+	if gltf_data == null:
+		return
+	var mats = gltf_data.get("materials", [])
+	var state_mats = state.get_materials()
+	for i in range(mini(mats.size(), state_mats.size())):
+		if str(mats[i].get("alphaMode", "")) != "MASK":
+			continue
+		var m = state_mats[i] as BaseMaterial3D
+		if m == null:
+			continue
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		m.alpha_scissor_threshold = float(mats[i].get("alphaCutoff", 0.45))
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		m.metallic = 0.0
+		print("  FOLIAGE: %s → scissor %.2f, cull off"
+			% [m.resource_name, m.alpha_scissor_threshold])
 
 
 func build_prop_scene(model_root: Node):
