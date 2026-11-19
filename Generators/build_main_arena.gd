@@ -121,7 +121,11 @@ func _init():
 		"RockMoss": { "path": "res://Graphics/Environment/Props/rock_moss_set_01/rock_moss_set_01.tscn", "pos": Vector3(-5, 0, -3), "scale": Vector3(0.8, 0.8, 0.8) },
 		# Стол зачарований (Q37): у непись-телепортера на углу карты (верб. юзера
 		# 19.11.26 «недалеко от синей капсулы на углу, не в середине»). Scale 1.7.
-		"EnchantTable": { "path": "res://Graphics/Environment/Props/enchant_table/enchant_table.tscn", "pos": Vector3(35.5, 0, 35.5), "scale": Vector3(1.7, 1.7, 1.7), "rot_y": -45.0 }
+		"EnchantTable": { "path": "res://Graphics/Environment/Props/enchant_table/enchant_table.tscn", "pos": Vector3(35.5, 0, 35.5), "scale": Vector3(1.7, 1.7, 1.7), "rot_y": -45.0 },
+		# Гриб-батут (Q31, PRP одобрен 20.11.26): CapStatic держит игрока, шейдерный
+		# промин шляпки, подброс по глубине посадки. no_hlod: корень = компонент
+		# MushroomBounce.gd — скрипт-оверрайд PropHLOD его бы стёр.
+		"MushroomBounce": { "path": "res://Graphics/Environment/Props/mushroom_bounce/mushroom_bounce.tscn", "pos": Vector3(12, 0, -12), "scale": Vector3(1, 1, 1), "no_hlod": true }
 	}
 	for p_name in prop_paths:
 		var p = prop_paths[p_name]
@@ -133,7 +137,10 @@ func _init():
 		# HLOD-фейк (демо 3d/visibility_ranges): апликатор на инстанс — pack()
 		# не сериализует настройки вложенных узлов префаба, а префабы камней
 		# одобрены юзером (не перегенерируем). Диапазоны ставит _ready скрипта.
-		inst.set_script(load("res://Graphics/PropHLOD.gd"))
+		# no_hlod: у инстанса свой корневой скрипт-компонент (гриб Q31) —
+		# set_script его стёр бы.
+		if not p.has("no_hlod"):
+			inst.set_script(load("res://Graphics/PropHLOD.gd"))
 		root.add_child(inst)
 		inst.owner = root
 		# Кузница скиллов (Q36): зона «Z — Кузница скиллов» у стола зачарований.
