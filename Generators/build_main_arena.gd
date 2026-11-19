@@ -136,6 +136,14 @@ func _init():
 		inst.set_script(load("res://Graphics/PropHLOD.gd"))
 		root.add_child(inst)
 		inst.owner = root
+		# Кузница скиллов (Q36): зона «Z — Кузница скиллов» у стола зачарований.
+		# Компонент ребёнком инстанса с owner (паттерн NeuroDummyProp: pack()
+		# сериализует только owned-узлы); окно — автолоад /root/SkillForgeWindow.
+		if p_name == "EnchantTable":
+			var forge_zone = load("res://Logic/SkillForge.gd").new()
+			forge_zone.name = "SkillForge"
+			inst.add_child(forge_zone)
+			forge_zone.owner = root
 		print(p_name + " placed at " + str(p.pos))
 
 	# Желе-монстр (QUEUE Q6 → Q25 → v3 по вердикту юзера «хотдог-мешок»):
@@ -180,10 +188,9 @@ func _init():
 		root.add_child(b)
 		b.owner = root
 
-	# --- Q22 слоты сравнения деревьев (юзер 19.11.26: «поставишь рядом
-	# деревья на мейн карте и я сравню. начнем с процедурного атласа»).
-	# A = префаб карточек по процедурному атласу хвои (14.4 м); рядом конус
-	# старого метода ТОЙ ЖЕ высоты — честное сравнение при равном размере.
+	# --- Q22 слот ели метода A (процедурный атлас) у спавна. Вердикт юзера
+	# 19.11.26: «выглядит неплохо, но возможно можно будет лучше» (методы
+	# B/C — в QUEUE); «Конус (старый метод)» удалён («это говно»).
 	# Блок атомарный: Q37-агент параллельно правит этот файл, его блоки
 	# не тронуты; удаляется целиком одним движением.
 	var q22_root := Node3D.new()
@@ -193,28 +200,14 @@ func _init():
 	var tree_a = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v2_foliage.tscn").instantiate()
 	tree_a.name = "TreeA_AtlasCards"
 	q22_root.add_child(tree_a)
-	var cone := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = 0.0
-	cm.bottom_radius = 2.16
-	cm.height = 14.4
-	cm.radial_segments = 24
-	var cmat := StandardMaterial3D.new()
-	cmat.albedo_color = Color(0.08, 0.5, 0.08)
-	cm.material = cmat
-	cone.mesh = cm
-	cone.name = "TreeA_ReferenceCone"
-	cone.position = Vector3(3.5, 7.2, 0)  # конус центрируется по высоте
-	q22_root.add_child(cone)
-	for lbl_i in 2:
-		var lbl := Label3D.new()
-		lbl.text = "A: процедурный атлас (карточки)" if lbl_i == 0 else "Конус (старый метод)"
-		lbl.font_size = 220
-		lbl.pixel_size = 0.01
-		lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		lbl.position = Vector3(0 if lbl_i == 0 else 3.5, 16.2, 0)
-		q22_root.add_child(lbl)
-	for n in [tree_a, cone, q22_root.get_child(2), q22_root.get_child(3)]:
+	var lbl := Label3D.new()
+	lbl.text = "A: процедурный атлас (карточки)"
+	lbl.font_size = 220
+	lbl.pixel_size = 0.01
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.position = Vector3(0, 16.2, 0)
+	q22_root.add_child(lbl)
+	for n in [tree_a, lbl]:
 		n.owner = root
 	q22_root.owner = root
 
