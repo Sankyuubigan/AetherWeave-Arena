@@ -167,26 +167,9 @@ func _init():
 	root.add_child(npc)
 	npc.owner = root
 
-	# FFA-боты (QUEUE Q10): 3 бота кольцом r=12 — кастуют скиллы через
-	# SpellCasterComponent, таргет = ближайший живой (игрок или другой бот).
-	# Скины как у врагов ада (Demon/Ganfaul); без сцены — капсульный фолбэк.
-	var bot_skin_paths := [
-		"res://Scenes/enemy_Demon_T_Wiezzorek.tscn",
-		"res://Scenes/enemy_Ganfaul_M_Aure.tscn",
-		"res://Scenes/enemy_Demon_T_Wiezzorek.tscn",
-	]
-	var bot_script := preload("res://Logic/Enemies/BotEnemy.gd")
-	for i in bot_skin_paths.size():
-		var skin: PackedScene = null
-		if ResourceLoader.exists(bot_skin_paths[i]):
-			skin = load(bot_skin_paths[i])
-		var b = skin.instantiate() if skin else bot_script.new()
-		b.set_script(bot_script)
-		var ang := TAU * i / bot_skin_paths.size() + 0.6
-		b.name = "FFABot_%d" % i
-		b.position = Vector3(cos(ang) * 12.0, 0.2, sin(ang) * 12.0)
-		root.add_child(b)
-		b.owner = root
+	# FFA-боты с мейн карты УДАЛЕНЫ (Q38, верб. юзера 19.11.26: «убери с мейн
+	# карты их. они не нужны в мейн мапе») — переехали в АД как элитные боты
+	# Whiteclown N Hallin (Logic/Enemies/EliteBotEnemy.gd, спавн в HellArena).
 
 	# --- Q22 слот ели метода A (процедурный атлас) у спавна. Вердикт юзера
 	# 19.11.26: «выглядит неплохо, но возможно можно будет лучше» (методы

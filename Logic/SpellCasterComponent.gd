@@ -14,6 +14,11 @@ const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
 ## FFA-боты (Q10) глушат полоску каста — она игроковая (CanvasLayer поверх HUD).
 @export var show_cast_bar: bool = true
 
+## Множитель урона кастуемых скиллов (Q38 элитные боты ада): прокидывается в
+## context (_aim_context) → Spawn*ProjectileEffect умножает damage компонента
+## снаряда. Игрок — 1.0; элита ставит 2.5 (урон «повышенный» — заказ юзера).
+@export var damage_mult: float = 1.0
+
 var _channeling := false
 var _alt_left := false  # чередование рук для alternate_hands-скиллов
 var _bar_layer: CanvasLayer
@@ -189,6 +194,7 @@ func _aim_context(player: Node, skill_id: String, skill, hand: String) -> Dictio
 		"forward_dir": forward,
 		"cast_origin": _hand_pos(player, hand),
 		"hand": hand,  # для отложенного спавна из живой кисти (spawn_delay)
+		"damage_mult": damage_mult,  # элитные боты ада ×2.5 (Q38)
 	}
 
 ## Окно IK-доводки: инста — длина UB-клипа; канал — cast_time + выброс.

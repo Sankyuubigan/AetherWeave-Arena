@@ -49,6 +49,15 @@ func apply(caster: Node, context: Dictionary) -> void:
 
     var proj = ProjectilePool.acquire(projectile_scene, parent)
 
+    # Кастер-мета (Q38): снаряд не бьёт КАСТЕРА (ProjectileComponent фильтрует
+    # по meta вместо старого body.name == "Player" — боты кастуют fireball В
+    # игрока). set каждый каст: пул шарит tscn между скиллами/кастерами.
+    proj.set_meta("cast_caster", caster)
+    # damage_mult (Q38 элита): урон снаряда × множителю кастера.
+    var dmg_mult := float(context.get("damage_mult", 1.0))
+    if dmg_mult != 1.0 and "damage" in proj:
+        proj.damage = int(proj.damage * dmg_mult)
+
     var origin: Vector3 = caster.global_position + Vector3(0, offset_y, 0)
     if spawn_from_hand and context.has("cast_origin"):
         origin = context["cast_origin"]

@@ -6,7 +6,9 @@ const DecalFrames = preload("res://Graphics/DecalFrames.gd")
 const AnimatedDecalComponent = preload("res://Graphics/AnimatedDecalComponent.gd")
 
 @export var speed: float = 6.0
-@export var damage: int = 35
+## База урона для сброса в пуле (Q38): элитный ×2.5 не «заражает» пул.
+const BASE_DAMAGE := 35
+@export var damage: int = BASE_DAMAGE
 
 ## Q34 (юзер 19.11.26): ретаргет мёртвой цели — ближайшая живая цель в этом
 ## радиусе от снаряда; никого — полёт дальше по инерции (не висим над трупом).
@@ -189,6 +191,7 @@ func _on_body_entered(body: Node):
 
 func pooled_reset():
     # Полный сброс полёта: _ready при переиспользовании не вызывается.
+    damage = BASE_DAMAGE  # Q38: сброс множителя элиты при возврате в пул
     target = null
     caster = null
     current_velocity = Vector3.ZERO

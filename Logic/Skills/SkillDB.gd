@@ -3,6 +3,65 @@ extends RefCounted
 static var _skills: Dictionary = {}
 static var _initialized: bool = false
 
+# Кузница скиллов (Q36): персист пользовательских скиллов (user://custom_skills.json).
+const UserSkillDBScript := preload("res://Logic/Skills/UserSkillDB.gd")
+
+static func register(id: String, skill: Resource) -> bool:
+    # Единственная легальная точка входа пользовательских скиллов в реестр.
+    # Префикс user_ обязателен; конфликт id — отказ, встроенные не перетираются.
+    if skill == null:
+        _log("register: skill null — отклонён (%s)" % id)
+        return false
+    if not id.begins_with("user_"):
+        _log("register: id без префикса user_ отклонён: %s" % id)
+        return false
+    if _skills.has(id):
+        _log("register: конфликт id, встроенный не перетирается: %s" % id)
+        return false
+    _skills[id] = skill
+    _log("register: зарегистрирован %s" % id)
+    return true
+
+
+static func replace(id: String, skill: Resource) -> bool:
+    # Перезапись ПОЛЬЗОВАТЕЛЬСКОГО скилла (правка из Кузницы, Q36):
+    # префикс user_ обязателен, встроенные не трогаются.
+    if skill == null:
+        _log("replace: skill null — отклонён (%s)" % id)
+        return false
+    if not id.begins_with("user_"):
+        _log("replace: id без префикса user_ отклонён: %s" % id)
+        return false
+    if not _skills.has(id):
+        _log("replace: скилла нет в реестре — используй register (%s)" % id)
+        return false
+    _skills[id] = skill
+    _log("replace: перезаписан %s" % id)
+    return true
+
+
+static func unregister(id: String) -> bool:
+    # Удаление пользовательского скилла из реестра (Кузница Q36).
+    if not id.begins_with("user_"):
+        _log("unregister: id без префикса user_ отклонён: %s" % id)
+        return false
+    if not _skills.has(id):
+        return false
+    _skills.erase(id)
+    _log("unregister: удалён %s" % id)
+    return true
+
+
+static func _log(msg: String) -> void:
+    # Консоль + лог в Logger-автолоад (из статики автолоад-имя резолвится
+    # в КЛАСС скрипта, а не в инстанс — инстанс берём через дерево сцен).
+    print("SkillDB: %s" % msg)
+    var ml := Engine.get_main_loop()
+    if ml is SceneTree:
+        var lg = (ml as SceneTree).root.get_node_or_null("/root/Logger")
+        if lg != null:
+            lg.log_message("SkillDB: %s" % msg)
+
 static func get_skills() -> Dictionary:
     if _initialized:
         return _skills
@@ -262,4 +321,7 @@ static func get_skills() -> Dictionary:
     ptl.effects.append(pts)
     _skills["portals"] = ptl
 
+    # Кузница скиллов (Q36): пользовательские скиллы вливаются в реестр в конце
+    # ленивой инициализации — магазин/ActionBar/каст/персист работают по id сами.
+    UserSkillDBScript.load_all(_skills)
     return _skills

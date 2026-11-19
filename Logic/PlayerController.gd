@@ -227,6 +227,9 @@ func _gui_blocks_capture() -> bool:
     var ui = get_node_or_null("/root/SettingsMenu")
     if ui and ui.get("is_open"):
         return true
+    var forge = get_node_or_null("/root/SkillForgeWindow")
+    if forge and forge.get("is_open"):
+        return true
     # Окно телепортера-непися (NPCTeleporter живёт в сцене, не autoload):
     # группа-флаг ставится/снимается в _open_dialog/_close_dialog.
     if get_tree().get_first_node_in_group("npc_dialog_open"):

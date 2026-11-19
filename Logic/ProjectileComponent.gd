@@ -5,6 +5,11 @@ const DecalFrames = preload("res://Graphics/DecalFrames.gd")
 const AnimatedDecalComponent = preload("res://Graphics/AnimatedDecalComponent.gd")
 
 @export var speed: float = 20.0
+## Урон снаряда — ПОЛЕ (Q38 элитные боты ада): SpawnProjectileEffect умножает
+## на context.damage_mult (элита ×2.5). Раньше константа 25 в take_damage.
+## BASE_DAMAGE: сброс в pooled_reset — снаряд элиты (62) не «заразит» пул.
+const BASE_DAMAGE := 25
+@export var damage: int = BASE_DAMAGE
 var direction: Vector3 = Vector3.FORWARD
 
 func set_direction(dir: Vector3):
@@ -17,13 +22,27 @@ func _physics_process(delta):
     global_position += direction * speed * delta
 
 func _on_body_entered(body: Node):
-    if body.name == "Player":
+    # Самоподрыв выключен ПО КАСТЕРУ (meta cast_caster от SpawnProjectileEffect,
+    # Q38): старый фильтр body.name == "Player" делал fireball ботов вообще
+    # безвредным для игрока. Кастер — не обязательно Player (боты/элита тоже
+    # кастуют); пул-безопасный set/erase как у impact_sfx.
+    if has_meta("cast_caster") and body == get_meta("cast_caster"):
         return
 
-    # ИСПРАВЛЕНИЕ: Так как HealthComponent прикреплен прямо на корень Манекена,
-    # body и является носителем функции take_damage
+    # Сигнатуры take_damage разнятся: PlayerController — (amount),
+    # HealthComponent/HellEnemyBase — (amount, impulse_dir). По фактическому
+    # числу аргументов (регресс 8a41311: fireball бота в игрока = SCRIPT ERROR,
+    # урон не применялся).
     if body.has_method("take_damage"):
-        body.take_damage(25, direction)
+        var _td_args: int = 1
+        for m in body.get_method_list():
+            if m.name == "take_damage":
+                _td_args = m.args.size()
+                break
+        if _td_args >= 2:
+            body.take_damage(damage, direction)
+        else:
+            body.take_damage(damage)
 
     # Пятно взрыва на поверхности (аним. декаль 4.8): спавн ДО release —
     # узел ещё в дереве, декаль живёт в current_scene независимо от пула.
@@ -78,6 +97,9 @@ func _spawn_scorch():
 
 func pooled_reset():
     direction = Vector3.FORWARD
+    # Сброс урона к базе (Q38): пул шарит снаряды между элитой (×2.5 → 62) и
+    # обычными кастами — без сброса damage 62 прилип бы к следующим снарядам.
+    damage = BASE_DAMAGE
     # Шлейф Trail3D при переиспользовании из пула: старая лента должна
     # исчезнуть, иначе от спавна тянется след прошлого полёта.
     var ribbon := get_node_or_null("TrailRibbon")

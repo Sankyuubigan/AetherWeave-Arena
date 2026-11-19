@@ -19,6 +19,10 @@ const NPCTeleporter = preload("res://Logic/NPCTeleporter.gd")
 ## Нет сцены скина (тесты/чистый headless) — фолбэк на красную капсулу.
 const MELEE_SKIN := "res://Scenes/enemy_Demon_T_Wiezzorek.tscn"
 const RANGED_SKIN := "res://Scenes/enemy_Ganfaul_M_Aure.tscn"
+## Элитные боты (Q38): Whiteclown N Hallin — «боссы/элитные мобы» ада
+## (заказ юзера: вражеские к игроку, урон повышенный, HP боссов, размер +).
+const ELITE_SKIN := "res://Scenes/enemy_Whiteclown_N_Hallin.tscn"
+const EliteBotEnemy = preload("res://Logic/Enemies/EliteBotEnemy.gd")
 
 var _noise: FastNoiseLite
 var _loading_layer: CanvasLayer
@@ -295,6 +299,22 @@ func _add_entities():
 		r.name = "Ranged_%d" % i
 		r.position = Vector3(rx, _height(rx, rz) + 0.2, rz)
 		add_child(r)
+
+	# Элитные боты (Q38, заказ юзера 19.11.26): Whiteclown N Hallin ×3 кольцом
+	# r=36 — «в аду они вражеские, урон повышенный, здоровье типа боссы,
+	# размером побольше». Таргет — игрок (BotEnemy._acquire_target); мобы ада
+	# на элиту не реагируют (таргетят только группу player).
+	var elite_skin: PackedScene = load(ELITE_SKIN) if ResourceLoader.exists(ELITE_SKIN) else null
+	if elite_skin == null:
+		print("Runtime: скин элиты не найден — красные капсулы (фолбэк)")
+	for i in 3:
+		var eang := TAU * i / 3.0 + 0.5
+		var ex := cos(eang) * 36.0
+		var ez := sin(eang) * 36.0
+		var e = _spawn_enemy(EliteBotEnemy, elite_skin)
+		e.name = "EliteBot_%d" % i
+		e.position = Vector3(ex, _height(ex, ez) + 0.2, ez)
+		add_child(e)
 
 ## Враг скина: сцена (CharacterBody3D + модель) получает поведенческий скрипт
 ## ДО add_child — _ready отработает уже на скиннутом теле.

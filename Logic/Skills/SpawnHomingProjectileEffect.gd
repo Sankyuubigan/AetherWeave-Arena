@@ -35,6 +35,12 @@ func apply(caster: Node, context: Dictionary) -> void:
 
     var proj = ProjectilePool.acquire(projectile_scene, parent)
 
+    # damage_mult (Q38 элита): урон молнии × множителю кастера (кастер-фильтр
+    # у гоминга свой — set_caster ниже).
+    var dmg_mult := float(context.get("damage_mult", 1.0))
+    if dmg_mult != 1.0 and "damage" in proj:
+        proj.damage = int(proj.damage * dmg_mult)
+
     var origin: Vector3 = caster.global_position + Vector3(0, offset_y, 0)
     if spawn_from_hand and context.has("cast_origin"):
         origin = context["cast_origin"]

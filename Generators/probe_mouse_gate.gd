@@ -15,6 +15,11 @@ func _init() -> void:
 		"res://Graphics/SkillMenu.gd",
 		"res://Graphics/SettingsMenu.gd",
 		"res://Logic/NPCTeleporter.gd",
+		"res://Logic/SkillForge.gd",
+		"res://Logic/Skills/SkillSerializer.gd",
+		"res://Logic/Skills/UserSkillDB.gd",
+		"res://Graphics/SkillForgeWindow.gd",
+		"res://Graphics/SkillForgeList.gd",
 	]:
 		var s := load(path) as Script
 		if s == null or not s.can_instantiate():
@@ -64,6 +69,26 @@ func _init() -> void:
 		fails += 1
 	else:
 		print("PASS: npc_dialog_open блокирует захват")
+	flag.remove_from_group("npc_dialog_open")  # не портить последующие чеки
+
+	# 6. Кузница скиллов (Q36): открытое окно блокирует захват.
+	var fw = root.get_node_or_null("SkillForgeWindow")
+	if fw == null:
+		print("FAIL: автолоад /root/SkillForgeWindow отсутствует")
+		fails += 1
+	else:
+		fw.set("is_open", true)
+		if not player.call("_gui_blocks_capture"):
+			print("FAIL: открытое окно Кузницы НЕ блокирует захват")
+			fails += 1
+		else:
+			print("PASS: открытое окно Кузницы блокирует захват")
+		fw.set("is_open", false)
+		if player.call("_gui_blocks_capture"):
+			print("FAIL: закрытое окно Кузницы блокирует захват (лишний гейт)")
+			fails += 1
+		else:
+			print("PASS: закрытое окно Кузницы не блокирует захват")
 
 	if fails == 0:
 		print("MOUSE-GATE ALL PASS")
