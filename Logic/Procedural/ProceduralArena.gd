@@ -109,7 +109,7 @@ func _add_nature():
 	trunk_mat.albedo_color = Color(0.35, 0.20, 0.08)
 	trunk_mesh.material = trunk_mat
 
-	# Камни: нейро-проп (trellis → префаб). Фолбэк — старая сфера, если ресурса нет.
+	# Камни: нейро-проп (trellis → префаб). Фолбэк — старая сфera, если ресурса нет.
 	var rock_mesh: Mesh = load("res://Graphics/Environment/Props/test_stone/test_stone_mesh_0.res")
 	if rock_mesh == null:
 		var sphere = SphereMesh.new()
@@ -120,13 +120,26 @@ func _add_nature():
 		sphere.material = rock_mat
 		rock_mesh = sphere
 
+	# Q11 (20.11.26): 5 уникальных CC0-камней (v2-пайплайн §6.5 + новый флаг
+	# --scale-to для нормализации PolyHaven-метров) — Rocks-скаттер = 6 форм
+	# вместо одного test_stone. 30 + 24×5 = те же 150 инстансов.
+	var rock_meshes: Array[Mesh] = [rock_mesh]
+	for rp in ["moon_rock_02", "moon_rock_03", "rock_07", "stone_01", "namaqualand_boulder_04"]:
+		var m: Mesh = load("res://Graphics/Environment/Props/%s/%s_mesh_0.res" % [rp, rp])
+		if m:
+			rock_meshes.append(m)
+
 	var rng = RandomNumberGenerator.new()
 
 	_add_scatter_group("Trees", tree_mesh, 200, rng, half, 0.3, 25.0)
 	# Trunks — тонкие столбики 1.5 м, их тень нечитаема → cast_shadow OFF (Шаг 5.2)
 	_add_scatter_group("Trunks", trunk_mesh, 200, rng, half, 0.3, 25.0, 0.8, 1.3, false, false)
 	# Камни: всегда масштабируем (разные размеры — вопрос юзера), диапазон шире деревьев.
-	_add_scatter_group("Rocks", rock_mesh, 150, rng, half, 0.6, 20.0, 0.5, 2.5, true)
+	# Q11: по группе на форму камня, счёт делится (30 test_stone + 24×5 новых).
+	for i in rock_meshes.size():
+		var gname := "Rocks" if i == 0 else "Rocks_%d" % (i + 1)
+		var rcnt := 30 if i == 0 else 24
+		_add_scatter_group(gname, rock_meshes[i], rcnt, rng, half, 0.6, 20.0, 0.5, 2.5, true)
 
 func _add_scatter_group(group_name: String, mesh: Mesh, count: int, rng: RandomNumberGenerator, half: float, spacing: float, camp_radius: float, scale_lo := 0.8, scale_hi := 1.3, always_scale := false, cast_shadows := true):
 	rng.seed = randi()

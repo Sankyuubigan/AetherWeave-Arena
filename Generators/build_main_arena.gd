@@ -125,7 +125,10 @@ func _init():
 		# Гриб-батут (Q31, PRP одобрен 20.11.26): CapStatic держит игрока, шейдерный
 		# промин шляпки, подброс по глубине посадки. no_hlod: корень = компонент
 		# MushroomBounce.gd — скрипт-оверрайд PropHLOD его бы стёр.
-		"MushroomBounce": { "path": "res://Graphics/Environment/Props/mushroom_bounce/mushroom_bounce.tscn", "pos": Vector3(12, 0, -12), "scale": Vector3(1, 1, 1), "no_hlod": true }
+		"MushroomBounce": { "path": "res://Graphics/Environment/Props/mushroom_bounce/mushroom_bounce.tscn", "pos": Vector3(12, 0, -12), "scale": Vector3(1, 1, 1), "no_hlod": true },
+		# Q32 мягкий грунт: дюна со следами/проминами у спавна. no_hlod: корень =
+		# компонент SoftGround.gd (стемп depth-текстуры) — PropHLOD его стёр бы.
+		"SoftGround": { "path": "res://Graphics/Environment/Props/soft_ground/soft_ground.tscn", "pos": Vector3(6, 0, -14), "scale": Vector3(1, 1, 1), "no_hlod": true }
 	}
 	for p_name in prop_paths:
 		var p = prop_paths[p_name]

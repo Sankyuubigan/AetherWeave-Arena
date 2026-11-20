@@ -44,6 +44,9 @@ FINAL_IMAGE_SIZE = 1024
 SKIP_BAKE = False
 USE_REMESH = False
 REMESH_VOXEL_SIZE = 0.035
+# Q11 (20.11.26): PolyHaven-сканы лежат в реальных метрах (moon_rock_02 = 25 см) —
+# для скаттера камень приводится к целевому габариту ДО cage/декимации/бейков.
+SCALE_TO = 0.0
 
 
 def clear_scene():
@@ -421,6 +424,23 @@ def process_model(filepath, output_dir, skip_decimate, out_name):
         print("ERROR: No mesh objects found!")
         return False
     total_before = tri_count(highpoly_objects)
+    # Q11: нормализация масштаба — max-габарит AABB -> SCALE_TO метров
+    # (uniform scale + transform_apply; ДО cage/weld/декимации, чтобы вся
+    # дальнейшая математика считала финальный размер).
+    if SCALE_TO > 0:
+        from mathutils import Vector
+        pts = [obj.matrix_world @ Vector(c) for obj in highpoly_objects for c in obj.bound_box]
+        mn = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+        mx = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+        max_dim = max(mx - mn)
+        f = SCALE_TO / max(max_dim, 1e-6)
+        print(f"SCALE-TO {SCALE_TO} м: max_dim {max_dim:.3f} -> x{f:.2f}")
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in highpoly_objects:
+            obj.scale = (obj.scale[0] * f, obj.scale[1] * f, obj.scale[2] * f)
+            obj.select_set(True)
+        bpy.context.view_layer.objects.active = highpoly_objects[0]
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     # Спец (19.11.26): cage_extrusion 0.05–0.08 для камней 1–3 м (v1: 0.03×radius
     # = 0.015–0.045 — клетка тоньше рельефа скана, лучи срезали рельеф).
     cage = min(0.08, max(0.05, 0.03 * bbox_radius(highpoly_objects)))
@@ -635,6 +655,7 @@ if __name__ == "__main__":
         return default
 
     TARGET_TRIANGLES = opt('--target', int, TARGET_TRIANGLES)
+    SCALE_TO = opt('--scale-to', float, SCALE_TO)
     out_dir = opt('--out', str, None) or os.path.dirname(os.path.abspath(input_path))
     out_name = opt('--name', str, None)
     SKIP_BAKE = '--no-bake' in args
