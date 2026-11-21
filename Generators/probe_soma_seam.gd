@@ -4,7 +4,9 @@ extends SceneTree
 ## 2) дрейф корня — размах root_positions по x/z (касты = ноги на месте).
 ## Запуск: --headless -s res://Generators/probe_soma_seam.gd
 
-const DIRS := ["cast_enter", "cast_loop", "cast_shoot", "cast_exit", "throw", "pistol_shoot"]
+const DIRS := ["cast_enter", "cast_loop", "cast_shoot", "cast_exit", "throw", "pistol_shoot",
+	# Q23: лупы/переходы локомоции — там метрики спеца (RSV/каденс/сим) осмысленны.
+	"mb_run_d", "mb_walk_test", "run_stop", "run_start"]
 const NJ := 30
 const BASE := "res://Graphics/Animations/neuro_soma"
 
@@ -42,8 +44,55 @@ func _run() -> void:
 			lo = lo.min(p)
 			hi = hi.max(p)
 		var drift := Vector3(hi.x - lo.x, 0, hi.z - lo.z)
-		print("PROBE %s: seam avg=%.1f° worst=%.1f° (joint %s) | корень размах x=%.2f z=%.2f y=%.2f" % [
-			d, rad_to_deg(sum / NJ), rad_to_deg(worst), _worst_joint(rots, frames), drift.x, drift.z, hi.y - lo.y])
+		# Q23 метрики спеца (20.11.26): Root Speed Variance <8–10% (луп ровный
+		# без «пульсации темпа»), каденс 2.5–3.0 шаг/с (>3.4 = «таракан»),
+		# Stride Symmetry <5% (чётные/нечётные минимумы высоты бёдер — лёвые/
+		# правые шаги одинаковой глубины). Лупы: Run_Test/Walk_Test/Run_Stop.
+		var dur := float(frames - 1) / 30.0
+		var spd: Array[float] = []
+		var v_mean := 0.0
+		for k in range(frames - 1):
+			var dv := Vector3(roots[(k + 1) * 3] - roots[k * 3], 0,
+				roots[(k + 1) * 3 + 2] - roots[k * 3 + 2])
+			spd.append(dv.length() * 30.0)
+			v_mean += spd[k]
+		v_mean /= maxf(1.0, spd.size())
+		var v_var := 0.0
+		for s in spd:
+			v_var += (s - v_mean) * (s - v_mean)
+		v_var = sqrt(v_var / maxf(1.0, spd.size()))
+		var rsv := (v_var / v_mean * 100.0) if v_mean > 0.1 else 0.0
+		var mins: Array[int] = []
+		for k in range(2, frames - 2):
+			var y := roots[k * 3 + 1]
+			if y < roots[(k - 1) * 3 + 1] and y <= roots[(k + 1) * 3 + 1] \
+					and y < roots[(k - 2) * 3 + 1] and y < roots[(k + 2) * 3 + 1]:
+				mins.append(k)
+		var cadence := mins.size() / maxf(0.2, dur)
+		var d_even := 0.0
+		var n_even := 0
+		var d_odd := 0.0
+		var n_odd := 0
+		for mi in range(mins.size()):
+			var k2 := mins[mi]
+			var y2 := roots[k2 * 3 + 1]
+			var base_y := (roots[(k2 - 2) * 3 + 1] + roots[(k2 + 2) * 3 + 1]) * 0.5
+			if mi % 2 == 0:
+				d_even += base_y - y2
+				n_even += 1
+			else:
+				d_odd += base_y - y2
+				n_odd += 1
+		var sym := -1.0
+		if n_even > 0 and n_odd > 0:
+			d_even /= n_even
+			d_odd /= n_odd
+			var dm := (d_even + d_odd) * 0.5
+			if dm > 1e-4:
+				sym = absf(d_even - d_odd) / dm * 100.0
+		print("PROBE %s: seam avg=%.1f° worst=%.1f° (joint %s) | корень размах x=%.2f z=%.2f y=%.2f | RSV=%.1f%% каденс=%.1f шаг/с сим=%.1f%% шагов=%d" % [
+			d, rad_to_deg(sum / NJ), rad_to_deg(worst), _worst_joint(rots, frames), drift.x, drift.z, hi.y - lo.y,
+			rsv, cadence, sym, mins.size()])
 	quit(0)
 
 func _worst_joint(rots: PackedFloat32Array, frames: int) -> String:

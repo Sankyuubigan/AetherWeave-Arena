@@ -15,7 +15,12 @@ const OVERLAY_SCRIPT := preload("res://Graphics/SpeedLinesOverlay.gd")
 
 const WING_COLOR := Color(0.45, 0.55, 1.0)
 const LIFETIME := 10.0
-const SPEED_MULT := 1.35
+# Q46 (юзер 20.11.26): скорость БАЗОВАЯ при активации; после SPRINT_RAMP секунд
+# НЕПРЕРЫВНОГО бега появляется эффект (линии+FOV) и скорость бустится —
+# «ещё быстрее чем щас» (было 1.35 сразу). Остановка = сброс рампа и буста.
+const SPEED_MULT := 1.6
+const SPRINT_RAMP := 2.5
+const SPRINT_HVEL := 2.0
 const BASE_FOV := 75.0
 const BOOST_FOV := 88.0
 const GLOW := 1.8
@@ -27,6 +32,8 @@ var _active := false
 var _life_left := 0.0
 var _flap_phase := 0.0
 var _sweep := 0.0
+var _run_time := 0.0     # накопитель непрерывного бега (Q46 рамп)
+var _boosted := false
 var _root: Node3D          # WingsRoot на GraphicsWrapper (не кость — грабля 4.8)
 var _wing_l: Node3D        # пивоты целого крыла (sweep + общий мах)
 var _wing_r: Node3D
@@ -54,7 +61,9 @@ func _ready() -> void:
 	# Корень на лопатках (модель 1.8: плечи ~1.45-1.5). Веер v9 раскрывается
 	# ВВЕРХ-НАЗАД — massa крыла над плечами, корень низко (проба v9: корень
 	# 1.95 = «рога на макушке», веер горизонтальный = линия сбоку).
-	_root.position = Vector3(0, 1.5, -0.28)
+	# Q45 (юзер 20.11.26 «крылья слишком далеко от тела»): было (0,1.5,-0.28) —
+	# плюс затемнённые корни перьев читались как фан, висящий в воздухе.
+	_root.position = Vector3(0, 1.45, -0.12)
 	_wing_l = _build_wing(1)
 	_wing_r = _build_wing(-1)
 	_root.add_child(_wing_l)
@@ -63,7 +72,7 @@ func _ready() -> void:
 	_light.light_color = WING_COLOR
 	_light.omni_range = 4.5
 	_light.light_energy = 1.3
-	_light.position = Vector3(0, 0.5, -0.3)
+	_light.position = Vector3(0, 0.5, -0.15)
 	_light.visible = false
 	_root.add_child(_light)
 	_camera = get_parent().get_node_or_null("SpringArm3D/Camera3D")
@@ -92,13 +101,13 @@ func activate(duration: float = LIFETIME) -> void:
 	if _trail_l: _trail_l.emitting = true
 	if _trail_r: _trail_r.emitting = true
 	var player := get_parent()
-	player.set("speed_mult", SPEED_MULT)
+	# Q46: при активации скорость БАЗОВАЯ (рамп буста — в _process), FOV не трогаем.
+	player.set("speed_mult", 1.0)
+	_run_time = 0.0
+	_boosted = false
 	# Полёт (Q20 v2): пока крылья активны — PlayerController держит тягу
 	# по Space в воздухе и глайд вместо свободного падения.
 	player.set("wings_fly", true)
-	if _camera:
-		_tween.parallel().tween_property(_camera, "fov", BOOST_FOV, 0.28) \
-			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 ## Деактивация: dissolve 0.4с (свечение → 0) + искры, всё остальное гасим сразу.
 func deactivate() -> void:
@@ -108,6 +117,8 @@ func deactivate() -> void:
 	var player := get_parent()
 	player.set("speed_mult", 1.0)
 	player.set("wings_fly", false)
+	_boosted = false
+	_run_time = 0.0
 	if _light: _light.visible = false
 	if _trail_l: _trail_l.emitting = false
 	if _trail_r: _trail_r.emitting = false
@@ -166,11 +177,34 @@ func _process(delta: float) -> void:
 		var fli := sin(_flap_phase - 0.55 * ti) * amp
 		(_feathers_l[i] as Node3D).rotation.z = fli * k
 		(_feathers_r[i] as Node3D).rotation.z = -fli * k
-	# Оверлей — только когда игрок реально разгоняется (как спринт Minecraft).
+	# Q46 рамп спринта: непрерывный бег копит _run_time; через SPRINT_RAMP —
+	# буст скорости + эффект (линии + FOV). Остановка — мгновенный сброс.
 	var hvel := 0.0
 	if player is CharacterBody3D:
 		hvel = Vector2(player.velocity.x, player.velocity.z).length()
-	_overlay.call("set_strength", clampf(hvel / 6.0, 0.0, 1.0))
+	if hvel >= SPRINT_HVEL:
+		_run_time += delta
+	else:
+		_run_time = 0.0
+	if _boosted and hvel < SPRINT_HVEL:
+		_boosted = false
+		player.set("speed_mult", 1.0)
+		if _camera:
+			var tw := create_tween()
+			tw.tween_property(_camera, "fov", BASE_FOV, 0.3)
+	elif not _boosted and _run_time >= SPRINT_RAMP:
+		_boosted = true
+		player.set("speed_mult", SPEED_MULT)
+		if _camera:
+			if _tween: _tween.kill()
+			_tween = create_tween()
+			_tween.tween_property(_camera, "fov", BOOST_FOV, 0.3) \
+				.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	# Оверлей ТОЛЬКО в буст-режиме: до рампа экран чистый (заказ юзера 20.11.26).
+	if _boosted:
+		_overlay.call("set_strength", clampf(hvel / 6.0, 0.0, 1.0))
+	else:
+		_overlay.call("set_strength", 0.0)
 
 ## Свечение 0..1: эмиссия материалов + альбедо-альфа (ADD-блендинг = яркость).
 ## База 0.35 (см. материал) — слоёное сложение 8 перьев не климпится в белое.
@@ -185,13 +219,15 @@ func _set_glow(g: float) -> void:
 ## ЗА СПИНУ (−Z: модель смотрит +Z — проба вскрыла, что +Z-веер торчит в
 ## лицо сквозь голову) и элевация ВВЕРХ (вертикальный раскрыл — иначе сбоку
 ## веер-в-одну-линию). Roll наклоняет плоскость ленты — ловит камеру с любых
-## ракурсов.
+## ракурсов. Q45 (юзер 20.11.26 «слишком далеко от тела»): короче (1.25–1.8,
+## было 1.5–2.2) и плотнее к спине (yaw 0.10–0.72, было 0.15–0.85) —
+## визуальная масса веера прижата к спине.
 func _feather_params(ti: float) -> Dictionary:
 	return {
-		"yaw": lerpf(0.15, 0.85, ti),
+		"yaw": lerpf(0.10, 0.72, ti),
 		"elev": lerpf(0.10, 1.05, ti),
 		"roll": lerpf(-0.35, 0.6, ti),
-		"length": lerpf(1.5, 2.2, ti),
+		"length": lerpf(1.25, 1.8, ti),
 		"width": lerpf(0.30, 0.17, ti),
 	}
 
@@ -242,8 +278,9 @@ func _feather_mesh(p: Dictionary, side: int, ti: float) -> ArrayMesh:
 			var v: Vector3 = quad[oi]
 			if side < 0:
 				v.x = -v.x
-			# Ярче к кончикам пера и у концевых перьев (HDR>1 клампится в белое).
-			var c: Color = WING_COLOR * (0.7 + 0.8 * ss[oi]) * (0.85 + 0.15 * ti)
+			# Ярче к кончикам (HDR>1 клампится в белое). Q45: корни подняты
+			# 0.7→0.95 — веер читается ПРИКРЕПЛЁННЫМ к спине, не висящим.
+			var c: Color = WING_COLOR * (0.95 + 0.6 * ss[oi]) * (0.85 + 0.15 * ti)
 			c.a = 1.0
 			st.set_color(c)
 			st.add_vertex(v)

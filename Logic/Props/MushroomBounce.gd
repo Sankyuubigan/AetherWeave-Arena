@@ -6,15 +6,15 @@ extends Node3D
 ## SoftBody3D сломана в 4.x (godot issues #93847/#108090) — сим игнорирует
 ## set_point_transform/set_point_pinned mid-run; PRP-фолбэк задействован.
 
-@export var v_ref := 12.0         # скорость посадки → 100% промина (м/с)
-@export var dent_max := 0.45      # глубина промина при 100% (м)
-@export var dent_radius := 1.3    # радиус воронки промина (м)
+@export var v_ref := 9.0          # скорость посадки → 100% промина (м/с; было 12 — репорт юзера 21.11.26 «промин почти не виден»)
+@export var dent_max := 0.7       # глубина промина при 100% (м; было 0.45 — воронка заметно глубже)
+@export var dent_radius := 1.6    # радиус воронки промина (м; было 1.3 — шире)
 @export var bounce_min_h := 1.2   # высота подброса при слабом промине (м)
 @export var bounce_max_h := 4.5   # высота подброса при 100% промине (м)
 @export var min_impact := 1.5     # ниже — не батут (просто стоять)
 @export var cooldown := 0.2       # с, против дребезга
 @export var bounce_min_y := 1.9   # центр тела выше — посадка на шляпку (не на землю рядом)
-@export var dent_release := 0.5   # с, время возврата шляпки после промина
+@export var dent_release := 0.9   # с, время возврата шляпки (было 0.5 — воронка живёт дольше, заметнее)
 
 var dent_current := 0.0           # текущая видимая глубина промина (читает гейт-проба)
 
@@ -36,6 +36,9 @@ func _ready() -> void:
 		push_error("[MUSH-BOUNCE] нет ShaderMaterial на CapVisual")
 		set_physics_process(false)
 		return
+	# Радиус воронки: ССОТ — экспорт компонента → шейдер (раньше шейдер жил
+	# на своём дефолте 1.3, экспорт никуда не писался).
+	_mat.set_shader_parameter("dent_radius", dent_radius)
 	_area.body_entered.connect(_on_body_entered)
 	_area.body_exited.connect(_on_body_exited)
 	_area.monitoring = true

@@ -3,7 +3,11 @@ extends Node3D
 ## → depth_tex шейдера (displacement детерминированный — урок Q31: точки
 ## SoftBody3D сломаны). Следы Л/П по пройденной дистанции, промин стоя;
 ## накопление min(1, old+add); 1 ImageTexture.update за тик (64 КБ — дёшево).
-## dent_scale компонента и шейдера держать синхронными (0.30).
+## dent_scale компонента и шейдера держать синхронными (0.07 — кап).
+## СИНК КОЛЛИЗИИ (фикс «висит над песком», 20.11.26): тот же стемп-гаусс
+## дублируется в точки HeightMapShape3D префаба (25×25, scale 0.5 — ССОТ
+## build_soft_ground_patch.gd) → map_data пересобирается при стемпе, персонаж
+## физически стоит на промятом песке, а не на невидимом плоском хулле.
 
 @export var patch_size := 12.0     # размер патча (м) — маппинг XZ→UV
 @export var tex_size := 256        # сторона текстуры глубины
@@ -13,10 +17,16 @@ extends Node3D
 @export var stand_sigma_px := 5.0  # радиус промина стоя (px)
 @export var foot_amp := 0.45       # глубина следа (доля dent_scale)
 @export var stand_amp := 0.22      # прибавка промина за цикл стояния (0.35 с)
+@export var dent_scale := 0.07     # макс глубина промина (м) — SSOT, шейдеру в _ready
+
+const HM_SCALE := 0.5              # scale CollisionShape3D (ССОТ = генератор)
 
 var _img: Image
 var _tex: ImageTexture
 var _mat: ShaderMaterial
+var _shape: HeightMapShape3D       # коллизия дюны (если heightmap — синк вкл)
+var _hm_base: PackedFloat32Array   # базовые высоты map_data (shape-пространство)
+var _hm_depth: PackedFloat32Array  # глубина проминов 0..1 в точках heightmap
 var _side := 1.0                   # чередование Л/П
 var _dist := 0.0                   # пройдено с последнего следа
 var _stand_t := 0.0
@@ -37,7 +47,27 @@ func _ready() -> void:
 	_img.fill(Color(0, 0, 0))
 	_tex = ImageTexture.create_from_image(_img)
 	_mat.set_shader_parameter("depth_tex", _tex)
-	print("[SOFT-GROUND] ready")
+	_mat.set_shader_parameter("dent_scale", dent_scale)
+	# Коллизия следует за проминами: у префаба HeightMapShape3D (генератор).
+	# Имя узла не гарантировано (генератор старых префабов не задавал .name) —
+	# ищем первого ребёнка CollisionShape3D у GroundBody.
+	var cs: CollisionShape3D = null
+	var gb := get_node_or_null("GroundBody")
+	if gb != null:
+		for c in gb.get_children():
+			if c is CollisionShape3D:
+				cs = c
+				break
+	if cs != null and cs.shape is HeightMapShape3D:
+		_shape = cs.shape
+		_hm_base = _shape.map_data.duplicate()
+		_hm_depth = PackedFloat32Array()
+		_hm_depth.resize(_hm_base.size())
+		print("[SOFT-GROUND] ready dent_scale=%.2f, heightmap %dx%d — промины проседают и физически" \
+				% [dent_scale, _shape.map_width, _shape.map_depth])
+	else:
+		push_warning("[SOFT-GROUND] нет HeightMapShape3D — промины только визуал (висяние над проминами)")
+		print("[SOFT-GROUND] ready dent_scale=%.2f (коллизия плоская!)" % dent_scale)
 
 func _physics_process(delta: float) -> void:
 	var player := get_tree().get_first_node_in_group("player") as CharacterBody3D
@@ -66,10 +96,18 @@ func _physics_process(delta: float) -> void:
 	if _dirty:
 		_dirty = false
 		_tex.update(_img)
+		if _shape != null:
+			# Высота точки heightmap = база − глубина промина (shape-пространство
+			# = мир / HM_SCALE). 625 точек раз в ~0.35 с — копейки (проба: 0.18 мс).
+			var md := _shape.map_data  # CoW-копия, переписывается целиком
+			for idx in range(md.size()):
+				md[idx] = _hm_base[idx] - _hm_depth[idx] * dent_scale / HM_SCALE
+			_shape.map_data = md
 
 ## Гаусс-стемп в текстуру глубины. p — локальные метры XZ (origin патча).
 ## За границей текстуры пиксели пропускаются (следы у кромки обрезаются —
-## там база 0, промин всё равно не виден).
+## там база 0, промин всё равно не виден). Тот же гаусс дублируется в точки
+## heightmap — коллизия и визуал проминаются синхронно.
 func _stamp(p: Vector2, sigma_px: float, amp: float) -> void:
 	var half := patch_size * 0.5
 	var cx := (p.x + half) / patch_size * float(tex_size)
@@ -91,6 +129,23 @@ func _stamp(p: Vector2, sigma_px: float, amp: float) -> void:
 			if nv > old:
 				_img.set_pixel(px, py, Color(nv, nv, nv))
 				_dirty = true
+	if _shape == null:
+		return
+	# Точки heightmap 25×25: точка i стоит на texel i*(tex_size)/(n−1) px.
+	var hm_n := _shape.map_width
+	var step_px := float(tex_size) / float(hm_n - 1)
+	var ci := int(round(cx / step_px))
+	var cj := int(round(cy / step_px))
+	var rad_hm := int(ceil(float(rad) / step_px)) + 1
+	for j in range(maxi(0, cj - rad_hm), mini(hm_n, cj + rad_hm + 1)):
+		for i in range(maxi(0, ci - rad_hm), mini(hm_n, ci + rad_hm + 1)):
+			var ddx := float(i) * step_px - cx
+			var ddy := float(j) * step_px - cy
+			var add := amp * exp(-(ddx * ddx + ddy * ddy) / (2.0 * s2))
+			var old := _hm_depth[j * hm_n + i]
+			var nv := minf(1.0, old + add)
+			if nv > old:
+				_hm_depth[j * hm_n + i] = nv
 
 ## Метрика для гейта: сколько пикселей текстуры промято выше порога.
 func count_dented_pixels(threshold := 0.02) -> int:

@@ -4,6 +4,9 @@ extends SceneTree
 ## трейл концевого пера, deactivate). + ФИЗИКА ПОЛЁТА: удержание Space в
 ## воздухе = тяга вверх (WINGS_LIFT), отпускание = глайд (WINGS_GLIDE),
 ## снятие крыльев = свободное падение. Паттерн test_energy_blade.
+## Q45/Q46 (юзер 20.11.26): корень крыльев ближе к спине (0,1.45,-0.12);
+## при активации скорость БАЗОВАЯ — буст 1.6 + FOV + оверлей только после
+## 2.5 с НЕПРЕРЫВНОГО бега (KEY_W), остановка = сброс.
 
 var _fails := 0
 
@@ -48,13 +51,14 @@ func _init() -> void:
 		quit(1); return
 	_ck(wings.is_active(), "wings is_active после activate")
 	_ck(wings.visible, "wings видимы")
-	_ck(player.get("speed_mult") == 1.35, "speed_mult == 1.35")
+	_ck(player.get("speed_mult") == 1.0, "Q46: при активации скорость БАЗОВАЯ (1.0)")
 	_ck(player.get("wings_fly") == true, "wings_fly == true (полёт разрешён)")
 
 	var cam = player.get_node_or_null("SpringArm3D/Camera3D")
 	_ck(cam != null, "камера игрока найдена")
 	await create_timer(0.5).timeout
-	_ck(cam and cam.fov > 82.0, "fov бустится (текущий %.1f)" % cam.fov)
+	_ck(cam and absf(cam.fov - 75.0) < 1.0,
+		"Q46: FOV не бустится при активации (%.1f)" % (cam.fov if cam else -1.0))
 
 	# WingsRoot на GraphicsWrapper (не кости — FPS-зависимая лотерея
 	# бон-базиса, пробы 02:41-02:45); позиция уровня лопаток.
@@ -64,8 +68,8 @@ func _init() -> void:
 	_ck(wroot != null and wroot.get_child_count() >= 3,
 		"WingsRoot: 2 пивота крыльев + свет (%d детей)"
 			% (wroot.get_child_count() if wroot else -1))
-	_ck(wroot != null and wroot.position.is_equal_approx(Vector3(0, 1.5, -0.28)),
-		"WingsRoot на лопатках (0,1.5,-0.28)")
+	_ck(wroot != null and wroot.position.is_equal_approx(Vector3(0, 1.45, -0.12)),
+		"Q45: WingsRoot прижат к спине (0,1.45,-0.12)")
 	var ovs = wings.get_children().filter(func(c): return c is CanvasLayer)
 	_ck(ovs.size() == 1, "SpeedLinesOverlay (CanvasLayer) на игроке")
 
@@ -115,11 +119,12 @@ func _init() -> void:
 						trail = ch
 	_ck(trail != null and trail.emitting, "трейл концевого пера emitит")
 
-	# --- ФИЗИКА ПОЛЁТА (Q20 v2): пол 24×0.5×24, верх y=0 ---
+	# --- ФИЗИКА ПОЛЁТА (Q20 v2): пол 60×0.5×60, верх y=0 (60 — чтобы 3 с бега
+	# Q46 не свалили игрока с края) ---
 	var floor_body := StaticBody3D.new()
 	var fcs := CollisionShape3D.new()
 	var fbox := BoxShape3D.new()
-	fbox.size = Vector3(24, 0.5, 24)
+	fbox.size = Vector3(60, 0.5, 60)
 	fcs.shape = fbox
 	floor_body.add_child(fcs)
 	floor_body.position = Vector3(0, -0.25, 0)
@@ -144,6 +149,25 @@ func _init() -> void:
 	_ck(vy_glide <= 0.0 and vy_glide >= -2.5,
 		"глайд: падение зажато -2.0 (vy=%.2f)" % vy_glide)
 
+	# --- Q46 РАМП СПРИНТА: эффект и буст НЕ сразу, а после 2.5 с непрерывного
+	# бега; остановка = сброс. Бег симулируем зажатием KEY_W (сырая клавиатура
+	# PlayerController — паттерн probe_q23_start). ---
+	player.global_position = Vector3(0, 0.6, 0)
+	player.velocity = Vector3.ZERO
+	_press_w(true)
+	await create_timer(0.5).timeout
+	_ck(player.get("speed_mult") == 1.0,
+		"Q46: 0.5с бега — скорость ещё базовая (%.2f)" % player.get("speed_mult"))
+	_ck(cam and cam.fov < 80.0, "Q46: 0.5с бега — FOV ещё базовый")
+	await create_timer(2.5).timeout  # суммарно ~3.0 с зажатого W
+	_ck(player.get("speed_mult") == 1.6,
+		"Q46: ~3с непрерывного бега — буст 1.6 (%.2f)" % player.get("speed_mult"))
+	_ck(cam and cam.fov > 82.0, "Q46: буст — FOV 88 (%.1f)" % cam.fov)
+	_press_w(false)
+	await create_timer(0.4).timeout
+	_ck(player.get("speed_mult") == 1.0, "Q46: остановка — буст сброшен")
+	_ck(cam and absf(cam.fov - 75.0) < 2.5, "Q46: остановка — FOV назад (%.1f)" % cam.fov)
+
 	# Свободное падение: крылья сняты → обычная гравитация. Подъём на 12 м —
 	# за 0.8с окна замера глайд-высота уже съедена, игрок у пола (vy=0 на земле).
 	player.global_position = Vector3(0, 12.0, 0)
@@ -166,6 +190,15 @@ func _press_space(pressed: bool) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = KEY_SPACE
 	ev.physical_keycode = KEY_SPACE
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+
+## Зажатие W для рамп-секции Q46 (та же headless-симуляция).
+func _press_w(pressed: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = KEY_W
+	ev.physical_keycode = KEY_W
 	ev.pressed = pressed
 	Input.parse_input_event(ev)
 	Input.flush_buffered_events()

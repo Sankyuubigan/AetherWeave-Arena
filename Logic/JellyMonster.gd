@@ -13,7 +13,9 @@ extends SoftBody3D
 ## - рест-шейп: сфера сплющена по Y (x0.88) + детерминированный шум вершин —
 ##   оседает рваной блобой, а не шаром (шум считается ПО Позиции вершины:
 ##   дубликаты на сферических швах сдвигаются одинаково — поверхность не рвётся);
-## - пин-штатив: 3 нижние точки по азимут-секторам (120°) вместо одной;
+## - v4 БЕЗ ПИНОВ (репорт юзера 21.11.26 «прибит к месту, не сдвигается»):
+##   любой пин = гвоздь к миру (переносить пины mid-run нельзя —
+##   set_point_transform сломан в 4.x), купол держит давление 1.5;
 ## - давление 1.05, дэмпинг 0.012, precision 6 — мягкая долгая дрожь;
 ## - РЕАКЦИЯ НА ИГРОКА: Area3D-фидер вокруг желе, на вход CharacterBody3D
 ##   спавнит невидимый RigidBody3D-шар-толкатель из точки игрока в желе;
@@ -29,8 +31,11 @@ extends SoftBody3D
 
 const GROUP_NAME := "jelly_monster"
 const JOLT_COOLDOWN_MS := 700
+const PUSH_STRENGTH := 14.0 # скорость толкателя при отдаче от тела (м/с)
+const PUSH_MASS := 28.0     # масса толкателя (было 9 — 40-кг софтбоди не сдвинуть)
 
 var _last_jolt_ms := -100000
+var _threat_bodies: Array = [] # CharacterBody3D внутри FeelerArea (непрерывная отдача)
 var _rng := RandomNumberGenerator.new()
 var _home := Vector3.ZERO
 # ЖИВОЙ центр/верх тела (AABB точек каждый физ-тик): узел желе уходит в
@@ -61,11 +66,6 @@ func _ready() -> void:
 		t.autostart = true
 		t.timeout.connect(_idle_poke)
 		add_child(t)
-	# Пин-юбка — deferred: точки должны быть инициализированы телом.
-	_pin_skirt.call_deferred()
-
-func _reanchor() -> void:
-	_pin_skirt()
 
 func _physics_process(_delta: float) -> void:
 	# Живой AABB тела: в headless трансформы (0,0,0) → lo==hi → скип.
@@ -94,11 +94,23 @@ func _physics_process(_delta: float) -> void:
 	var area := get_node_or_null("FeelerArea")
 	if area:
 		area.global_position = _live_center
+	# НЕПРЕРЫВНАЯ ОТДАЧА (v4): пока тело давит на желе (идёт в него или
+	# прижалось вплотную) — толкаем; кулдаун jolt_from задаёт каденс.
+	var threat: Node3D = null
+	for b in _threat_bodies:
+		if is_instance_valid(b):
+			threat = b
+			break
+	if threat != null and _want_push(threat):
+		jolt_from(threat.global_position, PUSH_STRENGTH)
 
 func _setup_physics() -> void:
-	pressure_coefficient = 1.35 # v3: купол держит форму (1.05 оседал лужей, 1.6 = «идеальный шар»)
+	pressure_coefficient = 1.35 # v4 купол как у v3; БЕЗ пин-юбки давление держит форма
 	damping_coefficient = 0.02
-	simulation_precision = 10 # жёстче соединения — меньше вяло-дрягающейся лужи (вердикт юзера)
+	simulation_precision = 18 # без пин-юбки против протекания точек сквозь статику
+	# (давление продавливает вершины при низкой precision — docsgodot
+	# «Using SoftBody3D» + issue #65588; поймано рендер-пробой: покой
+	# наполовину в полу, толчки уносили под землю)
 	collision_mask = 1 # мир + шары-толкатели (layer 1)
 	total_mass = 40.0
 
@@ -148,28 +160,9 @@ static func _noise3(v: Vector3) -> Vector3:
 static func _frac(x: float) -> float:
 	return x - floorf(x)
 
-## Пин-ЮБКА (v3, диагноз «хотдог-гамак» от юзера): 3 пина при провисшем теле
-## = мешок, растянутый между опорами. Пиним ВСЕ точки нижних ~18% высоты —
-## тело стоит куполом на «подоле», верх живо дрожит от толчков. Headless-
-## грабля: трансформы (0,0,0) → span 0 → пинится всё; для теста сойдёт.
-func _pin_skirt() -> void:
-	var count := get_point_count()
-	if count == 0:
-		return
-	var lo_y := 1e9
-	var hi_y := -1e9
-	for i in count:
-		var y := get_point_transform(i).y
-		lo_y = minf(lo_y, y)
-		hi_y = maxf(hi_y, y)
-	var threshold := lo_y + (hi_y - lo_y) * 0.18
-	for i in count:
-		if get_point_transform(i).y <= threshold:
-			set_point_pinned(i, true)
-
 ## Area3D-фидер: игрок (CharacterBody3D) вошёл в зону — толкаем. top_level +
 ## мировая позиция: трансформ узла желе физ-синк сбрасывает в identity, дети
-## узла уезжали бы в origin.
+## узла уезжали бы в origin. Выход из зоны снимает с непрерывной отдачи.
 func _add_feeler_area() -> void:
 	var area := Area3D.new()
 	area.name = "FeelerArea"
@@ -185,7 +178,26 @@ func _add_feeler_area() -> void:
 
 func _on_feeler_body(body: Node3D) -> void:
 	if body is CharacterBody3D:
-		jolt_from(body.global_position, 9.0)
+		if not _threat_bodies.has(body):
+			_threat_bodies.append(body)
+		jolt_from(body.global_position, PUSH_STRENGTH)
+
+func _on_feeler_body_exit(body: Node3D) -> void:
+	_threat_bodies.erase(body)
+
+## Давит ли тело на желе прямо сейчас: идёт В него (скорость в его сторону)
+## или уже прижалось вплотную (внутри 0.9 радиуса). Стоящий/идущий мимо вдалеке
+## — нет: постоявшего рядом желе без причины не пинает.
+func _want_push(threat: Node3D) -> bool:
+	var base := _live_center if _live_center != Vector3.ZERO else _home
+	var to_jelly := base - threat.global_position
+	to_jelly.y = 0.0
+	if to_jelly.length() < radius * 0.9:
+		return true
+	if to_jelly.length_squared() < 0.0001:
+		return true
+	return threat.velocity.dot(to_jelly.normalized()) > 0.5 \
+			and threat.velocity.length() > 0.8
 
 ## Толчок из точки from_pos (вход игрока в зону или взрыв снаряда рядом):
 ## невидимый RigidBody3D-шар летит в желе и физически пушит точки. Взрывы
@@ -204,7 +216,7 @@ func jolt_from(from_pos: Vector3, strength := 9.0) -> void:
 	var dir := to_center.normalized()
 	# Шар стартует в 1.3 м от источника в сторону желе (вне капсулы игрока),
 	# на высоте центра масс — влетает в бок софтбоди.
-	_make_pusher(from_pos + dir * 1.3 + Vector3(0, radius * 0.25, 0), dir * strength, 9.0)
+	_make_pusher(from_pos + dir * 1.3 + Vector3(0, radius * 0.25, 0), dir * strength, PUSH_MASS)
 
 ## Фоновая дрожь: маленький шар тыкает случайный бок — желе постоянно
 ## подрагивает, даже когда никто не рядом (вердикт «он не желе»).

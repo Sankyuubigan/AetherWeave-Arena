@@ -11,6 +11,7 @@ const SIZE := 12.0      # размер патча (м)
 const SEG := 96         # сегментов на сторону
 const BASE_H := 0.32    # высота дюны в центре (м)
 const FADE_IN := 0.75   # доля половины размера, внутри которой полная высота
+const HM_SCALE := 0.5   # uniform scale CollisionShape3D: ячейка heightmap 1 м → 0.5 м
 
 func _init() -> void:
 	DirAccess.make_dir_recursive_absolute(OUT_DIR)
@@ -72,13 +73,33 @@ func _build_prefab(mesh: ArrayMesh) -> void:
 	mi.material_override = smat
 	root.add_child(mi)
 
-	# Convex от базового меша (§6.5): trimesh+CharacterBody = депенетрация,
-	# convex дёшев; холм выпуклый, низ плоский — hull честен.
+	# Коллизия: HeightMapShape3D 25×25 с uniform scale 0.5 → ячейка 0.5 м,
+	# покрытие ровно 12×12 м (probe_hm_shape.gd: скейл применяется ко всем
+	# осям; перф стоя 0.08 мс / бег 0.18 мс — быстрее convex-хулла). Высоты =
+	# аналитическое _h: юбка коллизии совпадает с мешем (хулл 3 яруса давал
+	# до 4-5 см на склоне). ГЛАВНОЕ (баг 20.11.26 «висит над песком»):
+	# SoftGround при стемпах мутирует map_data — коллизия СЛЕДУЕТ за
+	# проминами/следами, которых раньше не было вовсе: визуал проминался
+	# шейдером на 7 см, а convex-хулл оставался плоским → персонаж стоял
+	# на невидимом плато над промятым песком.
 	var body := StaticBody3D.new()
 	body.name = "GroundBody"
 	root.add_child(body)
 	var cs := CollisionShape3D.new()
-	cs.shape = mesh.create_convex_shape(true, true)
+	cs.name = "CollisionShape3D"  # явное имя: .new() даёт автоген @…@ — не искать по пути
+	var hm := HeightMapShape3D.new()
+	hm.map_width = 25
+	hm.map_depth = 25
+	var data := PackedFloat32Array()
+	data.resize(25 * 25)
+	for j in range(25):
+		for i in range(25):
+			# точки x = i - 12 (ячейка 1 м до скейла), мир: (i-12)*0.5 м;
+			# высоты в СКЕЙЛ-пространстве (мир = shape × 0.5) → компенсация /0.5
+			data[j * 25 + i] = _h((i - 12) * 0.5, (j - 12) * 0.5) / HM_SCALE
+	hm.map_data = data
+	cs.shape = hm
+	cs.scale = Vector3(HM_SCALE, HM_SCALE, HM_SCALE)
 	body.add_child(cs)
 
 	for child in root.get_children():

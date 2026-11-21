@@ -83,6 +83,39 @@ func _run():
 						if row.get_global_rect().size.y <= 0.0:
 							errors.append("строка пресета с нулевой высотой — список невидим (лэйаут!)")
 
+					# Q42: 💾-пересохранение с подтверждением. Меняем состояние
+					# (покупаем второй навык, второй слот), дёргаем _on_save —
+					# диалог должен открыться, запись НЕ меняться; «Да» —
+					# запись перезаписана, имя сохранено.
+					var second_id: String = db.keys()[1] if db.keys().size() > 1 else first_id
+					menu.buy_skill(second_id, db[second_id].price)
+					if not player.unlocked_skills.get(second_id, false):
+						errors.append("тест некорректен: второй навык не купился (SP?)")
+					player.get_node("ActionBar").slots[1].set_skill(second_id)
+					var skills_before: int = presets[-1].get("skills", []).size()
+					panel._on_save(presets.size() - 1)
+					if panel._confirm == null or not panel._confirm.visible:
+						errors.append("💾: подтверждение не открылось")
+					if panel._pending_save != presets.size() - 1:
+						errors.append("💾: pending index не выставлен")
+					if panel._load_file()[-1].get("skills", []).size() != skills_before:
+						errors.append("💾: запись изменилась ДО подтверждения (должна ждать «да»)")
+					panel._on_confirm_save()
+					var p2: Dictionary = panel._load_file()[-1]
+					if p2.get("name") != "Тест Пресет":
+						errors.append("💾: имя пресета затёрлось: " + str(p2.get("name")))
+					if not second_id in p2.get("skills", []):
+						errors.append("💾: новое состояние не пересохранилось")
+					if p2.get("bar", [])[1] != second_id:
+						errors.append("💾: слот 1 не попал в пересохранение")
+					if panel._pending_save != -1:
+						errors.append("💾: pending не сброшен после пересохранения")
+					if panel._confirm != null and panel._confirm.visible:
+						errors.append("💾: диалог не закрылся после «да»")
+					presets = panel._load_file()  # после пересохранения записи обновились
+					p = presets[-1]  # и p тоже (SP-чек ниже сравнивает с файлом)
+					panel._on_load(presets.size() - 1)
+
 					# Загрузка: продать и перезагрузить пресет.
 					menu.sell_skill(first_id, db[first_id].price)
 					if player.unlocked_skills.get(first_id, false):

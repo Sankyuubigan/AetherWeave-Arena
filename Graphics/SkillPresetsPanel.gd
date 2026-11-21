@@ -12,6 +12,8 @@ var menu: CanvasLayer          # SkillMenu (владелец)
 var player: CharacterBody3D
 var _name_input: LineEdit
 var _rows_box: VBoxContainer
+var _confirm: ConfirmationDialog  # Q42: подтверждение пересохранения пресета
+var _pending_save := -1           # индекс пресета, ожидающего «да»
 
 func _init(owner_menu: CanvasLayer) -> void:
 	menu = owner_menu
@@ -63,7 +65,7 @@ func _build_ui() -> void:
 	scroll.add_child(_rows_box)
 
 	var hint := Label.new()
-	hint.text = "Сохраняет купленные навыки,\nостаток SP и расстановку панели."
+	hint.text = "Сохраняет купленные навыки, остаток SP\nи раскладку панели. 💾 — перезаписать\nпресет текущим состоянием (с подтверждением)."
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.modulate = Color(1, 1, 1, 0.55)
 	add_child(hint)
@@ -96,6 +98,16 @@ func _make_row(preset: Dictionary, index: int) -> HBoxContainer:
 	load_btn.pressed.connect(_on_load.bind(index))
 	row.add_child(load_btn)
 
+	# Q42 (заказ юзера 20.11.26): иконка сохранения на каждом созданном
+	# пресете — пересохраняет ТЕКУЩЕЕ состояние (скиллы, SP, раскладка,
+	# купленное) в файл этого пресета. Не сразу: сначала подтверждение.
+	var save_btn := Button.new()
+	save_btn.text = "💾"
+	save_btn.custom_minimum_size = Vector2(36, 0)
+	save_btn.tooltip_text = "Пересохранить пресет текущим состоянием"
+	save_btn.pressed.connect(_on_save.bind(index))
+	row.add_child(save_btn)
+
 	var del_btn := Button.new()
 	del_btn.text = "✕"
 	del_btn.custom_minimum_size = Vector2(32, 0)
@@ -103,11 +115,8 @@ func _make_row(preset: Dictionary, index: int) -> HBoxContainer:
 	row.add_child(del_btn)
 	return row
 
-## «+»: снапшот купленных навыков + SP + расстановка ActionBar.
-func _on_add() -> void:
-	var preset_name := _name_input.text.strip_edges()
-	if preset_name == "":
-		preset_name = "Пресет " + str(_load_file().size() + 1)
+## Текущее состояние игрока — общий снапшот для «+» и для 💾 (Q42).
+func _state_snapshot() -> Dictionary:
 	var bar: Array = []
 	var action_bar = player.get_node_or_null("ActionBar")
 	if action_bar:
@@ -118,16 +127,56 @@ func _on_add() -> void:
 	for sid in player.unlocked_skills:
 		if player.unlocked_skills[sid]:
 			skills.append(sid)
-	var preset := {
-		"name": preset_name,
+	return {
 		"skills": skills,
 		"sp": int(player.skill_points),
 		"bar": bar,
 	}
+
+## «+»: снапшот купленных навыков + SP + расстановка ActionBar.
+func _on_add() -> void:
+	var preset_name := _name_input.text.strip_edges()
+	if preset_name == "":
+		preset_name = "Пресет " + str(_load_file().size() + 1)
+	var preset := _state_snapshot()
+	preset["name"] = preset_name
 	var presets := _load_file()
 	presets.append(preset)
 	_save_file(presets)
 	_name_input.text = ""
+	refresh()
+
+## 💾 на строке пресета: НЕ пересохраняет сразу — сначала подтверждение
+## «уверены, что хотите пересохранить?» (заказ юзера).
+func _on_save(index: int) -> void:
+	var presets := _load_file()
+	if index < 0 or index >= presets.size():
+		return
+	_pending_save = index
+	if _confirm == null:
+		_confirm = ConfirmationDialog.new()
+		_confirm.ok_button_text = "Да, пересохранить"
+		_confirm.cancel_button_text = "Отмена"
+		_confirm.confirmed.connect(_on_confirm_save)
+		menu.add_child(_confirm)
+	_confirm.dialog_text = "Уверены, что хотите пересохранить пресет «%s»?\nТекущие навыки, SP и раскладка панели перезапишут его." % str(presets[index].get("name", "?"))
+	_confirm.popup_centered()
+
+## «Да» в подтверждении: полная перезапись записи пресета текущим состоянием.
+func _on_confirm_save() -> void:
+	if _pending_save < 0:
+		return
+	if _confirm != null:
+		_confirm.hide()  # клик «Да» окно гасит сам, прямой вызов хендлера — нет
+	var presets := _load_file()
+	if _pending_save >= presets.size():
+		_pending_save = -1
+		return
+	var preset := _state_snapshot()
+	preset["name"] = str(presets[_pending_save].get("name", "?"))
+	presets[_pending_save] = preset
+	_save_file(presets)
+	_pending_save = -1
 	refresh()
 
 ## Загрузка: полная перезапись состояния снапшотом — навыки «покупаются»,

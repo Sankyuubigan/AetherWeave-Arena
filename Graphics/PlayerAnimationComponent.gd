@@ -166,6 +166,15 @@ func _build_loco_machine() -> AnimationNodeStateMachine:
     # Стоп после бега (директива юзера 18.11.26): пока бежим — луп без
     # остановок; остановился — нейро-декель Run_Stop доигрывает в Idle.
     _add_anim_node(sm, "Stop", "Run_Stop")
+    # Разгон Idle→Run (Q23, автопоток 20.11.26): нейро-клип run_start (60f@30,
+    # темп шагов 0.19→4.70 м/с — зеркален декелю Run_Stop; хвост 4.70 ≈ луп
+    # Run_MB 4.49 → xfade в Run без «пульсации»). AT_END сам уводит в Run.
+    # ИМЯ УЗЛА «Accel», НЕ «Start»: «Start» — встроенный узел входа стейт-машины,
+    # add_node падает («states.has(p_name)»), ребро Idle→Start отвергается
+    # («p_to == Start forbidden») → travel("Start") входил во встроенный узел
+    # нулевой длины и AT_END мгновенно выкидывал в Run = «сразу резко бежит»
+    # (баг-репорт юзера 20.11.26, доказано probe_q23_start.gd).
+    _add_anim_node(sm, "Accel", "Run_Start")
     _add_anim_node(sm, "Jump", "Jump_Launch")
     _add_anim_node(sm, "Falling", "Falling")
     _add_anim_node(sm, "Landing", "Landing_Cut")
@@ -173,7 +182,11 @@ func _build_loco_machine() -> AnimationNodeStateMachine:
     # [из, в, xfade, auto_at_end]: ENABLED = переключаем travel()'ом,
     # AUTO+AT_END = дерево доигрывает клип и уходит само.
     var tr := [
-        ["Idle", "Run", 0.15, false],
+        ["Idle", "Accel", 0.1, false],
+        ["Accel", "Run", 0.1, true],
+        ["Accel", "Stop", 0.15, false],
+        ["Accel", "Jump", 0.1, false],
+        ["Accel", "Falling", 0.25, false],
         ["Run", "Idle", 0.2, false],
         ["Run", "Stop", 0.15, false],
         ["Stop", "Idle", 0.2, true],
@@ -361,15 +374,18 @@ func _process(_delta):
         return
 
     if speed < 0.001:
-        if _state == "Run":
-            _travel("Stop")  # декель после бега (директива юзера), AT_END → Idle
+        if _state == "Run" or _state == "Accel":
+            _travel("Stop")  # декель после бега/разгона (директива юзера), AT_END → Idle
         elif _state != "Stop" and _state != "Idle":
             _travel("Idle")
     else:
-        # В Stop разгонлся снова (микродвижение <0.5 м/с остаётся в декеле).
+        # В Stop разгонся снова (микродвижение <0.5 м/с остаётся в декеле):
+        # mid-Stop поза уже беговая — прямой Run, без разгона с нуля.
         if _state == "Stop" and speed > 0.5:
             _travel("Run")
-        elif _state != "Run" and _state != "Stop":
+        elif _state == "Idle":
+            _travel("Accel")  # Q23: разгон вместо мгновенного «включения» бега
+        elif _state != "Run" and _state != "Stop" and _state != "Accel":
             _travel("Run")
 
 ## ── Производные клипы ────────────────────────────────────────────────────

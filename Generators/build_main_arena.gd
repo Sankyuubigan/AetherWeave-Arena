@@ -193,44 +193,83 @@ func _init():
 	# дальше декоративные горы y≈14). z=-45 = край пола, вокруг пусто.
 	q22_root.position = Vector3(0, 0, -45)
 	root.add_child(q22_root)
-	var tree_a = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v2_foliage.tscn").instantiate()
+	var tree_a = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v4_cone_a.tscn").instantiate()
 	tree_a.name = "TreeA_AtlasCards"
 	q22_root.add_child(tree_a)
 	var lbl := Label3D.new()
-	lbl.text = "A: процедурный атлас (карточки)"
+	lbl.text = "A: конус + процедурный атлас"
 	lbl.font_size = 96
 	lbl.pixel_size = 0.01
 	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	lbl.position = Vector3(0, 17.2, 0)
 	q22_root.add_child(lbl)
+	# Q22-E (20.11.26, заказ юзера «гибрид как D, но форма старая, не конус —
+	# старое дерево наше с другой формой»): скан-скелет + СТАРАЯ крона-облако
+	# (v2-метод: 550 карточек по вокселям скана, до конуса) + атлас B (CC0).
+	# 6531 трис — как у старых A/B. Слот слева от A (справа ряда пол кончается
+	# на x≈50, рейкаст GCHK2).
+	var tree_e = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v2_foliage_b.tscn").instantiate()
+	tree_e.name = "TreeE_OldCloudAtlasB"
+	tree_e.position = Vector3(-16, 0, 0)
+	q22_root.add_child(tree_e)
+	var lbl_e := Label3D.new()
+	lbl_e.text = "E: старая крона + CC0-атлас"
+	lbl_e.font_size = 96
+	lbl_e.pixel_size = 0.01
+	lbl_e.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl_e.position = Vector3(-16, 17.2, 0)
+	q22_root.add_child(lbl_e)
 	# Q22-B (20.11.26): ель с атласом из CC0-фотоскана иголок (ambientCG
 	# PineNeedles001, журнал в docs/asset_sources.md) — тот же скелет/карточки,
 	# отлична только текстура: 3 пучка тонированы в хвойный зелёный + 1 «сухой».
-	var tree_b = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v3_stock.tscn").instantiate()
+	var tree_b = load("res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v4_cone_b.tscn").instantiate()
 	tree_b.name = "TreeB_StockScanCards"
-	tree_b.position = Vector3(20, 0, 0)
+	tree_b.position = Vector3(16, 0, 0)
 	q22_root.add_child(tree_b)
 	var lbl_b := Label3D.new()
-	lbl_b.text = "B: CC0-фотоскан иголок"
+	lbl_b.text = "B: конус + CC0-фотоскан"
 	lbl_b.font_size = 96
 	lbl_b.pixel_size = 0.01
 	lbl_b.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	lbl_b.position = Vector3(20, 17.2, 0)
+	lbl_b.position = Vector3(16, 17.2, 0)
 	q22_root.add_child(lbl_b)
 	# Q22-C (20.11.26): ель целиком из аддона MTree (живой скелет ветвления,
 	# атлас хвои тот же CC0 B) — 3830 трис, легче A/B. Спектр сравнения полный.
 	var tree_c = load("res://Graphics/Environment/Props/spruce_mtree/spruce_mtree.tscn").instantiate()
 	tree_c.name = "TreeC_MTree"
-	tree_c.position = Vector3(40, 0, 0)
+	tree_c.position = Vector3(32, 0, 0)
 	q22_root.add_child(tree_c)
 	var lbl_c := Label3D.new()
 	lbl_c.text = "C: MTree (живой скелет)"
 	lbl_c.font_size = 96
 	lbl_c.pixel_size = 0.01
 	lbl_c.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	lbl_c.position = Vector3(40, 17.2, 0)
+	lbl_c.position = Vector3(32, 17.2, 0)
 	q22_root.add_child(lbl_c)
-	for n in [tree_a, tree_b, tree_c, lbl, lbl_b, lbl_c]:
+	# Q22-D (20.11.26, заказ юзера «жду четвертый гибридный тип»): скелет C
+	# (геометрия gltf C 1:1) + атлас A. Сборка: копия gltf C с подменой URI
+	# изображений на копии A-атласа — seed C нигде не записан, поэтому
+	# геометрия переиспользована напрямую (точный гибрид, без новой случайности).
+	var tree_d = load("res://Graphics/Environment/Props/spruce_mtree_D/spruce_mtree_D.tscn").instantiate()
+	tree_d.name = "TreeD_MTreeAtlasA"
+	tree_d.position = Vector3(48, 0, 0)  # шаг 16 м: пол кончается на x≈50 (рейкаст GCHK2 (52,-45)=ПУСТО)
+	q22_root.add_child(tree_d)
+	var lbl_d := Label3D.new()
+	lbl_d.text = "D: гибрид C-скелет + A-атлас"
+	lbl_d.font_size = 96
+	lbl_d.pixel_size = 0.01
+	lbl_d.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl_d.position = Vector3(48, 17.2, 0)
+	q22_root.add_child(lbl_d)
+	# Юзер 20.11.26: «деревья E/A/B висят в воздухе — чтобы росли с земли».
+	# Карточные префабы (build_tree_prop.py) имеют origin выше подошвы: проба
+	# probe_tree_ground.gd — низ геометрии A/B/E = 0.089 м, у MTree C/D = 0.
+	# Опускаем слоты за низ AABB (§9), без врытия — слоты сравнения на полу.
+	for t in [tree_a, tree_e, tree_b, tree_c, tree_d]:
+		var drop := _geometry_min_y(t)
+		print("[ARENA] %s: низ геометрии %.3f → y=%.3f" % [t.name, drop, -drop])
+		t.position.y -= drop
+	for n in [tree_a, tree_b, tree_c, tree_d, tree_e, lbl, lbl_b, lbl_c, lbl_d, lbl_e]:
 		n.owner = root
 	q22_root.owner = root
 
@@ -239,3 +278,40 @@ func _init():
 	ResourceSaver.save(packed, "res://Scenes/MainArena.tscn")
 	print("MainArena generated!")
 	quit()
+
+## Низ геометрии инстанса (все MeshInstance3D/MultiMeshInstance3D, 8 углов
+## AABB, трансформы НАКОПЛЕНИЕМ локальных — генератор строит detached-иерархию,
+## global_transform не работает). Для карточных деревьев origin выше подошвы
+## → слот опускается за низ AABB.
+func _geometry_min_y(n: Node3D) -> float:
+	var lo := 1e9
+	# (узел, трансформ родителя в пространстве слота). AABB — РЕСУРСНЫЕ
+	# (mesh.get_aabb()/multimesh.get_aabb()): узловой get_aabb() на detached-
+	# иерархии пуст (генератор строит сцену вне дерева).
+	var stack: Array = [[n, Transform3D()]]
+	while not stack.is_empty():
+		var e: Array = stack.pop_back()
+		var nd: Node = e[0]
+		var xf: Transform3D = e[1]
+		if nd is Node3D:
+			xf = xf * (nd as Node3D).transform
+		if nd is MeshInstance3D and (nd as MeshInstance3D).mesh != null:
+			var ab: AABB = (nd as MeshInstance3D).mesh.get_aabb()
+			for cx in [ab.position.x, ab.end.x]:
+				for cy in [ab.position.y, ab.end.y]:
+					for cz in [ab.position.z, ab.end.z]:
+						lo = minf(lo, (xf * Vector3(cx, cy, cz)).y)
+		elif nd is MultiMeshInstance3D and (nd as MultiMeshInstance3D).multimesh != null:
+			var ab2: AABB = (nd as MultiMeshInstance3D).multimesh.get_aabb()
+			for cx2 in [ab2.position.x, ab2.end.x]:
+				for cy2 in [ab2.position.y, ab2.end.y]:
+					for cz2 in [ab2.position.z, ab2.end.z]:
+						lo = minf(lo, (xf * Vector3(cx2, cy2, cz2)).y)
+		for c in nd.get_children():
+			stack.append([c, xf])
+	if lo >= 1e9:
+		return 0.0 # мешей нет — слот не трогать
+	# ВИСИТ (низ выше origin, lo>0) → опустить на lo; уже врыт (lo<0) → не трогать.
+	# Грабля: minf(lo, 0.0) вместо maxf съедал именно висячий случай (0.089→0) —
+	# все деревья «опускались на 0» и баг оставался (20.11.26).
+	return maxf(lo, 0.0)

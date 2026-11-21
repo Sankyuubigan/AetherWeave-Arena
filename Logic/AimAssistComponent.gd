@@ -57,11 +57,18 @@ func _physics_process(_delta: float) -> void:
 	var cos_tol := cos(deg_to_rad(_tolerance_deg()))
 	var cam_pos := cam.global_position
 	var fwd := -cam.global_transform.basis.z
+	# Гейт юзера (репорт 21.11.26 «активна даже без выученных скиллов»): тип
+	# помечается только при живом requires_target-скилле этого типа — ВЫУЧЕН
+	# И ЗАБИНДОВАН на ActionBar. Считаем раз в скан, не на каждую цель.
+	var enabled := {
+		"friendly": _type_enabled("friendly"),
+		"enemy": _type_enabled("enemy"),
+	}
 	for node in get_tree().get_nodes_in_group("aim_targets"):
 		if not is_instance_valid(node) or not (node is Node3D):
 			continue
 		var ntype := _node_type(node)
-		if ntype == "":
+		if ntype == "" or not enabled.get(ntype, false):
 			continue
 		var center: Vector3 = node.global_position + Vector3(0, TARGET_LIFT, 0)
 		var to := center - cam_pos
@@ -102,6 +109,31 @@ func _node_type(node: Node3D) -> String:
 	if not friendly and node.has_method("take_damage"):
 		return "enemy"
 	return ""
+
+## Есть ли у игрока requires_target-скилл этого типа, который ВЫУЧЕН
+## (unlocked_skills) И ЗАБИНДОВАН на ActionBar (юзер: «скилл соответствующий
+## изучен и поставлен на панель нижнюю скиллов и бинд есть»).
+func _type_enabled(type: String) -> bool:
+	var player := get_parent()
+	if player == null:
+		return false
+	var unlocked = player.get("unlocked_skills")
+	if unlocked == null:
+		return false
+	var bar := player.get_node_or_null("ActionBar")
+	if bar == null:
+		return false
+	var db: Dictionary = SkillDB.get_skills()
+	for sid in db:
+		var sk = db[sid]
+		if sk.get("requires_target") != true or sk.get("target_type") != type:
+			continue
+		if not unlocked.get(sid, false):
+			continue
+		if str(bar.call("key_label_for_skill", sid)) == "":
+			continue
+		return true
+	return false
 
 func _has_los(from: Vector3, to: Vector3, target: Node3D) -> bool:
 	var space := get_viewport().get_world_3d().direct_space_state

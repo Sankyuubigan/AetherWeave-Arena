@@ -29,6 +29,19 @@ MAX_CARDS = 550
 CARD_MIN, CARD_MAX = 0.8, 1.3
 UV_INSET = 0.008
 RNG = random.Random(42424)
+# Q22-FIX (вердикт юзера 20.11.26 «А и Б висят в воздухе, форма странная»):
+# облако карточек унаследовано от скана 17М — крона с 25-30% высоты, внизу
+# голая палка (AABB-проба: низ геометрии 0.089 = ствол касается земли, но
+# видимая масса хвои стартует высоко — читается как «дерево на шпиле»).
+# TREE_CONE=1: карточки на КОНУС-конверте вокруг ствола скана (профиль ели,
+# как у одобренного Ц), радиус = максимальный разброс веток скана.
+CONE = os.environ.get("TREE_CONE", "0") == "1"
+CONE_Y0_FRAC = 0.08   # крона от 8% высоты (у одобренного Ц — от 12%)
+CONE_POWER = 1.3      # профиль (1-y/H)^p — выпуклый конус ели
+# Конус объёмом больше облака скана → 550 карт просвечивают интерьерный
+# меш (растянутые QEM-треугольники скана видны сквозь крону). 900 карт
+# закрывают интерьер; 900×4 + trim-ствол 677 = 4277 трис < хиро-нормы 5000.
+CONE_CARDS = int(os.environ.get("TREE_CONE_CARDS", "900"))
 
 
 def vsub(a, b): return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
@@ -79,6 +92,29 @@ def build_cloud(pts):
     return centers, len(vox), ymax
 
 
+def build_cone(pts):
+    """Карточки на конус-конверте: объёмная выборка (r ~ sqrt(u) * профиль)
+    — плотность равномерная по сечению, у вершины сгущение на оси."""
+    ax, az = axis_xz(pts)
+    ymax = max(p[1] for p in pts)
+    rmax = 0.0
+    for p in pts:
+        if p[1] < ymax * 0.2:
+            continue
+        rmax = max(rmax, math.hypot(p[0] - ax, p[2] - az))
+    y0 = ymax * CONE_Y0_FRAC
+    centers = []
+    for _ in range(CONE_CARDS):
+        y = y0 + (ymax - y0) * RNG.random()
+        prof = (1.0 - y / ymax) ** CONE_POWER
+        r = rmax * prof * math.sqrt(RNG.random())
+        a = RNG.uniform(0.0, 2.0 * math.pi)
+        centers.append((ax + math.cos(a) * r,
+                        y + RNG.uniform(-0.12, 0.12),
+                        az + math.sin(a) * r))
+    return centers, rmax, ymax
+
+
 def axis_xz(pts):
     n = len(pts)
     ax = sum(p[0] for p in pts) / n
@@ -120,6 +156,79 @@ def add_card(pos, nor, uvs, idx, center, ax, az):
         idx.extend([base, base + 1, base + 2, base, base + 2, base + 3])
 
 
+def read_acc_f(js, buf, acc_idx):
+    acc = js["accessors"][acc_idx]
+    bv = js["bufferViews"][acc["bufferView"]]
+    off = bv.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    n = acc["count"]
+    comps = 3 if acc["type"] == "VEC3" else 2
+    flat = struct.unpack_from("<%df" % (n * comps), buf, off)
+    return [tuple(flat[i:i + comps]) for i in range(0, n * comps, comps)]
+
+
+def read_acc_idx(js, buf, acc_idx):
+    acc = js["accessors"][acc_idx]
+    bv = js["bufferViews"][acc["bufferView"]]
+    off = bv.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    n = acc["count"]
+    fmt = "<%dH" if acc["componentType"] == 5123 else "<%dI"
+    return list(struct.unpack_from(fmt % n, buf, off))
+
+
+def trim_tree(js, buf, node_i, rmax, ymax):
+    """CONE-режим: ветки скана торчат из-под конус-конверта карточек
+    («антенны» на рендере v4-пробы). Треугольники дерева b остаются только
+    внутри конверта (r <= profile(y) + 0.15) или у оси (ствол). Новые
+    индексы кладутся во второй буфер (_data.bin) — POSITION/NORMAL/UV
+    не дублируются, примитивы лишь перепривязываются на новый accessor."""
+    y0 = ymax * CONE_Y0_FRAC
+    TOL = 0.15
+    blobs = []
+    views = []
+    off = 0
+    mesh = js["meshes"][js["nodes"][node_i]["mesh"]]
+    for pi, p in enumerate(mesh["primitives"]):
+        pts_p = read_acc_f(js, buf, p["attributes"]["POSITION"])
+        indices = read_acc_idx(js, buf, p["indices"])
+        assert len(pts_p) <= 65535, "uint16 индексы против count>65535"
+        kept = []
+        for t in range(0, len(indices), 3):
+            # точки проверки: вершины + середины рёбер (длинный пролёт ветки
+            # с вершинами внутри конверта вылезал «треугольником коры»)
+            vs = [pts_p[indices[t + k]] for k in range(3)]
+            check = list(vs)
+            for k in range(3):
+                a, b = vs[k], vs[(k + 1) % 3]
+                check.append(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2))
+            ok = True
+            for v in check:
+                r = math.hypot(v[0], v[2])
+                if r < 0.35:
+                    continue  # ствол у оси — всегда остаётся
+                prof = rmax * (1.0 - min(1.0, max(0.0, v[1] / ymax))) ** CONE_POWER
+                limit = prof + TOL if v[1] >= y0 else min(prof, 1.2) + TOL
+                if r > limit:
+                    ok = False
+                    break
+            if ok:
+                kept.extend(indices[t:t + 3])
+        data = struct.pack("<%dH" % len(kept), *kept)
+        bv_i = len(js["bufferViews"])
+        # тот же dict в локальный views И в js — shift в main мутирует оба
+        v = {"buffer": 1, "byteOffset": off,
+             "byteLength": len(data), "target": 34963}
+        js["bufferViews"].append(v)
+        views.append(v)
+        a_i = len(js["accessors"])
+        js["accessors"].append({"bufferView": bv_i, "componentType": 5123,
+                                "count": len(kept), "type": "SCALAR"})
+        p["indices"] = a_i
+        blobs.append(data)
+        off += len(data)
+        print("TREE TRIM: prim %d: %d -> %d idx" % (pi, len(indices), len(kept)))
+    return b"".join(blobs), views
+
+
 def pack_bin(pos, nor, uvs, idx):
     blobs = []
     views = []
@@ -143,16 +252,28 @@ def main():
     node_i, mesh_i = find_tree(js)
     pts = read_positions(js, buf, mesh_i)
     ax, az = axis_xz(pts)
-    centers, n_vox, ymax = build_cloud(pts)
+    if CONE:
+        centers, rmax, ymax = build_cone(pts)
+        n_vox = len(centers)
+        print("TREE CONE: rmax=%.1f y0=%.1f cards=%d" % (rmax, ymax * CONE_Y0_FRAC, n_vox))
+    else:
+        centers, n_vox, ymax = build_cloud(pts)
     pos, nor, uvs, idx = [], [], [], []
     for c in centers:
         add_card(pos, nor, uvs, idx, c, ax, az)
     blob, views = pack_bin(pos, nor, uvs, idx)
+    # av ДО extend: pack-вьюхи лягут ровно здесь (trim допишет свои после)
+    av = len(js["bufferViews"])
+    js["bufferViews"].extend(views)
+    if CONE:
+        tb, tv = trim_tree(js, buf, node_i, rmax, ymax)
+        shift = len(blob)
+        for v in tv:
+            v["byteOffset"] += shift
+        blob += tb
     open(os.path.join(PROP, OUT_BASE + "_data.bin"), "wb").write(blob)
 
     n = len(pos)
-    av = len(js["bufferViews"])
-    js["bufferViews"].extend(views)
     # glTF: новые данные — ВТОРОЙ буфер. Ловушка: bufferViews с buffer:1
     # валидны, но если сам буфер не добавить в buffers[], Godot падает
     # «Index buffer = 1 is out of bounds» (поймано на сборке ели-v2).

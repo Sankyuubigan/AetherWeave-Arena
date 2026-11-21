@@ -64,6 +64,10 @@ const TASKS := {
 	# Стоп после бега (раунд 23д, директива юзера «остановился — вот тогда
 	# стоп»): нейро-клип kimodo.cpp (40f@30, декель 4.6→0.3 м/с, финал = стойка).
 	"Run_Stop": "run_stop",
+	# Разгон Idle→Run (Q23, автопоток 20.11.26): профиль скорости зеркален
+	# декелю Run_Stop — 0.19→4.70 м/с (сид 505 из 5; 404 отбракован гейтом
+	# «таракан» 3.9 шаг/с). Вшит узлом «Start»: Idle→Start→Run AUTO AT_END.
+	"Run_Start": "run_start",
 	"Cast_Shoot_L": "cast_shoot_b",
 	"Cast_Exit": "cast_exit",
 	"Throw": "cast_push",

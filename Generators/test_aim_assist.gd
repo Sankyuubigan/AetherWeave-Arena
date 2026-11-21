@@ -102,6 +102,22 @@ func _run() -> void:
 
 	await create_timer(0.6).timeout
 
+	# ГЕЙТ юзера (репорт 21.11.26): свежий игрок БЕЗ выученных/забиндованных
+	# requires_target-скиллов — ассист молчит по ОБОИМ типам.
+	_check("гейт: без скиллов enemy не помечается", assist.get_marked("enemy") == null)
+	_check("гейт: без скиллов friendly не помечается", assist.get_marked("friendly") == null)
+
+	# Выучили + забиндовали (ЛКМ = молния, ПКМ = сердечко) — ассист оживает.
+	player.set("unlocked_skills", {"ball_lightning": true, "heart_heal": true})
+	var bar2 = player.get_node_or_null("ActionBar")
+	bar2.slots[12].set_skill("ball_lightning") # слот 12 = ЛКМ
+	bar2.slots[13].set_skill("heart_heal")     # слот 13 = ПКМ
+	await create_timer(0.4).timeout
+	_check("гейт: unlocked+bind — enemy помечен", assist.get_marked("enemy") == enemy1)
+	_check("гейт: unlocked+bind — friendly помечен", assist.get_marked("friendly") == friend)
+	_check("key_label_for_skill ЛКМ", str(bar2.call("key_label_for_skill", "ball_lightning")) == "ЛКМ")
+	_check("key_label_for_skill ПКМ", str(bar2.call("key_label_for_skill", "heart_heal")) == "ПКМ")
+
 	_check("enemy1 в центре помечен (enemy)", assist.get_marked("enemy") == enemy1)
 	_check("friend в конусе помечен (friendly)", assist.get_marked("friendly") == friend)
 	_check("enemy2 вне конуса (3м вбок) не помечен", assist.get_marked("enemy") != enemy2)

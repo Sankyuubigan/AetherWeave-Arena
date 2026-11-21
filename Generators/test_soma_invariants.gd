@@ -9,11 +9,11 @@ extends SceneTree
 ## Запуск: --headless -s res://Generators/test_soma_invariants.gd
 
 const NAMES := ["Cast_Enter", "Cast_Loop", "Cast_Shoot", "Cast_Shoot_L",
-	"Cast_Exit", "Throw", "Cast_Push", "Cast_Push_L"]
+	"Cast_Exit", "Throw", "Cast_Push", "Cast_Push_L", "Run_Start"]
 const RAW_DIR := {  # имя в библиотеке → каталог neuro_soma
 	"Cast_Enter": "cast_enter", "Cast_Loop": "cast_loop", "Cast_Shoot": "cast_shoot",
 	"Cast_Shoot_L": "cast_shoot_b", "Cast_Exit": "cast_exit", "Throw": "cast_push",
-	"Cast_Push": "cast_push", "Cast_Push_L": "cast_push_l",
+	"Cast_Push": "cast_push", "Cast_Push_L": "cast_push_l", "Run_Start": "run_start",
 }
 const LIB_PATH := "res://Graphics/Animations/shared_animations.res"
 const SOMA_BASE := "res://Graphics/Animations/neuro_soma"
@@ -119,7 +119,14 @@ func _run() -> void:
 				var target: String = "mixamorig_" + side
 				if not gs.has(target):
 					continue
-				var d: float = g[side].origin.distance_to(gs[target].origin)
+				# Q23 (20.11.26): сравнение в КОРНЕ-ОТНОСИТЕЛЬНОМ пространстве.
+				# Переходные клипы локомоции (Run_Start) путешествуют вперёд
+				# (~5 м) — RAW-глобал кисти уезжает, скин-FK (только ротации,
+				# позиции из rest) стоит на месте; для кастов-на-месте разница
+				# была нулевой, поэтому баг не всплывал. Инвариант позы не должен
+				# штрафовать перенос корня — вычитаем бёдра с обеих сторон.
+				var d: float = (g[side].origin - g["Hips"].origin) \
+						.distance_to(gs[target].origin - gs["mixamorig_Hips"].origin)
 				if d > worst_d:
 					worst_d = d
 					worst_at = "t%.2f %s" % [t, side]

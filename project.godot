@@ -33,6 +33,7 @@ DamageNumbers="*res://Graphics/DamageNumbers.gd"
 MusicSpectrum="*res://Graphics/MusicSpectrum.gd"
 GraphicsQuality="*res://Graphics/GraphicsQuality.gd"
 SkillForgeWindow="*res://Graphics/SkillForgeWindow.gd"
+HudToggle="*res://Graphics/HudToggle.gd"
 
 [display]
 
