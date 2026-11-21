@@ -280,6 +280,18 @@ func build_prop_scene(model_root: Node):
 		collision.shape = first_mi.mesh.create_convex_shape(true, true)
 		root.add_child(collision)
 
+	# КОНТРАКТ ПОДОШВЫ (Q47-F, гоу юзера 21.11.26): origin сырья (trellis/Blender/
+	# сканы) НЕ в подошве — свойство ДАННЫХ, чиним здесь, единственной точкой
+	# сборки: низ merged AABB → y=0. Идемпотентно (низ 0 не двигается). Потребители
+	# (скаттер, билдеры, PortalArchVisual, каталог) ставят проп в точку пола без
+	# вычислений. Гейт контракта — check_foot_origin.gd (низ tscn == 0±1 см).
+	var lowest := _merged_lowest_y(model_root)
+	if absf(lowest) > 0.001:
+		model_root.position.y -= lowest
+		print("  FOOT: низ геометрии %.3f → y=0 (Graphics сдвинут на %.3f)" % [lowest, -lowest])
+	elif absf(lowest) <= 0.001:
+		print("  FOOT: низ уже в y=0 — не двигаю")
+
 	model_root.name = "Graphics"
 	if model_root.get_parent():
 		model_root.get_parent().remove_child(model_root)
@@ -329,3 +341,37 @@ func _apply_visibility_ranges(node: Node) -> void:
 			mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	for c in node.get_children():
 		_apply_visibility_ranges(c)
+
+
+## Сырой низ merged AABB геометрии (детached-иерархия: трансформы НАКОПЛЕНИЕМ,
+## global_transform не работает; узловой get_aabb() пуст — только РЕСУРСНЫЕ
+## mesh.get_aabb()/multimesh.get_aabb(); паттерн _geometry_lowest_y из
+## build_main_arena.gd). Для контракта подошвы Q47-F.
+func _merged_lowest_y(n: Node3D) -> float:
+	var lo := 1e9
+	var stack: Array = [[n, Transform3D.IDENTITY]]
+	while not stack.is_empty():
+		var e: Array = stack.pop_back()
+		var nd: Node = e[0]
+		var xf: Transform3D = e[1]
+		var next_xf := xf
+		if nd is Node3D:
+			next_xf = xf * (nd as Node3D).transform
+		var ab: AABB
+		if nd is MeshInstance3D and (nd as MeshInstance3D).mesh != null:
+			ab = (nd as MeshInstance3D).mesh.get_aabb()
+		elif nd is MultiMeshInstance3D and (nd as MultiMeshInstance3D).multimesh != null:
+			ab = (nd as MultiMeshInstance3D).multimesh.get_aabb()
+		else:
+			ab = AABB()
+		if ab.size != Vector3.ZERO or ab.position != Vector3.ZERO:
+			for i in 8:
+				var cy := ab.position.y if i < 4 else ab.position.y + ab.size.y
+				var cx := ab.position.x if i % 2 == 0 else ab.position.x + ab.size.x
+				var cz := ab.position.z if (i % 4) < 2 else ab.position.z + ab.size.z
+				lo = minf(lo, (next_xf * Vector3(cx, cy, cz)).y)
+		for c in nd.get_children():
+			stack.append([c, next_xf])
+	if lo >= 1e9:
+		return 0.0
+	return lo

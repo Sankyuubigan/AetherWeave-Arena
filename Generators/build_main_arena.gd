@@ -291,14 +291,11 @@ func _init():
 	lbl_d.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	lbl_d.position = Vector3(48, 17.2, 0)
 	q22_root.add_child(lbl_d)
-	# Юзер 20.11.26: «деревья E/A/B висят в воздухе — чтобы росли с земли».
-	# Карточные префабы (build_tree_prop.py) имеют origin выше подошвы: проба
-	# probe_tree_ground.gd — низ геометрии A/B/E = 0.089 м, у MTree C/D = 0.
-	# Опускаем слоты за низ AABB (§9), без врытия — слоты сравнения на полу.
-	for t in [tree_a, tree_e, tree_b, tree_c, tree_d]:
-		var drop := _geometry_min_y(t)
-		print("[ARENA] %s: низ геометрии %.3f → y=%.3f" % [t.name, drop, -drop])
-		t.position.y -= drop
+	# Q47-F (гоу юзера 21.11.26): контракта подошвы — низ AABB префаба = y=0
+	# enforced в build_env_prop.gd (пересобраны все пропы, гейт check_foot_origin),
+	# поэтому слоты деревьев ставятся в точку пола БЕЗ per-инстанс подъёма
+	# (костыль-цикл _geometry_min_y удалён — биг Q22-HANG «висят в воздухе»
+	# закрыт на уровне данных, а не потребителя).
 	for n in [tree_a, tree_b, tree_c, tree_d, tree_e, lbl, lbl_b, lbl_c, lbl_d, lbl_e]:
 		n.owner = root
 	q22_root.owner = root
@@ -308,47 +305,3 @@ func _init():
 	ResourceSaver.save(packed, "res://Scenes/MainArena.tscn")
 	print("MainArena generated!")
 	quit()
-
-## Низ геометрии инстанса (все MeshInstance3D/MultiMeshInstance3D, 8 углов
-## AABB, трансформы НАКОПЛЕНИЕМ локальных — генератор строит detached-иерархию,
-## global_transform не работает). Для карточных деревьев origin выше подошвы
-## → слот опускается за низ AABB.
-func _geometry_min_y(n: Node3D) -> float:
-	# ВИСИТ (низ выше origin, lo>0) → опустить на lo; уже врыт (lo<0) → не трогать.
-	# Грабля: minf(lo, 0.0) вместо maxf съедал именно висячий случай (0.089→0) —
-	# все деревья «опускались на 0» и баг оставался (20.11.26).
-	return maxf(_geometry_lowest_y(n), 0.0)
-
-## Сырой низ геометрии (может быть ОТРИЦАТЕЛЬНЫМ: у trellis-выхода обломки-ножки
-## уходят ниже origin → пропы «проваливаются в пол», баг-репорт Q47 21.11.26).
-## Деревьям Q22 нужен clamp только вверх (врытое не трогать), аркам Q47 —
-## точная постановка низа на пол в обе стороны.
-func _geometry_lowest_y(n: Node3D) -> float:
-	var lo := 1e9
-	# (узел, трансформ родителя в пространстве слота). AABB — РЕСУРСНЫЕ
-	# (mesh.get_aabb()/multimesh.get_aabb()): узловой get_aabb() на detached-
-	# иерархии пуст (генератор строит сцену вне дерева).
-	var stack: Array = [[n, Transform3D()]]
-	while not stack.is_empty():
-		var e: Array = stack.pop_back()
-		var nd: Node = e[0]
-		var xf: Transform3D = e[1]
-		if nd is Node3D:
-			xf = xf * (nd as Node3D).transform
-		if nd is MeshInstance3D and (nd as MeshInstance3D).mesh != null:
-			var ab: AABB = (nd as MeshInstance3D).mesh.get_aabb()
-			for cx in [ab.position.x, ab.end.x]:
-				for cy in [ab.position.y, ab.end.y]:
-					for cz in [ab.position.z, ab.end.z]:
-						lo = minf(lo, (xf * Vector3(cx, cy, cz)).y)
-		elif nd is MultiMeshInstance3D and (nd as MultiMeshInstance3D).multimesh != null:
-			var ab2: AABB = (nd as MultiMeshInstance3D).multimesh.get_aabb()
-			for cx2 in [ab2.position.x, ab2.end.x]:
-				for cy2 in [ab2.position.y, ab2.end.y]:
-					for cz2 in [ab2.position.z, ab2.end.z]:
-						lo = minf(lo, (xf * Vector3(cx2, cy2, cz2)).y)
-		for c in nd.get_children():
-			stack.append([c, xf])
-	if lo >= 1e9:
-		return 0.0 # мешей нет — слот не трогать
-	return lo

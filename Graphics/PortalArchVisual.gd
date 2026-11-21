@@ -50,11 +50,10 @@ func _build() -> void:
 	var arch: Node = arch_prefab.instantiate()
 	holder.add_child(arch)
 	var aabb := _merged_aabb(arch)
-	# §9/Q47 (баг «провалились в пол», верб. юзера 21.11.26): origin trellis-
-	# префаба не в подошве (низ геометрии НИЖЕ origin) → поднимаем holder за
-	# низ геометрии: низ арки встаёт ровно НА пол у любых инстансов (телепортер
-	# любой карты) без ручных оффсетов.
-	holder.position.y -= aabb.position.y * arch_scale
+	# Q47-F (гоу юзера 21.11.26): контракт подошвы — низ AABB префаба = y=0
+	# enforced в build_env_prop.gd (единственная точка сборки), поэтому holder
+	# НЕ сдвигаем: проп ставится в точку пола как есть. Урок «провалились в
+	# пол» (21.11.26) закрыт на уровне данных, костыль-лифт удалён.
 	var w := aabb.size.x * membrane_size_frac.x
 	var h := aabb.size.y * membrane_size_frac.y
 	var center := Vector3(
