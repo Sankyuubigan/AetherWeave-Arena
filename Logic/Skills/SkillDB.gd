@@ -321,6 +321,27 @@ static func get_skills() -> Dictionary:
     ptl.effects.append(pts)
     _skills["portals"] = ptl
 
+    # Порталы v2 «живое окно» (Q44, юзер 20.11.26 «да гоу делай»): ОТДЕЛЬНЫЙ
+    # скилл, v1 «portals» остаётся старой версией. Окно в другой конец пары,
+    # проскок через мембрану (не телепорт-сдвиг), снаряды/лучи проходят,
+    # пара живёт 30 с. ССОТ плана — tasks/portals_v2_prp.md.
+    var ptl2 = preload("res://Logic/Skills/Skill.gd").new()
+    ptl2.id = "portals2"
+    ptl2.skill_name = "Порталы v2"
+    ptl2.description = "Живое окно в другой конец: сквозь мембрану видно
+другую локацию, снаряды и лучи проходят внутрь. Заходишь в один —
+выходишь из другого плавным проскоком. Пара живёт 30 секунд."
+    ptl2.icon = "🌀"
+    ptl2.price = 4
+    ptl2.max_range = 40.0
+    ptl2.cast_anim = ""
+    ptl2.effects.append(preload("res://Logic/Skills/SpawnPortals2Effect.gd").new())
+    var pts2 = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
+    pts2.audio_stream = load("res://Audio/SFX/neural_teleport.res")
+    pts2.volume_db = 0.0
+    ptl2.effects.append(pts2)
+    _skills["portals2"] = ptl2
+
     # Кузница скиллов (Q36): пользовательские скиллы вливаются в реестр в конце
     # ленивой инициализации — магазин/ActionBar/каст/персист работают по id сами.
     UserSkillDBScript.load_all(_skills)

@@ -24,6 +24,11 @@ const SP_MAX: int = 50
 
 var camera: Camera3D
 var spring_arm: Node3D
+## Pitch камеры — СКАЛЯР (SSOT). Читать его обратно из базиса пивота нельзя:
+## в Фазе 1 базис маппится матрицей портала (произвольный yaw/наклон) и
+## эйлер YXZ такого базиса возвращает мусор (гимбал-флип) → инверсия мыши,
+## живущая и после деспавна порталов (регресс Q44-R, вердикт юзера 26.11.26).
+var _cam_pitch: float = 0.0
 var graphics_wrapper: Node3D
 var spell_caster: Node
 
@@ -45,7 +50,14 @@ var is_dying: bool = false
 ## Макс HP игрока: враги ада наносят % ОТ ЭТОГО ЧИСЛА (верб. юзера 19.11.26).
 const MAX_HP: int = 100
 
+## Q44-R порталы v2 (спец, баг №3): фазовое состояние камеры-пивота.
+var _arm_mask: int = 0        # штатная collision_mask SpringArm (Фаза 1 глушит)
+var _shoulder := Vector3.ZERO # локальный оффсет пивота на теле
+var _p2_cam_prev := 1e9       # локальный z камеры у входного портала (кадр назад)
+var _p2_t0_seen := 0          # t0 последнего захода (сброс prev на новый проход)
+
 func _ready():
+    process_physics_priority = 100 # перенос портала в тике РАНЬШЕ камеры (спец)
     add_to_group("player") # цель для врагов ада (HellEnemyBase)
     camera = $SpringArm3D/Camera3D
     spring_arm = $SpringArm3D
@@ -55,7 +67,15 @@ func _ready():
     if spring_arm:
         spring_arm.add_excluded_object(self.get_rid())
         spring_arm.position.y = 0.5
-        
+        # Q44-R (спец, баг №3): SpringArm — ребёнок тела, телепорт матрицей
+        # утаскивал камеру вместе с телом («залезание в окно» невозможно).
+        # top_level: пивот живёт в мире, каждый физ-тик ставим вручную —
+        # штатный след (Фаза 0) или фазовый перенос через портал.
+        _arm_mask = spring_arm.collision_mask
+        _shoulder = spring_arm.position
+        _cam_pitch = spring_arm.rotation.x  # стартовый наклон из сцены
+        spring_arm.top_level = true
+
     if graphics_wrapper:
         graphics_wrapper.position.y = -1.0
         
@@ -201,8 +221,10 @@ func _input(event):
 
     if event is InputEventMouseMotion:
         rotate_y(-event.relative.x * mouse_sensitivity)
-        spring_arm.rotate_x(-event.relative.y * mouse_sensitivity)
-        spring_arm.rotation.x = clamp(spring_arm.rotation.x, -1.2, 1.2)
+        # Pitch — только в скаляр: rotate_x по узлу в Фазе 1 работал по
+        # маппнутому базису, и эйлер от него инвертировал управление.
+        _cam_pitch = clampf(_cam_pitch - event.relative.y * mouse_sensitivity,
+            -1.2, 1.2)
 
     if event.is_action_pressed("ui_cancel"):
         Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
@@ -301,5 +323,57 @@ func _physics_process(delta):
         # заглушены → автомат видит «в воздухе» → Jump/Falling → Landing).
         velocity = Vector3.ZERO
         move_and_slide()
+        _update_camera_pivot()
         return
     move_and_slide()
+    _update_camera_pivot()
+
+## Q44-R (спец, баг №3 + чек-лист п.4): пивот камеры больше НЕ ребёнок тела —
+## top_level, позиция ставится вручную каждый физ-тик. Три фазы:
+## 0 — штатный след за телом; 1 — тело перенесено матрицей портала, камера
+## продолжает жить на входной стороне: rigid-формула m⁻¹·(тело·офсет) =
+## «поза, как будто тело не телепортировалось» (точная при любом yaw/pitch —
+## M·(T·L) = (M·T)·L), аватар виден через окно; 2 — камера пересекла
+## плоскость входа (cam_z + → −): pivot = m·pivot — ТОЧНО совпадает с обычным
+## следом (ассоциативность умножения трансформов), дальше Фаза 0. Откат тела
+## через выходной портал (мета p2_entry == partner) чистит меты — Фаза 0.
+## Страховка спеца: Фаза 1 дольше 2 с — форс-резолв в штатный след.
+func _update_camera_pivot() -> void:
+    if spring_arm == null:
+        return
+    var entry = null
+    if has_meta("p2_entry"):
+        entry = get_meta("p2_entry")
+        if entry == null or not (entry is Node3D) or not is_instance_valid(entry):
+            entry = null
+            remove_meta("p2_entry")
+    var phase1: bool = entry != null
+    var t0 := 0
+    if phase1:
+        t0 = int(get_meta("p2_t0"))
+        if t0 != _p2_t0_seen:
+            _p2_t0_seen = t0
+            _p2_cam_prev = 1e9
+    # В Фазе 1 пивот на входной стороне — пружина не должна ловить геометрию
+    # портальной зоны; штатная маска возвращается в Фазе 0.
+    spring_arm.collision_mask = 0 if phase1 else _arm_mask
+    var local := Transform3D(Basis(Vector3(1, 0, 0), _cam_pitch), _shoulder)
+    if not phase1:
+        spring_arm.global_transform = global_transform * local
+        return
+    var m: Transform3D = entry.call("portal_matrix")
+    spring_arm.global_transform = m.affine_inverse() * (global_transform * local)
+    spring_arm.reset_physics_interpolation()
+    if Time.get_ticks_msec() - t0 > 2000:
+        remove_meta("p2_entry")
+        remove_meta("p2_t0")
+        spring_arm.global_transform = global_transform * local
+        return
+    var cam_z: float = entry.to_local(camera.global_position).z
+    if _p2_cam_prev > 0.0 and cam_z <= 0.0:
+        spring_arm.global_transform = m * spring_arm.global_transform
+        spring_arm.reset_physics_interpolation()
+        remove_meta("p2_entry")
+        remove_meta("p2_t0")
+    else:
+        _p2_cam_prev = cam_z
