@@ -129,6 +129,9 @@ const MAP := {
 	"heart_heal_v3f": "heart_heal_v3f",
 	"teleport_warp": "neural_teleport",
 	"ui_click": "neural_ui_click",
+	# Q47 (21.11.26): магический эмбиент нейро-портала — MOSS 8178, 8 с loop
+	# (loop включается рантайм в PortalArchVisual._enable_loop).
+	"portal_ambient": "neural_portal_ambient",
 }
 
 func _init() -> void:

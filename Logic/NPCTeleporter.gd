@@ -18,20 +18,19 @@ var _changing := false
 var _z_was := false
 
 func _ready():
-	# Тело: капсула-«монолит» с бирюзовым свечением — телепортер читается издалека.
-	var mi := MeshInstance3D.new()
-	var cap := CapsuleMesh.new()
-	cap.radius = 0.45
-	cap.height = 2.0
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.10, 0.35, 0.40)
-	mat.emission_enabled = true
-	mat.emission = Color(0.0, 0.6, 0.7)
-	mat.emission_energy_multiplier = 1.2
-	cap.material = mat
-	mi.mesh = cap
-	mi.position.y = 1.0
-	add_child(mi)
+	# Q47 (21.11.26, верб. юзера «А вариант намного лучше»): капсула-монолит →
+	# нейро-арка A (готическая разрушенная арка с рунами): шейдер-мембрана
+	# «вихрь+туманность+звёзды», искры, свет, эмбиент-луп. Сборка визуала —
+	# SSOT PortalArchVisual.gd, подъём за низ геометрии внутри компонента
+	# (origin trellis-префаба не в подошве). Коллизия/Area3D/диалоги не тронуты.
+	var arch = load("res://Graphics/PortalArchVisual.gd").new()
+	arch.name = "PortalArch"
+	arch.arch_prefab = load("res://Graphics/Environment/Props/portal_arch_a/portal_arch_a.tscn")
+	arch.mask_type = 1
+	arch.membrane_size_frac = Vector2(0.72, 0.84)
+	arch.membrane_center_frac = Vector2(0.5, 0.43)
+	arch.ambient_path = "res://Audio/SFX/neural_portal_ambient.res"
+	add_child(arch)
 
 	var cs := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()

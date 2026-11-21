@@ -45,6 +45,31 @@ func _init():
 	root.add_child(arena)
 	arena.owner = root
 
+	# Q25-B (26.11.26): МОНОЛИТ пола вместо сэндвича. Родной бокс пола 1 м
+	# (mid-plane −0.5) = клифф для софтбоди: покой желе −0.5 достигает мид-плейна
+	# → солвер выбрасывает точки через дно → провал в пустоту (репро
+	# probe_jelly_arena: 312/726 точек ниже пола за 1 с). Сэндвич
+	# floor+backing v1 выдавливал тело вбок (~7 м/с). Монолит FloorBacking
+	# 100×8×100 (топ y=0, точно под габаритом пола) — ЕДИНСТВЕННАЯ коллизия
+	# пола: мид-плейн на −4 недостижим, родной тонкий бокс отключает runtime-
+	# компонент FloorMonolith.gd (pack() не сериализует правки инстансов).
+	# SinkGuard в JellyMonster.gd капает промин на пол−0.55 ( dive+glide был
+	# позиционно-залочен, параметрами не лечится). За кромкой пола (±50)
+	# монолита нет — падение с края карты в пустоту работает как раньше.
+	var floor_backing = StaticBody3D.new()
+	floor_backing.name = "FloorBacking"
+	floor_backing.set_script(load("res://Logic/Props/FloorMonolith.gd"))
+	floor_backing.name = "FloorBacking"
+	var backing_cs = CollisionShape3D.new()
+	var backing_box = BoxShape3D.new()
+	backing_box.size = Vector3(100, 8, 100)
+	backing_cs.shape = backing_box
+	backing_cs.position = Vector3(0, -4, 0)
+	root.add_child(floor_backing)
+	floor_backing.owner = root
+	floor_backing.add_child(backing_cs)
+	backing_cs.owner = root # owner — строго после встройки в дерево (предок root)
+
 	var player_scene = load("res://Scenes/player.tscn")
 	var player = player_scene.instantiate()
 	player.position = Vector3(0, 1, 0)
@@ -177,6 +202,11 @@ func _init():
 	root.add_child(npc)
 	npc.owner = root
 
+	# Q47 шаг 9 (21.11.26, вердикт юзера «А вариант намного лучше»): капсула
+	# заменена нейро-аркой A внутри NPCTeleporter._ready (SSOT — все карты
+	# сразу). Стенд A/B снят; арка B осталась префабом в Props/ — попадает в
+	# каталог объектов (заказ юзера «пусть в каталоге лежит, докрутим потом»).
+
 	# FFA-боты с мейн карты УДАЛЕНЫ (Q38, верб. юзера 19.11.26: «убери с мейн
 	# карты их. они не нужны в мейн мапе») — переехали в АД как элитные боты
 	# Whiteclown N Hallin (Logic/Enemies/EliteBotEnemy.gd, спавн в HellArena).
@@ -284,6 +314,16 @@ func _init():
 ## global_transform не работает). Для карточных деревьев origin выше подошвы
 ## → слот опускается за низ AABB.
 func _geometry_min_y(n: Node3D) -> float:
+	# ВИСИТ (низ выше origin, lo>0) → опустить на lo; уже врыт (lo<0) → не трогать.
+	# Грабля: minf(lo, 0.0) вместо maxf съедал именно висячий случай (0.089→0) —
+	# все деревья «опускались на 0» и баг оставался (20.11.26).
+	return maxf(_geometry_lowest_y(n), 0.0)
+
+## Сырой низ геометрии (может быть ОТРИЦАТЕЛЬНЫМ: у trellis-выхода обломки-ножки
+## уходят ниже origin → пропы «проваливаются в пол», баг-репорт Q47 21.11.26).
+## Деревьям Q22 нужен clamp только вверх (врытое не трогать), аркам Q47 —
+## точная постановка низа на пол в обе стороны.
+func _geometry_lowest_y(n: Node3D) -> float:
 	var lo := 1e9
 	# (узел, трансформ родителя в пространстве слота). AABB — РЕСУРСНЫЕ
 	# (mesh.get_aabb()/multimesh.get_aabb()): узловой get_aabb() на detached-
@@ -311,7 +351,4 @@ func _geometry_min_y(n: Node3D) -> float:
 			stack.append([c, xf])
 	if lo >= 1e9:
 		return 0.0 # мешей нет — слот не трогать
-	# ВИСИТ (низ выше origin, lo>0) → опустить на lo; уже врыт (lo<0) → не трогать.
-	# Грабля: minf(lo, 0.0) вместо maxf съедал именно висячий случай (0.089→0) —
-	# все деревья «опускались на 0» и баг оставался (20.11.26).
-	return maxf(lo, 0.0)
+	return lo

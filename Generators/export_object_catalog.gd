@@ -40,6 +40,22 @@ func _init() -> void:
 	var dir_name := props_root.get_next()
 	while dir_name != "":
 		if props_root.current_is_dir() and not dir_name.begins_with("."):
+			# Q47 (21.11.26): папка без .tscn — raw-хранилище сырья (portal_arch/
+			# с .gdignore), НЕ проп: пропускаем вместо ошибки (был EXIT=1).
+			var has_tscn := false
+			var sub := DirAccess.open(PROPS_DIR + dir_name)
+			if sub:
+				sub.list_dir_begin()
+				var fn := sub.get_next()
+				while fn != "":
+					if fn.ends_with(".tscn"):
+						has_tscn = true
+						break
+					fn = sub.get_next()
+			if not has_tscn:
+				print("[SKIP] ", dir_name, " — нет .tscn (raw-хранилище)")
+				dir_name = props_root.get_next()
+				continue
 			var e := _export_prop(dir_name)
 			if e.is_empty():
 				failures.append(dir_name)

@@ -1,9 +1,11 @@
 extends SceneTree
 
-## Желе v4 рендер-проба (репорт юзера 21.11.26 «прибит к месту, не сдвигается»):
-## без пинов желе должно (1) держать купол — не лужа и не «хотдог-гамак»,
-## (2) СДВИГАТЬСЯ от толкателей, (3) пинов 0. PNG покой/после-толчков смотрю
-## сам. БЕЗ --headless (run_godot_render.ps1).
+## Желе v5 рендер-проба (Q25-B риг «мувер + пин-кольцо», Тест №1 PASS):
+## желе должно (1) держать купол с промином ~0.5 (посадка кольца) — не лужа
+## и не «хотдог-гамак», (2) СДВИГАТЬСЯ от толчков (пинки по куполу + импульс
+## муверу). Пин-кольцо низа — НОРМА v5 (проверяет 4-канальную механику
+## probe_movepoint), «пинов 0» из v4 больше не гейт. PNG покой/после-толчков
+## смотрю сам. БЕЗ --headless (run_godot_render.ps1).
 
 const JellyScript = preload("res://Logic/JellyMonster.gd")
 
@@ -78,12 +80,7 @@ func _init() -> void:
 		await physics_frame
 	var bb0 := _aabb(jelly)
 	var c0: Vector3 = (bb0.lo + bb0.hi) * 0.5
-	var pinned := 0
-	for i in jelly.get_point_count():
-		if jelly.is_point_pinned(i):
-			pinned += 1
-	_check("пинов 0 (подвижность)", pinned == 0)
-	_check("купол держится без юбки (высота ≥1.0 м)", bb0.hi.y - bb0.lo.y >= 1.0)
+	_check("купол держится на кольце (высота ≥1.0 м)", bb0.hi.y - bb0.lo.y >= 1.0)
 	_check("не расползается (ширина ≤ 8 м)",
 			maxf(bb0.hi.x - bb0.lo.x, bb0.hi.z - bb0.lo.z) <= 8.0)
 	print("[JELLY4] rest: lo=%s hi=%s" % [bb0.lo, bb0.hi])
@@ -91,18 +88,32 @@ func _init() -> void:
 	for i in 4:
 		await process_frame
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v4_rest.png")
+	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v5_rest.png")
 
-	# 2) серия толчков с одного бока (прямые пушеры 28 кг @16 м/с —
-	# как усиленный отжим игрока; кулдаун jolt_from не мешает).
-	# Высота удара — середина тела (как в игре): удар в подол у пола
-	# вминает точки СКВОЗЬ статику (поймано первым прогоном).
+	# 1b) НИЗкий ракурс «глаза игрока» (~1.6 м, почти горизонт): артефакт
+	# «полумесяца» (вердикт юзера 26.11.26: «ближняя сторона невидимая,
+	# обрезается») проявлялся именно сбоку на высоте стоя. DEPTH_PRE_PASS
+	# обязан держать купол цельным с любого угла — PNG смотрю сам.
+	cam.position = Vector3(c0.x, 1.6, c0.z + 9.5)
+	cam.look_at(Vector3(c0.x, 0.8, c0.z))
+	for i in 4:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v5_lowangle.png")
+	cam.position = Vector3(5.5, 3.2, 7.5)
+
+	# 2) серия толчков с одного бока (как усиленный отжим игрока; кулдаун
+	# jolt_from не мешает — каналы зовём напрямую). v5: удар = серия
+	# apply_impulse по куполу (точка на поверхности!) + импульс муверу;
+	# шары-пушеры не работают — контакт SoftBody-vs-RigidBody сломан
+	# (изолят probe_softcontact).
 	var body_h: float = bb0.hi.y - bb0.lo.y
 	for hit in 4:
 		var dir := Vector3(-1, 0, -0.25).normalized()
-		jelly._make_pusher(
-				c0 + dir * (jelly.radius + 1.2) + Vector3(0, body_h * 0.4, 0),
-				-dir * 16.0, 28.0)
+		jelly._poke_dome(
+				c0 + dir * (jelly.radius * 0.8) + Vector3(0, body_h * 0.25, 0),
+				-dir, 0.85)
+		jelly._kick_mover(-dir, 120.0)
 		for i in 30:
 			await physics_frame
 	var bb1 := _aabb(jelly)
@@ -116,7 +127,7 @@ func _init() -> void:
 	for i in 4:
 		await process_frame
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v4_pushed.png")
+	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v5_pushed.png")
 
 	if fails == 0:
 		print("JELLY4 GATE PASS")
