@@ -24,7 +24,7 @@ func _aabb(jelly: Node) -> Dictionary:
 		hi = hi.max(p)
 	return {"lo": lo, "hi": hi}
 
-func _spawn_jelly(spawn: Vector3 = Vector3(7, 1.95, -6)) -> SoftBody3D:
+func _spawn_jelly(spawn: Vector3 = Vector3(7, 0.75, -6)) -> SoftBody3D:
 	# Спавн-параметры живой арены: меш ДО add_child (грабля 4.8).
 	if spawn_arg != Vector3.ZERO:
 		spawn = spawn_arg
@@ -134,7 +134,7 @@ func _init() -> void:
 			fcs.position = Vector3(0, -4, 0)
 			root.add_child(fb)
 			fb.add_child(fcs)
-			jelly = _spawn_jelly(Vector3(7, 1.95, 6))
+			jelly = _spawn_jelly(Vector3(7, 0.75, 6))
 		"mono4":
 			# Контроль: единый монолит 100×4×100 (топ y=0) — ни сэндвича,
 			# ни тонкого бокса. Если и тут ползёт — сэндвич не при чём.

@@ -1,11 +1,10 @@
 extends SceneTree
 
-## Желе v5 рендер-проба (Q25-B риг «мувер + пин-кольцо», Тест №1 PASS):
-## желе должно (1) держать купол с промином ~0.5 (посадка кольца) — не лужа
-## и не «хотдог-гамак», (2) СДВИГАТЬСЯ от толчков (пинки по куполу + импульс
-## муверу). Пин-кольцо низа — НОРМА v5 (проверяет 4-канальную механику
-## probe_movepoint), «пинов 0» из v4 больше не гейт. PNG покой/после-толчков
-## смотрю сам. БЕЗ --headless (run_godot_render.ps1).
+## Желе v6 рендер-проба (CW-обмотка + риг v6). Желе должно (1) держать купол —
+## не лужа, (2) СДВИГАТЬСЯ от толчков, (3) с ракурса 45° СВЕРХУ (как ТПВ
+## игрока) купол ЦЕЛЬНЫЙ — только этот ракурс ловил «подкову» v5 (горизонт
+## сливал вогнутую заднюю стенку в силуэт; спец 22.11.26). PNG смотрю сам.
+## БЕЗ --headless (run_godot_render.ps1).
 
 const JellyScript = preload("res://Logic/JellyMonster.gd")
 
@@ -32,7 +31,7 @@ func _init() -> void:
 	await physics_frame
 	# Конфиг из аргументов (после `--`): --jpressure=X --jprecision=Y
 	var jpressure := 1.35
-	var jprecision := 18
+	var jprecision := 7
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--jpressure="):
 			jpressure = float(a.get_slice("=", 1))
@@ -65,7 +64,7 @@ func _init() -> void:
 	jelly.mesh = JellyScript.build_blob_mesh(2.6)
 	jelly.pressure_coefficient = jpressure
 	jelly.simulation_precision = jprecision
-	jelly.position = Vector3(0, 1.95, 0)
+	jelly.position = Vector3(0, 0.75, 0)
 	root.add_child(jelly)
 	await physics_frame
 	print("[JELLY4] config: pressure=%.2f precision=%d" % [jpressure, jprecision])
@@ -88,7 +87,7 @@ func _init() -> void:
 	for i in 4:
 		await process_frame
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v5_rest.png")
+	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v6_rest.png")
 
 	# 1b) НИЗкий ракурс «глаза игрока» (~1.6 м, почти горизонт): артефакт
 	# «полумесяца» (вердикт юзера 26.11.26: «ближняя сторона невидимая,
@@ -99,7 +98,19 @@ func _init() -> void:
 	for i in 4:
 		await process_frame
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v5_lowangle.png")
+	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v6_lowangle.png")
+	cam.position = Vector3(5.5, 3.2, 7.5)
+
+	# 1c) РАКУРС 45° СВЕРХУ (гейт спеца 22.11.26): ТПВ игрока смотрит сверху —
+	# только этот ракурс ловил «подкову» v5. Ждём: цельный купол (ближняя
+	# стенка рисуется — CW-обмотка), глаза на передней поверхности, полная
+	# тень купола на земле.
+	cam.position = Vector3(c0.x + 7.0, 7.0, c0.z + 7.0)
+	cam.look_at(Vector3(c0.x, 0.5, c0.z))
+	for i in 4:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v6_top45.png")
 	cam.position = Vector3(5.5, 3.2, 7.5)
 
 	# 2) серия толчков с одного бока (как усиленный отжим игрока; кулдаун
@@ -127,7 +138,7 @@ func _init() -> void:
 	for i in 4:
 		await process_frame
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v5_pushed.png")
+	root.get_texture().get_image().save_png("res://_tmp_probe/jelly_v6_pushed.png")
 
 	if fails == 0:
 		print("JELLY4 GATE PASS")

@@ -182,15 +182,16 @@ func _init():
 		print(p_name + " placed at " + str(p.pos))
 
 	# Желе-монстр (QUEUE Q6 → Q25 → v3 по вердикту юзера «хотдог-мешок»):
-	# SoftBody3D-слизень. y=1.95: низ купола (r*0.72=1.87) касается пола —
-	# пин-юбка фиксирует точки СРАЗУ на уровне пола, без провиса-гамака.
+	# SoftBody3D-слизень. v6-меш: плоское дно (0.25·r → дно −0.55 при r=2.6),
+	# спавн y=0.75 → дно на ~0.2 над полом; мувер-цилиндр сядет дном на пол сам
+	# (центр = RIG_HALF_H=0.75), пин-кольцо узкое (RIG_BAND 0.4).
 	var jelly = preload("res://Logic/JellyMonster.gd").new()
 	jelly.name = "JellyMonster"
 	# Меш ДО add_child (грабля 4.8, probe 19.11.26): назначение меша SoftBody3D
 	# когда узел уже в дереве, сбрасывает его трансформ в identity — желе
 	# уезжало из точки спавна в origin у спавна. Меш попадёт в tscn sub_resource.
 	jelly.mesh = preload("res://Logic/JellyMonster.gd").build_blob_mesh(jelly.radius)
-	jelly.position = Vector3(7, 1.95, -6)
+	jelly.position = Vector3(7, 0.75, -6)
 	root.add_child(jelly)
 	jelly.owner = root
 

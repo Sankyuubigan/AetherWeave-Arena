@@ -1,31 +1,27 @@
 extends SoftBody3D
-## Желе-монстр (QUEUE Q6 → Q25 v5 «Mover-риг», 26.11.26).
-##
-## Хроника каналов воздействия (все пойманы пробами, не теорией):
+## Желе-монстр (QUEUE Q6 → Q25 v6 «мувер-цилиндр + узкое кольцо + FSM-мозг»,
+## 22.11.26, по ответу спеца). Хроника каналов воздействия:
 ## - v1-v3: CharacterBody3D (move_and_slide) и Area3D-снаряды НЕ передают
 ##   импульс SoftBody3D; единственный канал — контакты с RigidBody3D.
 ## - v4 «БЕЗ ПИНОВ»: шары-толкатели RigidBody3D. Репорт юзера 21.11.26:
 ##   «прибит к месту» + Q25-B «упал под землю сразу при спавне». Изолят
 ##   probe_softcontact доказал: контакт SoftBody3D-vs-RigidBody3D в
 ##   GodotPhysics3d 4.8-beta3 СЛОМАН В ПРИНЦИПЕ (шар 28 кг дефолт-масок
-##   пролетает купол насквозь) — v4-пинки физически не работали вовсе.
+##   пролетает купол насквозy) — v4-пинки физически не работали вовсе.
 ## - Q25-B: контакт софтбоди со СТАТИКОЙ нестабилен: скан probe_jelly_arena
-##   mono4 16 точек — покой только в центре бокса, 15/16 дайвят под пол
+##   mono4 16 точек — покой только в центре, 15/16 дайвят под пол
 ##   (precision/pressure/mass/damping/drag/stiffness/friction/шум — все не лечат).
-## - v5 (Тест №1 спеца из tasks/Q25B_softbody_specialist_report.md, гейт
-##   MOVEPOINT PASS 4/4): НЕ-WATERTIGHT SphereMesh течёт объёмом при
-##   pressure>0 (купол 2.07→1.35 навсегда) → икосфера с уникальными
-##   вершинами; риг «мувер + пин-кольцо»: RigidBody3D-мувер лежит на полу
-##   (слой 1, контакты движка — железобетон), нижняя полоса точек пинится
-##   через PhysicsServer3D.soft_body_pin_point и КАЖДЫЙ ТИК двигается
-##   soft_body_move_point за мувером (пин = кинематика, но точку можно
-##   двигать — докс PhysicsServer3D). Желе НЕ контактирует с полом вовсе
-##   (mask 2), опора = кольцо; лифт-гвард возвращает точки, проскочившие
-##   кольцо при рывках. Пинки = серии apply_impulse(point_index) по куполу
-##   + центральный импульс муверу (сдвиг тела). Jolt не нужен.
-##
-## В headless трансформы точек реальны (probe_movepoint мерил lo/hi) —
-## гейты гоняются без окна.
+## - v5 (Тест №1 спеца, гейт MOVEPOINT PASS 4/4): риг «мувер + пин-кольцо».
+## - v6 (ответ спеца на Q25_jelly_consult_report_v52b.md): (1) ГЛАВНОЕ —
+##   обмотка икосферы была CCW (OpenGL-канон), а Godot ArrayMesh ждёт CW:
+##   cull_back отсекал БЛИЖНЮЮ стенку, рисовал внутренность ДАЛЬНЕЙ — вот вся
+##   «прозрачность»/«подкова»/«застрял в полу»; (2) узкое пин-кольцо 0.4 м с
+##   естественными оффсетами (полоса 1.3 м сминала 222 точки в плоскость);
+##   (3) мувер-цилиндр (не закатывается на валуны) + steering в мозге;
+##   (4) FSM поведения по КРОМКЕ купола (было «в упор»); (5) subdiv 2 +
+##   precision 7 (масса вниз ×8-10, пол невидим — precision 18 не нужен).
+
+const BrainScript = preload("res://Logic/JellyBrain.gd")
 
 @export var radius := 2.6
 @export var idle_wobble := true
@@ -34,27 +30,26 @@ const GROUP_NAME := "jelly_monster"
 const JOLT_COOLDOWN_MS := 700
 const PUSH_STRENGTH := 10.0 # отжим при давлении (10/9 базы → слайд ~2 м, догоняемо)
 
-# Q25-B v5 риг «мувер + пин-кольцо» (все константы из probe_movepoint PASS).
-const RIG_MOVER_R := 1.6 # радиус сферы-мувера
+# Q25 v6 риг «мувер-цилиндр + узкое пин-кольцо» (ответ спеца 22.11.26).
+const RIG_CYL_R := 2.0   # радиус ЦИЛИНДРА-мувера: вертикальные стенки не
+# дают закатываться на валуны (сфера r1.6 залезала вверх — вердикт «застревает»)
+const RIG_HALF_H := 0.75 # полу-высота цилиндра (h=1.5): дно мувера = center−0.75
 const RIG_MASS := 40.0   # масса мувера
-const RIG_BAND := 1.3    # высота полосы НИЗА тела, пинящейся к муверу (м над lowest)
-const RIG_SMUSH := 0.5   # посадка низа кольца ниже пола (одобренный промин JELLY4)
+const RIG_BAND := 0.4    # высота УЗКОГО донного кольца пинов (спец: полоса
+# 1.3 м сминала 222 точки в одну плоскость y=−0.5 — растяжение/разрывы)
+const RIG_SETTLE := 0.12 # лёгкая посадка кольца вниз, оффсеты ЕСТЕСТВЕННЫЕ
+const RIG_MP_SPEED := 12.0 # макс скорость move_point за тик (не рвать оболочку)
 const RIG_PIN_LERP := 0.08 # сглаживание выезда кольца к посадке за тик
-const RIG_LIFT_MARGIN := 0.55 # глубже (пол−0.55) точки мягко выталкиваются наверх
+const RIG_LIFT_MARGIN := 0.55 # глубже (дно мувера−0.55) точки мягко выталкиваются наверх
 const RIG_LIFT_K := 6.0  # Н на 1 м глубины лифт-гварда
 const RIG_LIFT_CLAMP := 1.0 # кламп глубины в силе (м)
-const RIG_KICK := 160.0  # Н·с муверу на толчок (база strength=9): скольжение ~2 м
+const RIG_KICK := 160.0  # Н·с муверу на контактный отжим (база strength=9)
 const PINK_PEAK := 0.85  # Н·с на точку купола в эпицентре (просадка ~0.3 м, гейт DENT)
 const DOME_ZONE := 1.4   # радиус зоны удара по куполу (линейный декей от точки удара)
 
-# «Оживление» v5.2 (выбор юзера 26.11.26: Б любопытство + В прыгун).
-const CURIOSITY_RANGE := 22.0 # дальше игроку желе «не замечает» его
-const CURIOSITY_FAR := 4.5    # ближе этой дистанции не подползает (личное пространство)
-const CURIOSITY_FORCE := 700.0 # Н постоянной тяги (probe_curiosity: импульсы
-# 90 Н·с тонут в damp 2.0 — путь 1.8 м за 4 с = «на месте»; сила 700 Н → ~1.25 м/с)
-const SCARE_HOLDS_S := 0.9    # с после ИСПУГА (снаряд/взрыв) тяга и прыжок молчат
-const HOP_MIN_S := 3.0        # пауза между подскоками (случайный диапазон)
-const HOP_MAX_S := 6.0
+# Поведение v6 — Logic/JellyBrain.gd (FSM APPROACH/ORBIT/FLEE/RECOVER,
+# дистанции ОТ КРОМКИ купола, 3-лучевой steering, unstuck). Здесь остались
+# только подскоки (мирные фазы зовут m._hop()).
 const HOP_UP := 140.0         # Н·с вертикали (масса 40 → v=3.5 → высота ~0.6 м)
 const HOP_SIDE := 25.0        # Н·с случайного бокового сноса прыжка
 
@@ -62,6 +57,10 @@ var _last_jolt_ms := -100000
 var _threat_bodies: Array = [] # CharacterBody3D внутри FeelerArea (непрерывная отдача)
 var _rng := RandomNumberGenerator.new()
 var _home := Vector3.ZERO
+# v6: мозг (FSM+steering, JellyBrain.gd) — подведён вместо импульсной _alive.
+var _brain = BrainScript.new()
+# фаза подскока: вне неё vy мувера клампится ≤0.5 (не «висит» на камнях — спец)
+var _hop_active := false
 # ЖИВОЙ центр/верх тела (AABB точек каждый физ-тик): узел желе уходит в
 # identity, тело оседает и расползается — все «прицепы» (глаза, зона, толчки)
 # должны следовать за реальным телом, а не за стартовым _home (вердикт
@@ -69,18 +68,14 @@ var _home := Vector3.ZERO
 var _live_center := Vector3.ZERO
 var _live_top := Vector3.ZERO
 var _eyes: Array = []
-# v5 риг: мувер (RigidBody3D на полу) + пин-кольцо низа.
+# v6: горизонтальный «взгляд» на игрока (глаза едут вперёд по нему + look_at).
+var _eye_fwd := Vector3(0, 0, 1)
+# v6 риг: мувер-цилиндр (RigidBody3D на полу) + узкое пин-кольцо низа.
 var _mover: RigidBody3D = null
 var _rig_rid: RID
 var _rig_pins := PackedInt32Array()
 var _rig_cur: Array[Vector3] = [] # текущие оффсеты кольца в локале мувера
-var _rig_tgt: Array[Vector3] = [] # целевые оффсеты (посадка на пол−RIG_SMUSH)
-# «Оживление»: обратный отсчёт до подскока; отдельный таймер ИСПУГА
-# (только снаряды/взрывы) — отжим при касании испугом НЕ считается:
-# иначе идущий к желе игрок держит его в вечном испуге и любопытство
-# никогда не просыпается (поймано вердиктом «ко мне не идёт» 26.11.26).
-var _hop_wait := 4.0
-var _last_scare_ms := -100000
+var _rig_tgt: Array[Vector3] = [] # целевые оффсеты (естественные + посадка −0.12)
 
 func _ready() -> void:
 	# Дом = трансформация из сцены, снимаем ДО возможного назначения меша.
@@ -120,9 +115,7 @@ func _physics_process(delta: float) -> void:
 		return # тик 1 до рига: падение ~3 мм — не заметно
 	var lo := Vector3(1e9, 1e9, 1e9)
 	var hi := Vector3(-1e9, -1e9, -1e9)
-	# Порог лифт-гварда = дно мувера − RIG_LIFT_MARGIN (мувер лежит на полу:
-	# центр на полу+RIG_MOVER_R). Точки глубже — мягкий подъём силой.
-	var lift_y := _mover.global_position.y - RIG_MOVER_R - RIG_LIFT_MARGIN
+	var lift_y := _mover.global_position.y - RIG_HALF_H - RIG_LIFT_MARGIN
 	for i in count:
 		var p := get_point_transform(i)
 		lo = lo.min(p)
@@ -135,21 +128,43 @@ func _physics_process(delta: float) -> void:
 	_live_center = (lo + hi) * 0.5
 	_live_top = Vector3(_live_center.x, hi.y, _live_center.z)
 	# Кольцо пинов каждый тик: оффсеты сглаживаются к посадке, точки двигаются
-	# за мувером (кинематика через soft_body_move_point — пин не отслеживает
-	# анкеры, но его можно двигать; докс PhysicsServer3D).
+	# за мувером; шаг move_point КЛАМПИТСЯ (RIG_MP_SPEED) — оболочку не рвёт
+	# (спец: при рывках move_point растягивал купол → вывороты).
 	for k in _rig_pins.size():
 		_rig_cur[k] = _rig_cur[k].lerp(_rig_tgt[k], RIG_PIN_LERP)
-		PhysicsServer3D.soft_body_move_point(_rig_rid, _rig_pins[k],
-				_mover.to_global(_rig_cur[k]))
-	# Глаза едут за верхней поверхностью (top_level — узел желе в identity).
-	# lerp 0.35 — глаза догоняют тело плавно, без дрожи по точкам.
+		var goal: Vector3 = _mover.to_global(_rig_cur[k])
+		var curp: Vector3 = PhysicsServer3D.soft_body_get_point_global_position(
+				_rig_rid, _rig_pins[k])
+		var step: Vector3 = goal - curp
+		var maxstep: float = RIG_MP_SPEED * delta
+		if step.length() > maxstep:
+			step = step.normalized() * maxstep
+		PhysicsServer3D.soft_body_move_point(_rig_rid, _rig_pins[k], curp + step)
+	# Вне прыжка vy мувера клампится ≤0.5: цилиндр не «задирается» вверх
+	# по камню при тяге (спец §БАГ-C.3: «запрет висеть на камне»).
+	if not _hop_active and _mover.linear_velocity.y > 0.5:
+		_mover.linear_velocity.y = 0.5
+	if _hop_active and _mover.global_position.y <= RIG_HALF_H + 0.05:
+		_hop_active = false
+	# Глаза едут за «взглядом» на игрока (спец §БАГ-D.3): forward сглаживается,
+	# позиция на передней поверхности купола + look_at (зрачок на −Z).
 	var dome := hi.y - _live_center.y
+	var fwd := Vector3(0, 0, 1)
+	var players := get_tree().get_nodes_in_group("player")
+	if players.size() > 0 and is_instance_valid(players[0]):
+		var tf: Vector3 = (players[0] as Node3D).global_position - _live_center
+		tf.y = 0.0
+		if tf.length_squared() > 0.001:
+			fwd = tf.normalized()
+	_eye_fwd = _eye_fwd.lerp(fwd, 0.15)
+	var right := Vector3(-_eye_fwd.z, 0.0, _eye_fwd.x)
 	for k in _eyes.size():
 		var side := 1.0 if k == 0 else -1.0
-		var target := _live_center \
-				+ Vector3(side * radius * 0.30, dome * 0.72, radius * 0.50)
+		var target := _live_center + _eye_fwd * radius * 0.75 \
+				+ right * (side * radius * 0.28) + Vector3(0, dome * 0.45, 0)
 		(_eyes[k] as Node3D).global_position = \
 				(_eyes[k] as Node3D).global_position.lerp(target, 0.35)
+		(_eyes[k] as Node3D).look_at(_live_center + _eye_fwd * radius * 2.0)
 	var area := get_node_or_null("FeelerArea")
 	if area:
 		area.global_position = _live_center
@@ -161,55 +176,29 @@ func _physics_process(delta: float) -> void:
 			threat = b
 			break
 	if threat != null and _want_push(threat):
-		# scary=false: контактный отжим — не «испуг», иначе любопытство
-		# никогда не просыпается (вердикт «ко мне не идёт» 26.11.26).
+		# scary=false: контактный отжим — не «испуг», иначе FSM-мозг
+		# включал бы FLEE от самого факта «игрок просто идёт к желе».
 		jolt_from(threat.global_position, PUSH_STRENGTH, false)
-	_alive(delta)
+	# Поведение v6: FSM-мозг (APPROACH/ORBIT/FLEE/RECOVER + steering + прыжки).
+	_brain.tick(delta, self)
 
-## «Оживление» желе (вердикт юзера 26.11.26 «тупо стоит»; выбор: любопытство
-## + прыгун). Канал тот же, что у пинков, — импульсы муверу, физика рига не
-## меняется. Любопытство: игрок в группе "player" в 6-22 м — ленивая тяга с
-## боковым сносом («кружит рядом»); испуг (jolt) держит паузу SCARE_HOLDS_S,
-## потом желе возвращается. Прыгун: подскок ~0.6 м с случайным сносом, только
-## с земли. В пробах игрока нет — тяга молчит, гейты покоя не задевает.
-func _alive(delta: float) -> void:
-	if _mover == null:
+## Подскок (мирные фазы зовут через мозг): только с земли, случайный снос.
+func _hop() -> void:
+	if _mover == null or _hop_active:
 		return
-	var scared := Time.get_ticks_msec() - _last_scare_ms < int(SCARE_HOLDS_S * 1000.0)
-	# --- Любопытство: ПОСТОЯННАЯ тяга, НЕ импульсы (probe_curiosity 26.11.26:
-	# кики 90 Н·с каждые 1.2 с тонут в damp 2.0 — путь 1.8 м за 4 с, «на
-	# месте»; сила 700 Н → видимые ~1.25 м/с). Боковой вобл по синусу —
-	# «кружит рядом», не по струне. В пробах игрока нет — тяга молчит.
-	var players := get_tree().get_nodes_in_group("player")
-	if not scared and players.size() > 0 and is_instance_valid(players[0]):
-		var pl := players[0] as Node3D
-		var base := _live_center if _live_center != Vector3.ZERO else _home
-		var to_pl := pl.global_position - base
-		to_pl.y = 0.0
-		var dist := to_pl.length()
-		if dist > CURIOSITY_FAR and dist < CURIOSITY_RANGE \
-				and to_pl.length_squared() > 0.001:
-			var wobble := sin(Time.get_ticks_msec() / 1000.0 * 1.3) * 0.35
-			var dir := (to_pl.normalized() \
-					+ Vector3(-to_pl.z, 0.0, to_pl.x).normalized() * wobble).normalized()
-			_mover.apply_central_force(dir * CURIOSITY_FORCE)
-	# --- Прыгун ---
-	_hop_wait -= delta
-	if _hop_wait <= 0.0:
-		_hop_wait = _rng.randf_range(HOP_MIN_S, HOP_MAX_S)
-		if not scared and _mover.global_position.y <= RIG_MOVER_R + 0.1:
-			var side := Vector3(_rng.randf_range(-1.0, 1.0), 0.0,
-					_rng.randf_range(-1.0, 1.0))
-			if side.length_squared() < 0.001:
-				side = Vector3(1, 0, 0)
-			side = side.normalized() * HOP_SIDE
-			_mover.apply_central_impulse(Vector3(side.x, HOP_UP, side.z))
+	var side := Vector3(_rng.randf_range(-1.0, 1.0), 0.0,
+			_rng.randf_range(-1.0, 1.0))
+	if side.length_squared() < 0.001:
+		side = Vector3(1, 0, 0)
+	side = side.normalized() * HOP_SIDE
+	_hop_active = true
+	_mover.apply_central_impulse(Vector3(side.x, HOP_UP, side.z))
 
 func _setup_physics() -> void:
 	pressure_coefficient = 1.35 # купол как у одобренного JELLY4
 	damping_coefficient = 0.02
-	simulation_precision = 18 # против протекания точек сквозь статику (docsgodot
-	# «Using SoftBody3D» + issue #65588)
+	simulation_precision = 7 # 18 был против протекания сквозь ПОЛ, но пол
+	# невидим (mask 2) — 7 достаточно, CPU ×2.5 легче (спец §8.5)
 	# Слой/маска 2: пол (слой 1) и мувер ИСКЛЮЧЕНЫ из контактов желе —
 	# опора = пин-кольцо на мувере, движковых контактов софтбоди нет вовсе.
 	collision_layer = 2
@@ -218,9 +207,16 @@ func _setup_physics() -> void:
 
 ## Watertight-икосфера (Q25-B): SphereMesh 32×20 не замкнут — UV-шов с
 ## дублированными вершинами, при pressure>0 объём ТЕЧЁТ насквозь (купол
-## 2.07→1.35 навсегда, поймано probe_movepoint). Икосфера subdiv 3 = 642
-## уникальные вершины, без шва и полюсов. Рест-шейп: сплющивание по Y (x0.72)
-## + детерминированный шум ПО направлению до squash (как в одобренном виде).
+## 2.07→1.35 навсегда, поймано probe_movepoint). Икосфера subdiv 2 = 162
+## уникальные вершины, без шва и полюсов (спец §8.5: CPU ×8-10 легче, вид тот же
+## со сглаженными нормалями). ГРАБЛЯ-ССОТ (спец 22.11.26, «главная находка»):
+## Godot ArrayMesh лицевая грань = CW — (v1−v0).cross(v2−v0).dot(outward) < 0
+## (OpenGL-доки/туториалы говорят CCW!). Обмотка CCW = купол «наизнанку»:
+## cull_back отсекает БЛИЖНЮЮ стенку → «прозрачность», «видна внутренняя
+## сторона», «подкова». _ico_subdiv пишет индексы [a, c, b] — CW.
+## Форма: ПЛОСКОЕ ШИРОКОЕ ДНО запечено в rest-меш (v.y<0 → y·0.25, верх
+## 0.85) — купол с первого кадра стоит на полу; прежняя посадка пин-кольцом
+## сминала полосу 1.3 м в плоскость (спец §БАГ-B). Шум по v*r до squash.
 ## STATIC + вызывается ГЕНЕРАТОРОМ ДО add_child: назначение меша рантаймом
 ## (узел уже в дереве) сбрасывает трансформ SoftBody3D в identity.
 static func build_blob_mesh(r: float, noise_amp: float = 0.04) -> ArrayMesh:
@@ -245,12 +241,14 @@ static func build_blob_mesh(r: float, noise_amp: float = 0.04) -> ArrayMesh:
 	var ilist := PackedInt32Array()
 	var mid := {}
 	for f in faces:
-		_ico_subdiv(f[0], f[1], f[2], 3, vlist, ilist, mid)
+		_ico_subdiv(f[0], f[1], f[2], 2, vlist, ilist, mid) # subdiv 2: 162/320
 	var verts := PackedVector3Array()
 	var norms := PackedVector3Array()
 	for v in vlist:
 		var q := v * r
-		q.y *= 0.72 # приземистый купол-рест — осевшее тело = слизень-купол
+		# ПЛОСКОЕ ШИРОКОЕ ДНО в rest-меш (спец §БАГ-B.1): низ жмётся до 0.25,
+		# верх до 0.85 — купол стоит на полу сам, кольцо не сминает полусферу.
+		q.y *= (0.25 if v.y < 0.0 else 0.85)
 		q += _noise3(v * r) * r * noise_amp
 		verts.append(q)
 		norms.append(v)
@@ -284,7 +282,11 @@ static func build_blob_mesh(r: float, noise_amp: float = 0.04) -> ArrayMesh:
 static func _ico_subdiv(a: int, b: int, c: int, depth: int,
 		vlist: Array[Vector3], ilist: PackedInt32Array, mid: Dictionary) -> void:
 	if depth == 0:
-		for i in [a, b, c]:
+		# CW-обмотка для Godot ArrayMesh (спец 22.11.26, главная находка):
+		# лицевая грань — (v1−v0)×(v2−v0)·outward < 0. CCW (OpenGL-канон
+		# туториалов) давал купол «наизнанку»: cull_back отсекал БЛИЖНЮЮ
+		# стенку → «прозрачность», «видна внутренняя сторона».
+		for i in [a, c, b]:
 			ilist.append(i)
 		return
 	var ab := _ico_mid(a, b, vlist, mid)
@@ -330,6 +332,10 @@ func _add_feeler_area() -> void:
 	cs.shape = ss
 	area.add_child(cs)
 	area.body_entered.connect(_on_feeler_body)
+	# БАГ A (спец 22.11.26): этой строки НЕ БЫЛО — игрок навсегда оставался
+	# в _threat_bodies после первого входа → _want_push срабатывал с 10 м
+	# при беге в сторону желе.
+	area.body_exited.connect(_on_feeler_body_exit)
 	add_child(area)
 	area.global_position = _home
 
@@ -378,8 +384,6 @@ func jolt_from(from_pos: Vector3, strength := 9.0, scary := true) -> void:
 	if now - _last_jolt_ms < JOLT_COOLDOWN_MS:
 		return
 	_last_jolt_ms = now
-	if scary:
-		_last_scare_ms = now # испуг: тяга+прыжок молчат SCARE_HOLDS_S секунд
 	var k := strength / 9.0
 	# Отжим СТРОГО горизонтальный: вертикальная компонента (center выше
 	# игрока) подбрасывала мувера — желе «прыгало лягушкой» (вердикт юзера).
@@ -389,7 +393,13 @@ func jolt_from(from_pos: Vector3, strength := 9.0, scary := true) -> void:
 		away = Vector3(0, 0, 1)
 	away = away.normalized()
 	_poke_dome(base - away * radius * 0.8, away, PINK_PEAK * k)
-	_kick_mover(away, RIG_KICK * k)
+	if scary:
+		# Испуг v6 = FSM-фаза FLEE в мозге: старт-кик 280·k + активная тяга
+		# бегства 950 Н на 4-5 с (спец §БАГ-D: отлёт ~1 м и «секунда испуга»
+		# не давали отхода; вердикт юзера «отходит на 1 метр и прилипает»).
+		_brain.scare(self, away, k)
+	else:
+		_kick_mover(away, RIG_KICK * k)
 
 ## Фоновая дрожь: лёгкий тычок в случайный бок — желе постоянно подрагивает,
 ## даже когда никто не рядом (вердикт «он не желе»). Без сдвига мувера.
@@ -402,12 +412,14 @@ func _idle_poke() -> void:
 ## Удар по куполу: серия apply_impulse(point_index) по вершинам в зоне
 ## DOME_ZONE от точки удара с линейным декеймом. Гейт DENT probe_movepoint:
 ## peak 0.85 Н·с → просадка купола 0.32 м с полным восстановлением (икосфера).
+## Кламп 1.2 Н·с на вершину (спец §8.1: потолок импульса — без выворотов).
 func _poke_dome(hit: Vector3, dir: Vector3, peak: float) -> void:
+	var pk := minf(peak, 1.2)
 	var n := get_point_count()
 	for i in n:
 		var d := get_point_transform(i).distance_to(hit)
 		if d < DOME_ZONE:
-			apply_impulse(i, dir * (1.0 - d / DOME_ZONE) * peak)
+			apply_impulse(i, dir * (1.0 - d / DOME_ZONE) * pk)
 
 ## Центральный импульс муверу: тело (вместе с пин-кольцом) СДВИГАЕТСЯ.
 func _kick_mover(dir: Vector3, impulse_len: float) -> void:
@@ -415,13 +427,13 @@ func _kick_mover(dir: Vector3, impulse_len: float) -> void:
 		return
 	_mover.apply_central_impulse(dir * impulse_len)
 
-## Q25-B v5 риг «мувер + пин-кольцо» (Тест №1, MOVEPOINT GATE PASS 4/4).
-## Мувер = RigidBody3D сфера RIG_MOVER_R на полу (слой 1): контакты движка
-## с полом железобетонны, мувер НЕ провалится (в отличие от софтбоди).
-## Нижняя полоса точек (RIG_BAND над lowest) пинится через
-## PhysicsServer3D.soft_body_pin_point и двигается soft_body_move_point за
-## мувером КАЖДЫЙ ТИК. Желе контакта с полом не имеет вовсе (mask 2) —
-## опора целиком на кольце; посадка низа на пол−RIG_SMUSH (промин JELLY4).
+## Q25 v6 риг (спец §БАГ-B/C): мувер = RigidBody3D с ЦИЛИНДРОМ r=2.0 h=1.5 —
+## вертикальные стенки физически не дают закатываться на валуны (сфера r1.6
+## залезала вверх). Пин-кольцо УЗКОЕ (0.4 м над lowest, ~30-50 точек) с
+## ЕСТЕСТВЕННЫМИ локальными оффсестами + посадка −0.12 м: полоса 1.3 м с
+## смином 222 точек в плоскость y=−0.5 тянула оболочку на 1.88 м вниз
+## (спец §БАГ-B) → растяжения/вывороты. Желе контакта с полом не имеет вовсе
+## (mask 2) — опора целиком на кольце.
 func _add_mover_rig() -> void:
 	var n := get_point_count()
 	if n == 0:
@@ -433,19 +445,27 @@ func _add_mover_rig() -> void:
 	_mover.name = "RigMover"
 	_mover.mass = RIG_MASS
 	_mover.linear_damp = 2.0
+	# Трение ≈ 0 (22.11.26, диагностика CURIOSITY FAIL): лимит статического
+	# трения о пол μ1.0×вес40кг ≈ 392 Н ГЛОТИЛ все силы мозга ниже лимита
+	# (долина пульса 245 Н, ORBIT 180 Н) → тело стояло/спало. Торможение —
+	# linear_damp 2.0, а не трением.
+	var mpm := PhysicsMaterial.new()
+	mpm.friction = 0.05
+	_mover.physics_material_override = mpm
 	_mover.collision_layer = 1
 	_mover.collision_mask = 1
 	_mover.lock_rotation = true
 	_mover.top_level = true # узел желе уходит в identity — мувер живёт в мире
 	var mcs := CollisionShape3D.new()
-	var msph := SphereShape3D.new()
-	msph.radius = RIG_MOVER_R
-	mcs.shape = msph
+	var cyl := CylinderShape3D.new()
+	cyl.radius = RIG_CYL_R
+	cyl.height = RIG_HALF_H * 2.0
+	mcs.shape = cyl
 	_mover.add_child(mcs)
 	add_child(_mover)
-	# Дно мувера на полу: центр = спавн−0.35 (низ блоба при спавне ~0.08 над
-	# полом). Если спавн выше пола — мувер досядет физикой сам.
-	_mover.global_position = _home + Vector3(0, -0.35, 0)
+	# Дно цилиндра на полу: центр = RIG_HALF_H (пол y=0). Спавн-высота узла
+	# желе y=0.75 ставит дно меша (−0.55) у пола — посадка без рывка.
+	_mover.global_position = Vector3(_home.x, RIG_HALF_H, _home.z)
 	_rig_rid = get_physics_rid()
 	for i in n:
 		var p: Vector3 = get_point_transform(i)
@@ -453,10 +473,10 @@ func _add_mover_rig() -> void:
 			continue
 		PhysicsServer3D.soft_body_pin_point(_rig_rid, i, true)
 		_rig_pins.append(i)
-		_rig_cur.append(_mover.to_local(p)) # старт без рывка
-		# Цель посадки: XZ точки, Y = дно мувера − RIG_SMUSH (мировой пол).
-		_rig_tgt.append(_mover.to_local(Vector3(p.x,
-				_mover.global_position.y - RIG_MOVER_R - RIG_SMUSH, p.z)))
+		# ЕСТЕСТВЕННЫЕ локальные оффсеты (не сминая в плоскость!), цель —
+		# лёгкая посадка −RIG_SETTLE (спец §БАГ-B.2).
+		_rig_cur.append(_mover.to_local(p))
+		_rig_tgt.append(_mover.to_local(p) + Vector3(0, -RIG_SETTLE, 0))
 
 ## Area3D-фидер, глаза (см. _add_feeler_area) — прицепы тела.
 func _add_eyes() -> void:
@@ -481,5 +501,6 @@ func _add_eyes() -> void:
 		pm.height = radius * 0.12
 		pm.material = black
 		pupil.mesh = pm
-		pupil.position = Vector3(0, 0, radius * 0.12)
+		# Зрачок на −Z: look_at направляет −Z на игрока — зрачок «спереди».
+		pupil.position = Vector3(0, 0, -radius * 0.12)
 		eye.add_child(pupil)
