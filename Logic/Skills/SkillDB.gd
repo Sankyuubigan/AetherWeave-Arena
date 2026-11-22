@@ -502,6 +502,76 @@ Esc — отмена."
     bdrop.effects.append(preload("res://Logic/Skills/BardDropEffect.gd").new())
     _skills["bard_drop"] = bdrop
 
+    # Стойка «Пульс Битвы» (22.11.26, спец 11-ответ Блоки 2–3): вторая стойка
+    # барда — ритм на ВСЕ действия (Hi-Fi Rush): ЛЮБОЙ скилл в бит заряжает
+    # Грув и получает ×1.0..1.35 урона по tier. БЕЗ падающих нот/дорожек.
+    var bgroove = preload("res://Logic/Skills/Skill.gd").new()
+    bgroove.id = "bard_groove"
+    bgroove.skill_name = "Пульс Битвы"
+    bgroove.description = "Стойка-грув: ЛЮБОЙ скилл/шаг в бит заряжает
+шкалу (1 бит = 1 заряд) и усиливает урон по tier (×1.0→1.35).
+ЛКМ — Нота-пуля, ПКМ — Ритм-выпад, кнопка стойки — Крещендо (от 60%).
+Купол 100 (+10 за perfect), спад 11%/с, потолок 16 с. Esc — отмена."
+    bgroove.icon = "🎶"
+    bgroove.price = 5
+    bgroove.max_range = 200.0
+    var g_ent = preload("res://Logic/Skills/EnterStanceEffect.gd").new()
+    g_ent.stance_id = "bard_groove"
+    # Реальный выход: groove_empty / barrier_break / max_duration(16 c) /
+    # crescendo / cancel — duration 99 только страховка (как у bard_flow).
+    g_ent.duration = 99.0
+    bgroove.effects.append(g_ent)
+    var g_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
+    g_sound.audio_stream = load("res://Audio/Bard/note_a4.res")
+    g_sound.volume_db = 0.0
+    bgroove.effects.append(g_sound)
+    var g_subs: Array[Dictionary] = [
+        {"id": "groove_pulse", "label": "Нота-пуля", "default_slot": "ЛКМ"},
+        {"id": "groove_step", "label": "Ритм-выпад", "default_slot": "ПКМ"},
+        {"id": "groove_crescendo", "label": "Крещендо", "default_slot": "self"},
+    ]
+    bgroove.stance_sub_skills = g_subs
+    # Ритм-судья НОТ не участвует (sub_kinds пуст): вердикты даёт
+    # BardGrooveComponent.evaluate_action через хук cast_skill.
+    bgroove.cooldown = 2.0  # КД повторного входа (как bard_flow)
+    _skills["bard_groove"] = bgroove
+
+    # Под-приёмы «Пульса Битвы».
+    var gpulse = preload("res://Logic/Skills/Skill.gd").new()
+    gpulse.id = "groove_pulse"
+    gpulse.skill_name = "Нота-пуля"
+    gpulse.description = "Лёгкий снаряд (14 урона) под стрельбу 1 раз в бит.
+В бит — золотая, быстрее, ×1.25; мимо — «фальшивый» плевок ×0.4."
+    gpulse.icon = "🎵"
+    gpulse.is_sub_skill = true
+    gpulse.max_range = 100.0
+    gpulse.cooldown = 0.25
+    gpulse.effects.append(preload("res://Logic/Skills/GroovePulseEffect.gd").new())
+    _skills["groove_pulse"] = gpulse
+
+    var gstep = preload("res://Logic/Skills/Skill.gd").new()
+    gstep.id = "groove_step"
+    gstep.skill_name = "Ритм-выпад"
+    gstep.description = "Резкий стрейф-рывок 3.5 м по WASD (или вперёд).
+В бит — длиннее (4.5 м) и со шлейфом нот на полу."
+    gstep.icon = "💃"
+    gstep.is_sub_skill = true
+    gstep.max_range = 10.0
+    gstep.cooldown = 0.45
+    gstep.effects.append(preload("res://Logic/Skills/GrooveStepEffect.gd").new())
+    _skills["groove_step"] = gstep
+
+    var gcres = preload("res://Logic/Skills/Skill.gd").new()
+    gcres.id = "groove_crescendo"
+    gcres.skill_name = "Крещендо"
+    gcres.description = "Финал Пульса: AoE-взрыв ∝ Груву (от 60%),
+отброс по шкале, закрывает стойку."
+    gcres.icon = "🥁"
+    gcres.is_sub_skill = true
+    gcres.max_range = 8.0
+    gcres.effects.append(preload("res://Logic/Skills/GrooveCrescendoEffect.gd").new())
+    _skills["groove_crescendo"] = gcres
+
     # Кузница скиллов (Q36): пользовательские скиллы вливаются в реестр в конце
     # ленивой инициализации — магазин/ActionBar/каст/персист работают по id сами.
     UserSkillDBScript.load_all(_skills)

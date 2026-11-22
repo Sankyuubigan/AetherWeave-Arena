@@ -47,10 +47,15 @@
   CrescentWave/AoeDamage/SpawnProjectile; без стойки = 1.0 — поведение не меняется.
 * `knockback_mult` (Q16) — множитель отброса AoE (Бас-Дроп: 1 + 0.25×tier),
   читает AoeDamageEffect.
+* `groove_verdict` (22.11.26, «Пульс Битвы») — вердикт ритма
+  («perfect»/«good»/«offbeat»), кладёт `SpellCasterComponent._groove_judge`
+  при активной стойке bard_groove (в ОБЕИХ ветках cast_skill). Тот же хук
+  умножает `damage_mult` на TIER_DAMAGE_MULT[tier] (пост-press, offbeat —
+  НЕ меняет, скилл не блокируется). Читают GroovePulse/GrooveStep.
 
 ---
 
-## 📦 Доступные строительные блоки (12, реализовано)
+## 📦 Доступные строительные блоки (20, реализовано)
 
 ### 1. `SpawnProjectileEffect`
 Классический летящий по прямой снаряд (урон тащит сам снаряд из tscn).
@@ -193,6 +198,35 @@ A→B 0.45 с (дуга smoothstep + подпрыг 0.4 м в начале, «п
 Позиция кости кисти кастера (`mixamorig_RightHand`/`LeftHand`) для спавна
 из руки; фолбэк — центр тела +1.2 м. У ботов/врагов скелет ищется по всему
 поддереву (скин не всегда под `GraphicsWrapper/PlayerModel`).
+
+### 18. `GroovePulseEffect` (22.11.26, «Пульс Битвы»)
+«Нота-пуля» (ЛКМ в bard_groove): mana_bolt урон 14, КД 0.25 — ритм-масштаб
+по `context["groove_verdict"]`.
+* perfect/good: урон ×1.25 (СВЕРХ tier-множителя, уже лежащего в
+  `damage_mult`), скорость ×1.6, материал снаряда — золото (emission).
+* offbeat: ×0.4 «фальшивый плевок» (5 урона), глухая нота note_miss.
+* **Пул-безопасность:** damage/speed/material_override перезаписываются
+  КАЖДЫЙ каст (ProjectilePool шарит узлы между жизнями).
+* **Применение:** образец «урон зависит от ритма без блокировки каста».
+
+### 19. `GrooveStepEffect` (22.11.26)
+«Ритм-выпад» (ПКМ в bard_groove): рывок 3.5 м (в бит 4.5) по WASD-вектору
+(фолбэк `forward_dir` из context), КД 0.45.
+* Raycast-гард стены: дистанция до hit −0.6 (мин 0.5);
+  `reset_physics_interpolation` после сдвига.
+* Шлейф: `AnimatedDecalComponent.ground_hit_below` + DecalFrames.warp_ring
+  (золото в бит / фиолет мимо); в бит — вторая декаль на финише.
+* **Применение:** мобильность, управляемая ритмом игрока.
+
+### 20. `GrooveCrescendoEffect` (22.11.26)
+«Крещендо» (self в bard_groove, повторное нажатие кнопки стойки): взрыв,
+растущий от шкалы Грува.
+* Гард: groove < 60 → тост «Крещендо: нужно ≥60% Грува» + глухая нота,
+  стойка НЕ закрывается.
+* При ≥60: AoeDamageEffect radius 5.5, урон lerp(20, 100, g),
+  `center_on_caster`, `knockback_mult` 1 + 0.8g, VFX thunder_effect;
+  после apply — `groove.close("crescendo")`.
+* **Применение:** «накопил — выпустил», выход из стойки с уроном.
 
 ---
 

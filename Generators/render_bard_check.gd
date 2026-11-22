@@ -19,7 +19,8 @@ func _run() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-50, -25, 0)
 	root.add_child(sun)
-	# Пол — кромка DEPTH-пересечения купола светится на нём.
+	# Пол — кромка DEPTH-пересечения купола светится на нём + коллизия для
+	# raycast ground_y (вердикт 11: кольцо лежит на РЕАЛЬНОМ полу).
 	var floor_mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(40, 40)
@@ -28,13 +29,29 @@ func _run() -> void:
 	fm.albedo_color = Color(0.45, 0.5, 0.45)
 	floor_mi.material_override = fm
 	root.add_child(floor_mi)
-	# Стаб игрока + РЕАЛЬНЫЕ компоненты (те же, что у игрока в _ready).
+	var floor_body := StaticBody3D.new()
+	var fcs := CollisionShape3D.new()
+	var fbox := BoxShape3D.new()
+	fbox.size = Vector3(40, 1, 40)
+	fcs.shape = fbox
+	floor_body.add_child(fcs)
+	floor_body.position = Vector3(0, -0.5, 0)  # топ бокса = y 0.0
+	root.add_child(floor_body)
+	# Стаб игрока в РЕАЛЬНЫХ условиях (вердикт 11 §5): CharacterBody3D,
+	# покой y=1.0 (капсула h=2.0 в origin, низ 0.0) — как в MainArena.
 	var stub := GDScript.new()
-	stub.source_code = "extends Node3D\nvar speed_mult: float = 1.0\n"
+	stub.source_code = "extends CharacterBody3D\nvar speed_mult: float = 1.0\n"
 	stub.reload()
-	var pl := Node3D.new()
+	var pl := CharacterBody3D.new()
 	pl.set_script(stub)
+	pl.position = Vector3(0, 1.0, 0)
 	root.add_child(pl)
+	var cs := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.height = 2.0
+	cap.radius = 0.5
+	cs.shape = cap
+	pl.add_child(cs)
 	var flow = load("res://Logic/BardFlowComponent.gd").new()
 	flow.name = "BardFlowComponent"
 	pl.add_child(flow)

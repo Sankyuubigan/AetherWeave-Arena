@@ -110,6 +110,7 @@ func cast_skill(skill_id: String, extra_context: Dictionary = {}):
 		return
 	if not extra_context.is_empty():
 		context.merge(extra_context, true)  # stance_power и пр. (Q16 Шаг 1)
+	_groove_judge(player, skill_id, context)
 
 	var anim_comp = player.get_node_or_null("PlayerAnimationComponent")
 
@@ -145,6 +146,7 @@ func cast_skill(skill_id: String, extra_context: Dictionary = {}):
 			return
 		if not extra_context.is_empty():
 			context.merge(extra_context, true)
+		_groove_judge(player, skill_id, context)
 		skill.execute(player, context)
 	else:
 		if cast_anim_name != "" and anim_comp and anim_comp.has_method("play_cast_anim"):
@@ -153,6 +155,24 @@ func cast_skill(skill_id: String, extra_context: Dictionary = {}):
 			if anim_comp.has_method("cast_clip_length"):
 				_ik_begin(player, hand, skill, anim_comp.cast_clip_length(cast_anim_name))
 		skill.execute(player, context)
+
+## «Пульс Битвы» (спец 11-ответ, 22.11.26): при активной стойке bard_groove
+## КАЖДЫЙ каст судится ритмом (BardGrooveComponent.evaluate_action): саб —
+## source "sub" (спам-штраф мимо бита), остальное — "skill". perfect/good →
+## урон ×TIER_DAMAGE_MULT[tier] (1.0/1.15/1.25/1.35), offbeat → без множителя.
+## Скилл НИКОГДА не блокируется вердиктом (ТЗ Блок 2.3) — только масштаб.
+func _groove_judge(player: Node, skill_id: String, context: Dictionary) -> void:
+	var groove = player.get_node_or_null("BardGrooveComponent")
+	if groove == null or not bool(groove.is_active):
+		return
+	var skill = SkillDB.get_skills().get(skill_id)
+	var source := "sub" if skill != null and "is_sub_skill" in skill \
+			and bool(skill.is_sub_skill) else "skill"
+	var verdict: String = groove.evaluate_action(source)
+	context["groove_verdict"] = verdict  # для эффектов (pulse ×1.25/×0.4 и пр.)
+	if verdict == "perfect" or verdict == "good":
+		var mult := float(groove.TIER_DAMAGE_MULT[groove.tier])
+		context["damage_mult"] = float(context.get("damage_mult", 1.0)) * mult
 
 ## Прицел + валидация цели → контекст execute. Пустой Dictionary = каст
 ## отменён (requires_target не выполнен / нет камеры). Инста вызывает один

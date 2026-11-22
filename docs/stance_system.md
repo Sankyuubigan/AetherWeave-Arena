@@ -140,6 +140,56 @@ API:
   частицы — процедурная 64×64 острая искра; иконки под-приёмов на ВСЕХ
   подменённых слотах ActionBar (мышиные тоже).
 
+## 5.1 «Пульс Битвы» (bard_groove) — вторая стойка Барда (T, 22.11.26)
+
+Вся математика — `Logic/BardGrooveComponent.gd` (консты — ССОТ чисел). ТЗ
+спеца 11-ответ (Блоки 2–3). **БЕЗ падающих нот**: ритм судится на ВСЕ
+действия (Hi-Fi Rush-стиль), метроном — пульс-кольца вокруг прицела.
+- Грув: старт 25, спад 11%/с (на 75+ — 14%/с); tier по 40/70/95 → DR
+  {0.15,0.28,0.40,0.50}, RR {0.15,0.30,0.45,0.55}, скорость {0,12,20,25}%,
+  множитель урона скиллов в бит {1.0,1.15,1.25,1.35}. Жёсткий потолок
+  стойки **16 с** (`MAX_DURATION`, «ПУЛЬС ЗАВЕРШЁН»).
+- **Судья `evaluate_action(source)`**: dt до ближайшей доли (четверть 0.5 с
+  при 120 BPM / восьмая при 72 — `fraction_len` = beat_len≤0.6 ? beat_len :
+  ×0.5). Окна: |dt|≤0.075 perfect / ≤0.135 good / else offbeat. Заряд:
+  скилл/саб +18/+10 (perfect ещё купол +10, кап 120), движение +12/+6;
+  **1 бит = 1 заряд** (`last_charged_beat`, вердикт возвращается всегда —
+  анти-абуз не блокирует). Спам сабами мимо бита чаще 0.30 с → −6 + глухой
+  звук. Сигнал `groove_hit(verdict, source, delta)` → попапы UI.
+- **Выходы**: `groove_empty` / `max_duration` / `barrier_break` /
+  `crescendo` (Крещендо: self-саб, порог ≥60%, AoE 20–100 ∝ groove, сам
+  закрывает стойку) / `cancel`.
+- **Хуки (универсальный ритм)**: `SpellCasterComponent._groove_judge` в
+  ОБЕИХ ветках cast_skill (инста после merge; канал после re-aim) ставит
+  `context["groove_verdict"]` и умножает `context["damage_mult"]` на
+  TIER_DAMAGE_MULT **пост-press tier** (tier растёт синхронно внутри
+  evaluate_action — как у Потока); offbeat НИЧЕГО не меняет — скилл НИКОГДА
+  не блокируется. `PlayerController._physics_process`: новые нажатия
+  WASD/стрелок/Space → `evaluate_action("move")` (снапшот-битмаска прошлого
+  кадра — `Input.is_key_just_pressed` НЕ существует). Скорость — через
+  `speed_mult` из `_apply_buffs` (стойка УСКОРЯЕТ; stance_mult 0.5 только
+  bard_flow). Купол у игрока — через `player_damage_hook`: flow ИЛИ groove
+  (кто активен).
+- **Купол + Нота-Рикошет**: та же dual-path связка, что у Потока
+  (`damage_interceptor` + `player_damage_hook`), карта DR/RR — groove;
+  рикошет через ProjectilePool с метами `override_damage`/`is_reflected`.
+- **UI `Graphics/BardGrooveUI.gd`** (layer 4, IGNORE, ~204 строки, 4
+  пробела): БЕЗ дорожек; два сходящихся полукольца-пульса r44→16 px по доле
+  бита (`RhythmConductor.filtered_time`); дуга Грува + крупная цифра % +
+  мелкий остаток лимита + 3 ромба Tier + ЗАЩ/ОТР 16px над прицелом
+  (STATUS-паттерн Потока, «не на голове героя»); попапы
+  «В БИТ! +18%»/«+10%» + золотая вспышка прицела; баннер причины 2.0 с
+  ПОСЛЕ закрытия (`EXIT_BANNERS`, текст max_duration строится из консты).
+- **AcousticBarrierVFX — единый источник**: `_active_bard()` возвращает
+  BardGrooveComponent (is_active) ИЛИ BardFlowComponent (is_flowing) ИЛИ
+  null — купол/кольцо/ноты живут в ОБОИХ стойках от одного кода.
+- Сабы (SkillDB): groove_pulse «Нота-пуля» ЛКМ (КД 0.25), groove_step
+  «Ритм-выпад» ПКМ (КД 0.45), groove_crescendo «Крещендо» self —
+  `is_sub_skill`, без judge_kind (судья сам). КД входа стойки 2.0 с.
+- **Квирки**: полный cast_skill в пробе двигает song_time на СВЕЖИЙ бит —
+  анти-абуз съедает второй заряд в том же бите; probe RhythmConductor
+  get-or-make (автолоады при -s ненадёжны, паттерн probe_bard_flow).
+
 ## 6. Инварианты (нарушать = регресс)
 
 - **Logic-only**: вся математика стоек/топлива/барьера/tier — в Logic
@@ -202,6 +252,22 @@ API:
   недостижимы — charge не копится в закрытой стойке) — probe перестроен:
   повторный вход по Q между ступенями + чеки `sub_used` (49 чеков).
   probe_bard_flow: чек «Miss −1.5 → 5.2» → «Miss −0.5 → 6.2» (83).
+- **Урок купола — «пробы зелёные, рантайм кривой»** (вердикт 11, 22.11.26):
+  AcousticBarrierVFX единственный в проекте считал `player.global_position.y`
+  «полом», а покой игрока в MainArena — **y=1.0** (капсула r0.5 h2.0 origin —
+  низ на 0.0) → весь купол уезжал на +1.0 м (кольцо на поясе, сфера висит).
+  Пробы-стабы стояли на y=0 — код совпадал с пробой, не с рантаймом. Фикс:
+  `_cache_feet` (низ коллайдера один раз: capsule/cyl position.y−h·0.5,
+  box −size.y·0.5; нет шейпа → fallback −1.0), центр = feet_y+0.95, ground_y
+  = raycast вниз 2.6 м (Array[RID] exclude, маска 1), кольцо ground_y+0.02,
+  scale.x/z = sqrt(R²−dy²)/base_fit (сечение сферы полом), скрыть при
+  dy≥1.8. **Урок: высотные якоря мерить в реальной сцене с физикой**
+  (probe_bard_dome_real_scene — MainArena + CharacterBody3D), не в стабе.
+  Плюс Vulkan-квирк шейдера: DEPTH через NDC не работает на Compatibility —
+  `#if CURRENT_RENDERER == RENDERER_COMPATIBILITY` ветка.
+- **Input.is_key_just_pressed НЕ существует** (4.8): только
+  `is_key_pressed`; just-pressed для WASD/стрелок/Space в PlayerController —
+  снапшот-битмаска прошлого кадра (`_groove_prev_keys`).
 
 ## 9. Гейты (все headless, EXIT=0, 0 SCRIPT ERROR)
 
@@ -217,6 +283,12 @@ API:
 MainArena/ProceduralArena/HellArena/Rotmarsh. ПОЛНЫЙ прогон после В.7 —
 22.11.26: все EXIT=0, 0 FAIL, 0 SCRIPT ERROR. Рендер-проб купола/дуг:
 `_tmp_probe/render_bard_check.ps1` → PNG просмотрен агентом.
+
+Стойка groove (22.11.26, 11-ответ): `probe_bard_groove_mechanics` (37) ·
+`probe_bard_dome_real_scene` (18) · `probe_parse_check_groove` (10) —
+полный прогон 18 проб + смоуки MainArena/Rotmarsh EXIT=0, 0 FAIL, 0 SCRIPT
+ERROR; render_bard_check PNG a/b просмотрены (кольцо на полу в обеих
+стойках — единый `_active_bard()`).
 
 ## 10. Честные оговорки (edges)
 

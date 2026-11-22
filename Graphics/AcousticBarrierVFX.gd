@@ -13,12 +13,15 @@ const BANDS := 12
 const FREQ_MIN := 40.0
 const FREQ_MAX := 16000.0
 const DOME_RADIUS := 1.9
-## Центр купола (Фикс Б, 10-ответ): Hips X/Z + player.y + 0.95 — каждый _process.
+## Центр купола (вердикт 11-ответа): Hips X/Z + feet_y + 0.95. feet_y — НОГИ
+## из кеша коллайдера (origin капсулы НЕ пол: h=2.0 в origin → покой на 1.0 м).
 const DOME_CENTER_Y := 0.95
-## Кольцо основания (Фикс Б + плейтест-4 22.11.26): бублик шириной 0.18 м
-## на полу y+0.03. Радиус = СЕЧЕНИЕ сферы полом (sqrt(r²−cy²)), НЕ радиус
-## сферы: при 1.90 кольцо торчало из-под купола («кривой купол» на скрине).
+## Кольцо основания: бублик шириной 0.18 м. Строится с радиусом base_fit
+## (сечение сферы полом); в рантайме масштаб = sqrt(R²−dy²)/base_fit по
+## реальному ground_y (raycast), лежит плоским ободом на полу (scale.y=0.15).
 const RING_WIDTH := 0.18
+## Raycast пола вниз от origin игрока (вердикт 11): длина с запасом.
+const GROUND_RAY_LEN := 2.6
 
 const COL_T := Color(0.2, 0.9, 1.0)    # T0–1: бирюза
 const COL_P := Color(0.72, 0.3, 1.0)   # T2: фиолет-неон
@@ -32,7 +35,7 @@ uniform vec3 tier_color : source_color = vec3(0.2, 0.9, 1.0);
 uniform vec3 impact_pos = vec3(0.0, 1.0, 0.0);
 uniform float impact_time = -100.0;
 uniform float u_time = 0.0;
-uniform float u_floor_y = 0.2;  // Фикс Б: мир y пола (player_y + 0.20)
+uniform float u_floor_y = 0.2;  // мир y пола (raycast ground_y + 0.18)
 uniform float beat = 0.0;
 uniform float bands[12];
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
@@ -53,15 +56,18 @@ void fragment() {
 	// В.7: тонкие волны эквалайзера от MusicSpectrum вместо широких поясов:
 	// каждая полоса — узкая горизонтальная линия на своей высоте UV.y,
 	// яркость = магнитуда полосы, лёгкое дыхание по высоте и яркости.
-	float eq = 0.0;
-	for (int i = 0; i < 12; i++) {
-		float mag = bands[i];
+		float eq = 0.0;
+		for (int i = 0; i < 12; i++) {
+			// Вердикт 11: порог отсечки шума — в тишине полосы молчат.
+			float mag = max(0.0, bands[i] - 0.08);
 		float cy = (float(i) + 0.5) / 12.0 + sin(u_time * 1.7 + float(i) * 1.3) * 0.015;
 		float d = (UV.y - cy) * 28.0;
 		eq += exp(-d * d) * mag * (0.55 + 0.45 * sin(u_time * 2.3 + float(i) * 0.9));
 	}
 	// Бегущие световые кольца от бита (conductor.beat_tick).
-	float rings = pow(max(0.0, sin(UV.y * 9.0 - u_time * 2.2)), 6.0) * (0.25 + beat);
+	// Вердикт 11: база 0.03 вместо 0.25 — в тишине нет ложного пояса,
+	// кольца вспыхивают только в бит.
+	float rings = pow(max(0.0, sin(UV.y * 9.0 - u_time * 2.2)), 6.0) * (0.03 + beat * 0.75);
 	// Концентрическая рябь от попадания (impact_pos/impact_time).
 	float age = u_time - impact_time;
 	float dist = distance(v_local, impact_pos);
@@ -72,7 +78,14 @@ void fragment() {
 	}
 	// DEPTH-пересечение: светящаяся кромка там, где купол встречает пол/геометрию.
 	float scene_d = texture(depth_tex, SCREEN_UV).r;
+	// Вердикт 11: скрытый баг — в Forward+/Vulkan глубина уже [0,1] (Reverse-Z),
+	// а в Compatibility (OpenGL) — [-1,1]. Умножать scene_d на 2-1 можно
+	// ТОЛЬКО в Compatibility, иначе реконструкция vs.z ломается.
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
 	vec3 ndc = vec3(SCREEN_UV, scene_d) * 2.0 - 1.0;
+#else
+	vec3 ndc = vec3(SCREEN_UV * 2.0 - 1.0, scene_d);
+#endif
 	vec4 vs = INV_PROJECTION_MATRIX * vec4(ndc, 1.0);
 	vs.xyz /= vs.w;
 	float diff = abs(-vs.z - (-v_view_pos.z));
@@ -81,7 +94,7 @@ void fragment() {
 	// стены/препятствия больше не «прожигают» купол насквозь.
 	edge *= 1.0 - smoothstep(u_floor_y - 0.05, u_floor_y, v_world_y);
 
-	vec3 col = tier_color * (fres * 1.2 + eq * 1.8 + rings * 0.9 + edge * 0.8);
+	vec3 col = tier_color * (fres * 1.2 + eq * 1.1 + rings * 0.9 + edge * 0.8);
 	col += vec3(1.0, 0.95, 0.8) * ripple;
 	ALBEDO = col;
 	// В.7: base alpha 0.03 — тело купола чуть читается, не только линии;
@@ -90,7 +103,6 @@ void fragment() {
 }
 """
 
-var _flow: Node = null
 var _cond: Node = null
 var _mesh: MeshInstance3D
 var _mat: ShaderMaterial
@@ -102,14 +114,19 @@ var _beat := 0.0
 var _elapsed := 0.0
 var _was_flowing := false
 var _tier := -1
+## Вердикт 11-ответа: локальный оффсет origin игрока → подошва (кеш из
+## CollisionShape3D); INF = ещё не посчитан. Реальный игрок: −1.0.
+var _feet_local_y := INF
+var _ring_base_fit := 1.0  # радиус, которым построен торус (масштаб 1.0 = база)
+var _last_ground_y := 0.0  # последний валидный пол (raycast мимо — держим)
 
 func _ready() -> void:
 	_bands.resize(BANDS)
-	_flow = get_parent().get_node_or_null("BardFlowComponent")
 	_cond = get_node_or_null("/root/RhythmConductor")
 	_build_dome()
 	_build_ring()
 	_build_notes()
+	_cache_feet(get_parent() as Node3D)
 	visible = false  # показывается только в Потоке
 	if _cond != null and not _cond.beat_tick.is_connected(_on_beat):
 		_cond.beat_tick.connect(_on_beat)
@@ -140,6 +157,7 @@ func _build_ring() -> void:
 	# Фикс Б: строго на полу y+0.03, бублик (не залитый круг) шириной 0.18.
 	# Плейтест-4: радиус = окружность встречи купола с полом.
 	var fit := sqrt(DOME_RADIUS * DOME_RADIUS - DOME_CENTER_Y * DOME_CENTER_Y)
+	_ring_base_fit = fit  # база для рантайм-масштаба сечения (вердикт 11)
 	var torus := TorusMesh.new()
 	torus.inner_radius = fit - RING_WIDTH
 	torus.outer_radius = fit
@@ -205,10 +223,11 @@ func _build_notes() -> void:
 	add_child(_notes)
 
 func _process(delta: float) -> void:
-	if _flow == null:
-		_flow = get_parent().get_node_or_null("BardFlowComponent")
-		return
-	var flowing: bool = _flow.is_flowing
+	# Единый источник (спец 11-ответ Блок 3 п.1): активный бард-компонент —
+	# «Пульс» (bard_groove, is_active) ИЛИ «Поток» (bard_flow, is_flowing);
+	# купол один на обе стойки, tier/барьер-цвет общие.
+	var bard := _active_bard()
+	var flowing: bool = bard != null
 	if flowing != _was_flowing:
 		_was_flowing = flowing
 		visible = flowing
@@ -219,23 +238,36 @@ func _process(delta: float) -> void:
 		return
 	_elapsed += delta
 	_beat = maxf(0.0, _beat - delta * 2.5)
-	# Фикс Б: центр купола = кость Hips X/Z + player.y + 0.95 КАЖДЫЙ кадр —
-	# купол едет с телом (наклоны/анимация), не с origin коллбокса.
+	# Вердикт 11-ответа: все высоты от НОГ (feet_y = origin + оффсет коллайдера),
+	# пол — короткий raycast (ground_y). Центр купола: Hips X/Z + feet_y + 0.95.
 	var player := get_parent() as Node3D
 	if player != null:
+		if is_inf(_feet_local_y):
+			_cache_feet(player)
+		var feet_y := player.global_position.y + _feet_local_y
 		var cx := player.global_position.x
 		var cz := player.global_position.z
 		var bp := _hips_pos(player)
 		if bp != Vector3.INF:
 			cx = bp.x
 			cz = bp.z
-		_mesh.global_position = Vector3(cx, player.global_position.y + DOME_CENTER_Y, cz)
-		# Кольцо пиним в мир тем же способом, что и сферу: узел VFX висит на
-		# игроке с его локальным сдвигом — локальной (0,0.03,0) недостаточно.
-		_ring.global_position = Vector3(cx, player.global_position.y + 0.03, cz)
-		_mat.set_shader_parameter("u_floor_y", player.global_position.y + 0.20)
+		var center_y := feet_y + DOME_CENTER_Y
+		_mesh.global_position = Vector3(cx, center_y, cz)
+		# Кольцо-шов: на реальном полу под ногами, радиус = сечение сферы полом.
+		var ground_y := _ground_y(player)
+		var dy := center_y - ground_y
+		if dy >= 0.0 and dy < DOME_RADIUS - 0.1:
+			_ring.visible = true
+			_ring.global_position = Vector3(cx, ground_y + 0.02, cz)
+			var sec := sqrt(maxf(0.0, DOME_RADIUS * DOME_RADIUS - dy * dy))
+			var s := sec / _ring_base_fit
+			_ring.scale = Vector3(s, 0.15, s)  # 0.15: плоский световой обод
+		else:
+			# Прыжок выше купола / raycast мимо пола — шов не парит в воздухе.
+			_ring.visible = false
+		_mat.set_shader_parameter("u_floor_y", ground_y + 0.18)
 	# Цвет по tier (опрос — надёжнее сигналов при позднем подключении VFX).
-	var t: int = int(_flow.tier)
+	var t: int = int(bard.tier)
 	if t != _tier:
 		_tier = t
 		var c := COL_T if t < 2 else (COL_P if t == 2 else COL_G)
@@ -260,10 +292,74 @@ func _process(delta: float) -> void:
 	_mat.set_shader_parameter("u_time", _elapsed)
 	_mat.set_shader_parameter("beat", _beat)
 
-## Рябь от попадания в купол (BardFlowComponent._absorb_damage, Шаг 6).
+## Рябь от попадания в купол (BardFlowComponent/BardGrooveComponent._absorb_damage).
 func notify_impact(world_pos: Vector3) -> void:
 	_mat.set_shader_parameter("impact_pos", _mesh.to_local(world_pos))
 	_mat.set_shader_parameter("impact_time", _elapsed)
+
+## Единый источник данных купола (спец 11-ответ Блок 3 п.1): активный
+## бард-компонент — «Пульс» (bard_groove) или «Поток» (bard_flow); null —
+## вне обеих стоек (купол скрыт).
+func _active_bard() -> Node:
+	var parent := get_parent()
+	var g = parent.get_node_or_null("BardGrooveComponent")
+	if g != null and bool(g.is_active):
+		return g
+	var f = parent.get_node_or_null("BardFlowComponent")
+	if f != null and bool(f.is_flowing):
+		return f
+	return null
+
+## ── Вердикт 11-ответа: ноги из коллайдера + raycast пола ──────────────────
+var _feet_cached := false
+
+## Кеш высоты ног: локальный оффсет origin→подошва из CollisionShape3D.
+## Capsule/Cylinder: position.y − height·0.5; Box: position.y − size.y·0.5.
+## Нет коллайдера / неизвестный шейп → fallback −1.0 (вердикт 11), НЕ INF:
+## стабы проб без коллайдера обязаны работать как игрок-«эталон».
+func _cache_feet(player: Node3D) -> void:
+	if _feet_cached or player == null:
+		return
+	var col := _find_collision(player)
+	if col == null or col.shape == null:
+		_feet_local_y = -1.0
+		_feet_cached = true
+		return
+	var sh: Shape3D = col.shape
+	if sh is CapsuleShape3D:
+		_feet_local_y = col.position.y - (sh as CapsuleShape3D).height * 0.5
+	elif sh is CylinderShape3D:
+		_feet_local_y = col.position.y - (sh as CylinderShape3D).height * 0.5
+	elif sh is BoxShape3D:
+		_feet_local_y = col.position.y - (sh as BoxShape3D).size.y * 0.5
+	else:
+		_feet_local_y = -1.0
+	_feet_cached = true
+
+static func _find_collision(node: Node) -> CollisionShape3D:
+	if node == null:
+		return null
+	if node is CollisionShape3D:
+		return node
+	for c in node.get_children():
+		var r := _find_collision(c)
+		if r != null:
+			return r
+	return null
+
+## Пол под ногами: 1 raycast вниз от origin (исключая игрока), маска слоя 1.
+func _ground_y(player: Node3D) -> float:
+	var space := player.get_world_3d().direct_space_state
+	var excl: Array[RID] = [player.get_rid()]
+	var q := PhysicsRayQueryParameters3D.create(
+			player.global_position,
+			player.global_position + Vector3.DOWN * GROUND_RAY_LEN,
+			1, excl)
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return _last_ground_y
+	_last_ground_y = hit.position.y
+	return _last_ground_y
 
 ## ── Фикс Б: привязка купола к кости Hips ─────────────────────────────────
 var _hips_bone := -1

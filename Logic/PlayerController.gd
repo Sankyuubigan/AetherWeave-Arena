@@ -35,6 +35,10 @@ var spell_caster: Node
 var skill_points: int = SP_MAX
 var player_hp: int = 100
 
+# «Пульс Битвы»: снапшот клавиш движения прошлого кадра (Input НЕ имеет
+# is_key_just_pressed — just-pressed считаем сами: новые биты в маске).
+var _groove_prev_keys: int = 0
+
 var unlocked_skills = {}
 var can_double_jump: bool = false
 var was_space_pressed: bool = false
@@ -154,6 +158,14 @@ func _ready():
         bard_comp.set_script(load("res://Logic/BardFlowComponent.gd"))
         add_child(bard_comp)
 
+    # «Пульс Битвы» (22.11.26, спец 11-ответ): вторая стойка барда — Грув
+    # 0–100 на ВСЕ действия (скиллы/сабы/движение), купол + Нота-Рикошет.
+    if get_node_or_null("BardGrooveComponent") == null:
+        var groove_comp := Node.new()
+        groove_comp.name = "BardGrooveComponent"
+        groove_comp.set_script(load("res://Logic/BardGrooveComponent.gd"))
+        add_child(groove_comp)
+
     # Визуал Потока (Q16 Шаг 7): купол-барьер + дуги вокруг прицела.
     if get_node_or_null("AcousticBarrierVFX") == null:
         var dome_vfx = preload("res://Graphics/AcousticBarrierVFX.gd").new()
@@ -163,6 +175,13 @@ func _ready():
         var flow_ui = preload("res://Graphics/BardFlowUI.gd").new()
         flow_ui.name = "BardFlowUI"
         add_child(flow_ui)
+
+    # HUD «Пульса Битвы» (22.11.26): пульс-кольца у прицела + дуга Грува,
+    # БЕЗ дорожек; IGNORE-оверлей (как BardFlowUI).
+    if get_node_or_null("BardGrooveUI") == null:
+        var groove_ui = preload("res://Graphics/BardGrooveUI.gd").new()
+        groove_ui.name = "BardGrooveUI"
+        add_child(groove_ui)
 
 func _exit_tree():
     # Снапшот скиллов при уходе с карты (телепорт непися / меню I / смерть).
@@ -228,6 +247,12 @@ func take_damage(amount: int, attacker: Node = null):
     var bf = get_node_or_null("BardFlowComponent")
     if bf != null and bf.has_method("player_damage_hook") \
             and bool(bf.player_damage_hook(amount, attacker)):
+        return
+    # «Пульс Битвы» (22.11.26): купол второй стойки — та же dual-path связка,
+    # активен только bard_groove (не flow), иначе возвращает false.
+    var bg = get_node_or_null("BardGrooveComponent")
+    if bg != null and bg.has_method("player_damage_hook") \
+            and bool(bg.player_damage_hook(amount, attacker)):
         return
     player_hp = max(0, player_hp - amount)
     update_hud()
@@ -372,6 +397,23 @@ func _physics_process(delta):
     var local_dir = Vector3(input_dir.x, 0, input_dir.y)
 
     var space_pressed = (not locked) and Input.is_key_pressed(KEY_SPACE)
+
+    # «Пульс Битвы» (22.11.26, спец 11-ответ): движение в бит заряжает Грув —
+    # just_pressed WASD/стрелки/Space → perfect +12 / good +6 (ТЗ Блок 2).
+    # Судья сам гасит анти-абузом (1 бит = 1 заряд) и мёртв вне стойки.
+    # Input НЕ имеет is_key_just_pressed → снапшот прошлого кадра (битмаска).
+    if not locked:
+        var bgm = get_node_or_null("BardGrooveComponent")
+        if bgm != null and bool(bgm.is_active):
+            var cur := 0
+            var bit := 1
+            for k in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_RIGHT, KEY_LEFT, KEY_UP, KEY_DOWN, KEY_SPACE]:
+                if Input.is_key_pressed(k):
+                    cur |= bit
+                bit <<= 1
+            if (cur & ~_groove_prev_keys) != 0:  # появилась новая нажатая клавиша
+                bgm.evaluate_action("move")
+            _groove_prev_keys = cur
 
     # Эфирный захват (Q48): пока нить активна, физика тела — у TetherSwingComponent
     # (перезапись velocity ходьбой убила бы маятник/зип, ТЗ §4.1). Мышь свободна —

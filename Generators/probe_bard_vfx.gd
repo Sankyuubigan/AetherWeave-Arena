@@ -55,13 +55,30 @@ func _run() -> void:
 	judge.register_note("harmony", 1.5)
 	judge.register_note("chord", 2.5)
 	_ck(judge.get_notes().size() == 2, "get_notes: 2 ноты в снимке")
-	# 5) Стаб игрока + реальные компоненты (как у игрока в _ready).
+	# 5) Стаб игрока в РЕАЛЬНЫХ условиях (вердикт 11 §5): CharacterBody3D,
+	# покой y=1.0 (капсула h=2.0 в origin), пол-плоскость на y=0.0 — так
+	# геометрия купола совпадает с рантаймом MainArena, а не с фантазией пробы.
 	var stub := GDScript.new()
-	stub.source_code = "extends Node3D\nvar speed_mult: float = 1.0\n"
+	stub.source_code = "extends CharacterBody3D\nvar speed_mult: float = 1.0\n"
 	stub.reload()
-	var pl := Node3D.new()
+	var pl := CharacterBody3D.new()
 	pl.set_script(stub)
+	pl.position = Vector3(0, 1.0, 0)
 	root.add_child(pl)
+	var cs := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.height = 2.0
+	cap.radius = 0.5
+	cs.shape = cap
+	pl.add_child(cs)
+	var floor_body := StaticBody3D.new()
+	var fcs := CollisionShape3D.new()
+	var fbox := BoxShape3D.new()
+	fbox.size = Vector3(8, 1, 8)
+	fcs.shape = fbox
+	floor_body.add_child(fcs)
+	floor_body.position = Vector3(0, -0.5, 0)  # топ бокса = y 0.0
+	root.add_child(floor_body)
 	var flow = load("res://Logic/BardFlowComponent.gd").new()
 	flow.name = "BardFlowComponent"
 	pl.add_child(flow)
@@ -113,24 +130,32 @@ func _run() -> void:
 	var col: Color = tc if tc is Color else Color(tc)
 	_ck(col.b < 0.6 and col.r > 0.7, "T3 цвет золото (%s)" % col)
 	_ck(dome._notes.emitting, "орбита нот-частиц на T3")
-	# 9b) Фикс Б (10-ответ): купол едет с телом — центр player.y+0.95 КАЖДЫЙ
-	# кадр; кольцо = СЕЧЕНИЕ сферы полом на полу y+0.03 (плейтест-4);
-	# DEPTH-кромка только у пола (u_floor_y = player.y + 0.20).
+	# 9b) Фикс купола (вердикт 11-ответа): высоты от НОГ из кеша коллайдера
+	# (feet_y = player.y + _feet_local_y), пол — raycast (ground_y); кольцо
+	# лежит на ground_y+0.02 плоским ободом (scale.y 0.15), радиус — сечение
+	# сферы полом; u_floor_y = ground_y + 0.18.
+	var feet_local: float = dome._feet_local_y
+	_ck(absf(feet_local - (-1.0)) < 0.001,
+			"кеш ног: капсула h2.0 в origin → _feet_local_y = −1.0 (%.3f)" % feet_local)
+	var feet_y := pl.global_position.y + feet_local
 	var dmy: float = dome._mesh.global_position.y
-	_ck(absf(dmy - (pl.global_position.y + 0.95)) < 0.001,
-			"Фикс Б: центр купола player.y + 0.95 (%.3f)" % dmy)
+	_ck(absf(dmy - (feet_y + 0.95)) < 0.001,
+			"купол центр = feet_y + 0.95 (%.3f, feet_y=%.1f)" % [dmy, feet_y])
 	var ring_fit := sqrt(1.9 * 1.9 - 0.95 * 0.95)
 	var torus := dome._ring.mesh as TorusMesh
 	_ck(torus != null and absf(torus.inner_radius - (ring_fit - 0.18)) < 0.0001
 			and absf(torus.outer_radius - ring_fit) < 0.0001,
 			"кольцо = сечение купола полом %.2f/%.2f (ширина 0.18)" % [ring_fit - 0.18, ring_fit])
-	_ck(absf(float(dome._ring.position.y) - 0.03) < 0.0001,
-			"Фикс Б: кольцо на полу y+0.03")
-	_ck(absf(float(mat.get_shader_parameter("u_floor_y"))
-			- (pl.global_position.y + 0.20)) < 0.001,
-			"Фикс Б: u_floor_y = player.y + 0.20 (кромка только у пола)")
+	_ck(absf(dome._ring.global_position.y - 0.02) < 0.05,
+			"кольцо на полу ground_y+0.02 (%.3f)" % dome._ring.global_position.y)
+	_ck(absf(dome._ring.scale.x - 1.0) < 0.05 and absf(dome._ring.scale.y - 0.15) < 0.05,
+			"кольцо: сечение-масштаб 1.0, плоский обод scale.y 0.15 (%.3f/%.3f)"
+					% [dome._ring.scale.x, dome._ring.scale.y])
+	_ck(absf(float(mat.get_shader_parameter("u_floor_y")) - 0.18) < 0.05,
+			"u_floor_y = ground_y + 0.18 (%.3f)"
+					% float(mat.get_shader_parameter("u_floor_y")))
 	_ck(dome._hips_pos(pl) == Vector3.INF,
-			"Hips-фолбэк: без скелета → INF (центр по origin игрока)")
+			"Hips-фолбэк: без скелета → INF (центр X/Z по origin игрока)")
 	# 10) Рябь от попадания (notify_impact — путь Шага 6).
 	dome.notify_impact(pl.global_position + Vector3(0, 1.9, 0))
 	var it := float(mat.get_shader_parameter("impact_time"))
