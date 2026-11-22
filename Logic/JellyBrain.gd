@@ -8,7 +8,7 @@ extends RefCounted
 ## Подключается JellyMonster через preload (class_name в headless -s может
 ## не резолвиться без свежего --import — грабля).
 
-enum S { APPROACH, ORBIT, FLEE, RECOVER }
+enum S { APPROACH, ORBIT, FLEE, RECOVER, ATTACK }
 
 # --- Дистанции от КРОМКИ купола (спец §БАГ-D) ---
 const AWARE_RANGE := 22.0    # дальше игрок не «замечен» (было CURIOSITY_RANGE)
@@ -37,8 +37,15 @@ const UNSTUCK_HOLD := 1.2
 # --- Прыжки в мирных фазах ---
 const HOP_MIN_S := 3.0
 const HOP_MAX_S := 6.0
+# --- Атака красного (Q49, заказ юзера 22.11.26: вражеские агрессивные) ---
+const ATK_TRIGGER_EDGE := 1.8 # кромка ближе — ТАРАН
+const ATK_CD := 1.2          # кулдаун тарана (с)
+const ATK_KICK := 220.0      # Н·с муверу в игрока
+const ATK_DMG_PCT := 5       # % MAX_HP игрока за таран (как ближники ада)
 
 var state: int = S.APPROACH
+var aggressive := false # красный вражеский: JellyMonster._ready ставит по своему флагу
+var _atk_cd_left := 0.0
 var _flee_left := 0.0
 var _recover_left := 0.0
 var _unstuck_left := 0.0
@@ -77,6 +84,7 @@ func tick(delta: float, m) -> void:
 	var cd: float = to_pl.length()
 	var edge: float = cd - m.radius
 	# Смена стороны орбиты раз в несколько секунд («кружит» не по кругу).
+	_atk_cd_left = maxf(0.0, _atk_cd_left - delta)
 	_orbit_swap -= delta
 	if _orbit_swap <= 0.0:
 		_orbit_swap = _rng.randf_range(4.0, 9.0)
@@ -99,8 +107,11 @@ func tick(delta: float, m) -> void:
 			if _recover_left <= 0.0:
 				state = S.APPROACH
 		_:
-			# Мирные фазы; ORBIT/APPROACH выбираются по кромке.
-			if cd > AWARE_RANGE:
+			# Q49: красный (aggressive) всегда атакует — игнорирует AWARE_RANGE.
+			if aggressive:
+				_attack_tick(m, edge, to_pl)
+				_move_unstuck(delta, m)
+			elif cd > AWARE_RANGE:
 				pass # далеко — не замечен
 			elif edge < TOO_CLOSE:
 				# Игрок сам подошёл — плавно отползает (спец §БАГ-D.1).
@@ -130,6 +141,29 @@ func tick(delta: float, m) -> void:
 				var move_dir := (tang * _orbit_side + radial.normalized() * 0.5)
 				m._mover.apply_central_force(_steer(m, move_dir) * ORBIT_FORCE)
 				_move_unstuck(delta, m)
+
+## Q49 ATTACK (красный вражеский): тянется к игроку (пульс APPROACH),
+## у кромки < ATK_TRIGGER_EDGE — ТАРАН: кик мувера + урон игроку
+## ATK_DMG_PCT% MAX_HP (как ближники ада) с кулдауном ATK_CD. Между
+## таранами мягкая тяга «держит контакт». Unstuck общий.
+func _attack_tick(m, edge: float, to_pl: Vector3) -> void:
+	state = S.ATTACK
+	if to_pl.length_squared() < 0.001:
+		return
+	var dir := to_pl.normalized()
+	if edge < ATK_TRIGGER_EDGE:
+		if _atk_cd_left <= 0.0:
+			_atk_cd_left = ATK_CD
+			m._kick_mover(dir, ATK_KICK)
+			var pls: Array = m.get_tree().get_nodes_in_group("player")
+			if pls.size() > 0 and is_instance_valid(pls[0]) \
+					and pls[0].has_method("take_damage"):
+				var pc = pls[0]
+				pc.take_damage(ceili(pc.MAX_HP * ATK_DMG_PCT / 100.0))
+		m._mover.apply_central_force(dir * ORBIT_FORCE * 2.0)
+	else:
+		var pulse := 0.35 + 0.65 * maxf(0.0, sin(_t * PULSE_RATE))
+		m._mover.apply_central_force(_steer(m, dir) * APPROACH_FORCE * pulse)
 
 ## Unstuck: если тяга есть, а смещение за UNSTUCK_WIN меньше UNSTUCK_DIST —
 ## принудительный обходной вектор ±90° на UNSTUCK_HOLD (спец §БАГ-C.2).

@@ -147,10 +147,6 @@ func _init():
 		# Стол зачарований (Q37): у непись-телепортера на углу карты (верб. юзера
 		# 19.11.26 «недалеко от синей капсулы на углу, не в середине»). Scale 1.7.
 		"EnchantTable": { "path": "res://Graphics/Environment/Props/enchant_table/enchant_table.tscn", "pos": Vector3(35.5, 0, 35.5), "scale": Vector3(1.7, 1.7, 1.7), "rot_y": -45.0 },
-		# Гриб-батут (Q31, PRP одобрен 20.11.26): CapStatic держит игрока, шейдерный
-		# промин шляпки, подброс по глубине посадки. no_hlod: корень = компонент
-		# MushroomBounce.gd — скрипт-оверрайд PropHLOD его бы стёр.
-		"MushroomBounce": { "path": "res://Graphics/Environment/Props/mushroom_bounce/mushroom_bounce.tscn", "pos": Vector3(12, 0, -12), "scale": Vector3(1, 1, 1), "no_hlod": true },
 		# Q32 мягкий грунт: дюна со следами/проминами у спавна. no_hlod: корень =
 		# компонент SoftGround.gd (стемп depth-текстуры) — PropHLOD его стёр бы.
 		"SoftGround": { "path": "res://Graphics/Environment/Props/soft_ground/soft_ground.tscn", "pos": Vector3(6, 0, -14), "scale": Vector3(1, 1, 1), "no_hlod": true }
@@ -181,19 +177,9 @@ func _init():
 			forge_zone.owner = root
 		print(p_name + " placed at " + str(p.pos))
 
-	# Желе-монстр (QUEUE Q6 → Q25 → v3 по вердикту юзера «хотдог-мешок»):
-	# SoftBody3D-слизень. v6-меш: плоское дно (0.25·r → дно −0.55 при r=2.6),
-	# спавн y=0.75 → дно на ~0.2 над полом; мувер-цилиндр сядет дном на пол сам
-	# (центр = RIG_HALF_H=0.75), пин-кольцо узкое (RIG_BAND 0.4).
-	var jelly = preload("res://Logic/JellyMonster.gd").new()
-	jelly.name = "JellyMonster"
-	# Меш ДО add_child (грабля 4.8, probe 19.11.26): назначение меша SoftBody3D
-	# когда узел уже в дереве, сбрасывает его трансформ в identity — желе
-	# уезжало из точки спавна в origin у спавна. Меш попадёт в tscn sub_resource.
-	jelly.mesh = preload("res://Logic/JellyMonster.gd").build_blob_mesh(jelly.radius)
-	jelly.position = Vector3(7, 0.75, -6)
-	root.add_child(jelly)
-	jelly.owner = root
+	# Желе-монстр ПЕРЕЕХАЛ на карту «Гнилодолье» (Q49, приказ юзера 22.11.26:
+	# «с мейн мапы убирать перемещать нашего желемонстра... перемещаем на новую
+	# карту и спавним там их по больше» — стаи на RotmarshArena).
 
 	# Непись-телепортер у края арены (19.11.26, верб. юзера): пол 100×100
 	# (box 50×1×50 × scale 2), край на ±50 → угол (38, 0, 38) «ближе к краю».

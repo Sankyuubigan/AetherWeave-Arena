@@ -65,6 +65,12 @@ const PALETTES := {
 		"low": Color(0.14, 0.04, 0.03), "mid": Color(0.28, 0.08, 0.06),
 		"high": Color(0.42, 0.14, 0.10), "rock": Color(0.10, 0.06, 0.06),
 	},
+	# Гнилодолье (Q49, 22.11.26): гнилое болото — тёмный ил низин, оливковая
+	# плесень равнин, бледный мох верхних этажей, мокрый тёмный камень склонов.
+	"rotmarsh": {
+		"low": Color(0.09, 0.13, 0.07), "mid": Color(0.24, 0.32, 0.14),
+		"high": Color(0.44, 0.48, 0.28), "rock": Color(0.18, 0.20, 0.16),
+	},
 }
 
 static func build(arena: Node3D, height_fn: Callable, size: float, theme: String) -> void:
@@ -76,7 +82,7 @@ static func build(arena: Node3D, height_fn: Callable, size: float, theme: String
 	arena.add_child(body)
 
 	var chunk_size := size / float(CHUNKS_PER_SIDE)
-	var textured := (not PALETTES.has(theme)) or theme == "hell"
+	var textured := (not PALETTES.has(theme)) or theme == "hell" or theme == "rotmarsh"
 	# Ад мрачнее лесной карты: палитра доминирует над фототекстурой сильнее.
 	var strength := 0.75 if theme == "hell" else TINT_STRENGTH
 	var tint := 0.0 if not textured else 1.0 - strength
@@ -114,7 +120,7 @@ static func _terrain_material(theme: String) -> StandardMaterial3D:
 			mat.roughness_texture = load(HELL_TEX["rough"])
 			mat.ao_enabled = true
 			mat.ao_texture = load(HELL_TEX["ao"])
-	elif not PALETTES.has(theme):
+	elif theme == "rotmarsh" or not PALETTES.has(theme):
 		var diff := load(GROUND_TEX["diff"]) as Texture2D
 		if diff: # после --import это CompressedTexture2D; без него — грязный фолбэк
 			mat.albedo_texture = diff

@@ -41,6 +41,25 @@ static func _preset(theme: StringName) -> Dictionary:
 				"u_ember_color": Color(1.0, 0.42, 0.08),
 				"u_ember_amount": 1.0,
 			}
+		"rotmarsh":
+			# Гнилая мгла (Q49 Гнилодолье, 22.11.26): серо-зелёный зенит,
+			# болотная жёлто-зелёная муть у горизонта, низкие тяжёлые тучи,
+			# без эмберов.
+			return {
+				"u_top": Color(0.10, 0.14, 0.13),
+				"u_horizon": Color(0.42, 0.46, 0.30),
+				"u_bottom": Color(0.10, 0.12, 0.09),
+				"u_horizon_sharp": 2.6,
+				"u_sun_color": Color(0.85, 0.88, 0.70),
+				"u_sun_size": 0.010,
+				"u_glow": 0.25,
+				"u_cloud_color": Color(0.52, 0.56, 0.46),
+				"u_cloud_cover": 0.75,
+				"u_cloud_speed": 0.008,
+				"u_cloud_dark": 0.55,
+				"u_ember_color": Color(1.0, 0.42, 0.08),
+				"u_ember_amount": 0.0,
+			}
 		"forest":
 			# Свежее утро: зеленоватая мгла у горизонта, лёгкие облака.
 			return {

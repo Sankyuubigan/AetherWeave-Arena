@@ -1,5 +1,9 @@
 extends Area3D
 
+## Q49: слой 8 = хитбоксы желе (Logic/JellyHitbox.gd) — снаряд ловит их
+## контактом (Area3D дефолт-маска 1 софтбоди/хитбокс не видел).
+## Назначается в _ready (в теле класса — Parse Error).
+
 # Снизил скорость шаровой молнии до 6 м/с
 const ProjectilePool = preload("res://Logic/Skills/ProjectilePool.gd")
 const DecalFrames = preload("res://Graphics/DecalFrames.gd")
@@ -32,6 +36,7 @@ func set_caster(c: Node3D):
     caster = c
 
 func _ready():
+    collision_mask = 1 | 8
     body_entered.connect(_on_body_entered)
     base_scale = scale
 

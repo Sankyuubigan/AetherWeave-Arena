@@ -1,13 +1,16 @@
 extends StaticBody3D
 ## Непись-телепортер (19.11.26, верб. юзера): капсула у края карты; подходишь —
 ## значок «[Z] Телепорт» слева снизу экрана; по Z — окно телепорта со списком
-## ТРЁХ карт (тот же функционал, что был у TeleportMenu по клавише I). Стоит
-## на всех картах: MainArena, ProceduralArena, HellArena.
+## карт из MAPS (тот же функционал, что был у TeleportMenu по клавише I).
+## Стоит на всех картах: MainArena, ProceduralArena, HellArena, RotmarshArena.
 
 const MAPS := [
 	{"title": "Главная арена", "path": "res://Scenes/MainArena.tscn"},
 	{"title": "Процедурная арена", "path": "res://Scenes/ProceduralArena.tscn"},
 	{"title": "Ад", "path": "res://Scenes/HellArena.tscn"},
+	# Q49 (22.11.26): карта «этажами» по Y — террасы/горы/ямы, стаи желе
+	# (зелёные дружественные + красные агрессивные), грибы-батуты, руны.
+	{"title": "Гнилодолье", "path": "res://Scenes/Rotmarsh.tscn"},
 ]
 
 var _prompt: CanvasLayer

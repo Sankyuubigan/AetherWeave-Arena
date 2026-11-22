@@ -22,9 +22,20 @@ extends SoftBody3D
 ##   precision 7 (масса вниз ×8-10, пол невидим — precision 18 не нужен).
 
 const BrainScript = preload("res://Logic/JellyBrain.gd")
+const HealthScript = preload("res://Logic/JellyHealth.gd")
+const HitboxScript = preload("res://Logic/JellyHitbox.gd")
 
 @export var radius := 2.6
 @export var idle_wobble := true
+# Q49 (заказ юзера 22.11.26): два вида желе. false = зелёный дружественный
+# (нынешний FSM, безобидный); true = КРАСНЫЙ вражеский: сам атакует игрока
+# (стейт ATTACK в мозге), имеет HP, дамажится скиллами через хитбокс.
+@export var aggressive := false
+@export var body_color := Color(0.32, 0.85, 0.42) # меш строится в _ready по цвету
+
+const COLOR_FRIENDLY := Color(0.32, 0.85, 0.42)
+const COLOR_AGGRESSIVE := Color(0.78, 0.16, 0.12)
+const JELLY_HP := 100
 
 const GROUP_NAME := "jelly_monster"
 const JOLT_COOLDOWN_MS := 700
@@ -50,8 +61,13 @@ const DOME_ZONE := 1.4   # радиус зоны удара по куполу (�
 # Поведение v6 — Logic/JellyBrain.gd (FSM APPROACH/ORBIT/FLEE/RECOVER,
 # дистанции ОТ КРОМКИ купола, 3-лучевой steering, unstuck). Здесь остались
 # только подскоки (мирные фазы зовут m._hop()).
-const HOP_UP := 140.0         # Н·с вертикали (масса 40 → v=3.5 → высота ~0.6 м)
-const HOP_SIDE := 25.0        # Н·с случайного бокового сноса прыжка
+const HOP_UP := 380.0         # Н·с вертикали (масса 40 → v=9.5; damp 2.0 гасит
+                              # слабый импульс за долю секунды → «икание»,
+                              # вердикт юзера 22.11.26 «не поднимается над землёй»)
+const HOP_SIDE := 60.0        # Н·с случайного бокового сноса прыжка
+const HOP_MAX_S := 1.8        # таймаут фазы подскока: если приземление не
+                              # поймалось (сел на камень выше дна мувера) —
+                              # vy-кламп НЕ залипает выключенным
 
 var _last_jolt_ms := -100000
 var _threat_bodies: Array = [] # CharacterBody3D внутри FeelerArea (непрерывная отдача)
@@ -61,6 +77,7 @@ var _home := Vector3.ZERO
 var _brain = BrainScript.new()
 # фаза подскока: вне неё vy мувера клампится ≤0.5 (не «висит» на камнях — спец)
 var _hop_active := false
+var _hop_left := 0.0 # таймаут фазы подскока (HOP_MAX_S)
 # ЖИВОЙ центр/верх тела (AABB точек каждый физ-тик): узел желе уходит в
 # identity, тело оседает и расползается — все «прицепы» (глаза, зона, толчки)
 # должны следовать за реальным телом, а не за стартовым _home (вердикт
@@ -72,6 +89,11 @@ var _eyes: Array = []
 var _eye_fwd := Vector3(0, 0, 1)
 # v6 риг: мувер-цилиндр (RigidBody3D на полу) + узкое пин-кольцо низа.
 var _mover: RigidBody3D = null
+# Q49: HP-компонент (полоска над куполом) + детект-хитбокс (AnimatableBody3D
+# слой 8, заезжает за живым центром — софтбоди в физ-запросах ненадёжен).
+var _health = null
+var _hitbox = null
+var _dying := false
 var _rig_rid: RID
 var _rig_pins := PackedInt32Array()
 var _rig_cur: Array[Vector3] = [] # текущие оффсеты кольца в локале мувера
@@ -86,12 +108,14 @@ func _ready() -> void:
 	_home = global_position
 	if mesh == null:
 		# Фолбэк для .new()-тестов: в бою меш ставит генератор ДО add_child.
-		mesh = build_blob_mesh(radius)
+		mesh = build_blob_mesh(radius, 0.04, body_color)
 	_setup_physics()
 	_rig_setup_deferred()
 	add_to_group(GROUP_NAME)
+	_brain.aggressive = aggressive # красный: FSM → ATTACK (JellyBrain._attack_tick)
 	_add_eyes()
 	_add_feeler_area()
+	_add_health_and_hitbox()
 	if idle_wobble:
 		var t := Timer.new()
 		t.wait_time = 2.4
@@ -109,6 +133,8 @@ func _rig_setup_deferred() -> void:
 	_add_mover_rig()
 
 func _physics_process(delta: float) -> void:
+	if _dying:
+		return # труп разлетается: риг/мозг/хитбокс не тикают
 	# Живой AABB тела + лифт-гвард в одном проходе.
 	var count := get_point_count()
 	if count == 0 or _mover == null:
@@ -127,6 +153,9 @@ func _physics_process(delta: float) -> void:
 		return
 	_live_center = (lo + hi) * 0.5
 	_live_top = Vector3(_live_center.x, hi.y, _live_center.z)
+	# Хитбокс едет за живым центром (его позицию видят рейкаст/АоЕ/снаряды).
+	if _hitbox != null and is_instance_valid(_hitbox):
+		_hitbox.global_position = _live_center
 	# Кольцо пинов каждый тик: оффсеты сглаживаются к посадке, точки двигаются
 	# за мувером; шаг move_point КЛАМПИТСЯ (RIG_MP_SPEED) — оболочку не рвёт
 	# (спец: при рывках move_point растягивал купол → вывороты).
@@ -144,8 +173,10 @@ func _physics_process(delta: float) -> void:
 	# по камню при тяге (спец §БАГ-C.3: «запрет висеть на камне»).
 	if not _hop_active and _mover.linear_velocity.y > 0.5:
 		_mover.linear_velocity.y = 0.5
-	if _hop_active and _mover.global_position.y <= RIG_HALF_H + 0.05:
-		_hop_active = false
+	if _hop_active:
+		_hop_left -= delta
+		if _mover.global_position.y <= RIG_HALF_H + 0.05 or _hop_left <= 0.0:
+			_hop_active = false
 	# Глаза едут за «взглядом» на игрока (спец §БАГ-D.3): forward сглаживается,
 	# позиция на передней поверхности купола + look_at (зрачок на −Z).
 	var dome := hi.y - _live_center.y
@@ -192,6 +223,7 @@ func _hop() -> void:
 		side = Vector3(1, 0, 0)
 	side = side.normalized() * HOP_SIDE
 	_hop_active = true
+	_hop_left = HOP_MAX_S
 	_mover.apply_central_impulse(Vector3(side.x, HOP_UP, side.z))
 
 func _setup_physics() -> void:
@@ -219,7 +251,8 @@ func _setup_physics() -> void:
 ## сминала полосу 1.3 м в плоскость (спец §БАГ-B). Шум по v*r до squash.
 ## STATIC + вызывается ГЕНЕРАТОРОМ ДО add_child: назначение меша рантаймом
 ## (узел уже в дереве) сбрасывает трансформ SoftBody3D в identity.
-static func build_blob_mesh(r: float, noise_amp: float = 0.04) -> ArrayMesh:
+static func build_blob_mesh(r: float, noise_amp: float = 0.04,
+		body_color: Color = COLOR_FRIENDLY) -> ArrayMesh:
 	var phi := (1.0 + sqrt(5.0)) * 0.5
 	var vlist: Array[Vector3] = [
 		Vector3(-1, phi, 0).normalized(), Vector3(1, phi, 0).normalized(),
@@ -269,7 +302,7 @@ static func build_blob_mesh(r: float, noise_amp: float = 0.04) -> ArrayMesh:
 	# артефакт невозможен в принципе. (Грабля-ССОТ: enum в этом билде —
 	# ..._DEPTH_PRE_PASS с подчёркиванием, онлайн-доки говорят PREPASS.)
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
-	mat.albedo_color = Color(0.32, 0.85, 0.42)
+	mat.albedo_color = body_color
 	mat.roughness = 0.12
 	mat.rim_enabled = true
 	mat.rim = 0.7
@@ -393,13 +426,75 @@ func jolt_from(from_pos: Vector3, strength := 9.0, scary := true) -> void:
 		away = Vector3(0, 0, 1)
 	away = away.normalized()
 	_poke_dome(base - away * radius * 0.8, away, PINK_PEAK * k)
-	if scary:
+	if scary and not aggressive:
 		# Испуг v6 = FSM-фаза FLEE в мозге: старт-кик 280·k + активная тяга
 		# бегства 950 Н на 4-5 с (спец §БАГ-D: отлёт ~1 м и «секунда испуга»
 		# не давали отхода; вердикт юзера «отходит на 1 метр и прилипает»).
+		# Q49: КРАСНЫЙ (aggressive) НЕ пугается выстрелов — каждое попадание
+		# уводило бы его на 8 м, дамажить невозможно. Физ-ответ = кик.
 		_brain.scare(self, away, k)
 	else:
 		_kick_mover(away, RIG_KICK * k)
+
+## Q49: урон от скиллов (приёмщик — JellyHitbox, слой 8; duck-typing
+## take_damage у хитскана/AoE/проектайлов). Физ-ответ: дрожь купола + кик
+## мувера от точки удара; FSM-испуга нет (см. jolt_from).
+func take_damage(amount: int, impulse_dir: Vector3 = Vector3.ZERO) -> void:
+	if _dying or _health == null:
+		return
+	var base := _live_center if _live_center != Vector3.ZERO else _home
+	var away := impulse_dir
+	away.y = 0.0
+	if away.length_squared() < 0.0001:
+		away = Vector3(_rng.randf_range(-1.0, 1.0), 0.0,
+				_rng.randf_range(-1.0, 1.0))
+	away = away.normalized()
+	_health.take(amount)
+	_poke_dome(base - away * radius * 0.8, away, PINK_PEAK * 1.2)
+	_kick_mover(away, RIG_KICK * 0.8)
+
+## Q49: HP + хитбокс. Хитбокс — AnimatableBody3D слой 8 детект-only (mask 0):
+## ни с чем не коллизится физически, но виден лучам/AoE/Area-контактам.
+func _add_health_and_hitbox() -> void:
+	_health = HealthScript.new()
+	_health.name = "JellyHealth"
+	add_child(_health)
+	_health.setup(JELLY_HP, radius * 1.4)
+	_health.died.connect(_die)
+	_hitbox = HitboxScript.new()
+	_hitbox.name = "JellyHitbox"
+	_hitbox.jelly = self
+	add_child(_hitbox)
+	var hcs := CollisionShape3D.new()
+	var hsph := SphereShape3D.new()
+	hsph.radius = radius
+	hcs.shape = hsph
+	_hitbox.add_child(hcs)
+	_hitbox.global_position = _home + Vector3(0, radius * 0.35, 0)
+
+## Смерть желе: пины снять (кольцо иначе стянет взрыв в блин), всем точкам
+## импульс наружу+вверх («разлетается»), мувер/хитбокс убрать, труп удалить.
+func _die() -> void:
+	if _dying:
+		return
+	_dying = true
+	if _rig_rid.is_valid():
+		PhysicsServer3D.soft_body_remove_all_pinned_points(_rig_rid)
+	var n := get_point_count()
+	var base := _live_center if _live_center != Vector3.ZERO else _home
+	for i in n:
+		var out := (get_point_transform(i) - base).normalized()
+		if out.length_squared() < 0.001:
+			out = Vector3.UP
+		apply_impulse(i, (out * 0.5 + Vector3.UP * 0.7).normalized()
+				* _rng.randf_range(0.5, 1.1))
+	if _hitbox != null and is_instance_valid(_hitbox):
+		_hitbox.queue_free()
+		_hitbox = null
+	if _mover != null and is_instance_valid(_mover):
+		_mover.queue_free()
+		_mover = null
+	get_tree().create_timer(1.2).timeout.connect(queue_free)
 
 ## Фоновая дрожь: лёгкий тычок в случайный бок — желе постоянно подрагивает,
 ## даже когда никто не рядом (вердикт «он не желе»). Без сдвига мувера.

@@ -1,5 +1,10 @@
 extends Area3D
 
+## Q49: слой 8 = хитбоксы желе (Logic/JellyHitbox.gd) — снаряд ловит их
+## контактом (Area3D дефолт-маска 1 софтбоди/хитбокс не видел).
+## Назначается в _ready: присваивание встроенному свойству в теле класса —
+## Parse Error «Unexpected identifier».
+
 const ProjectilePool = preload("res://Logic/Skills/ProjectilePool.gd")
 const DecalFrames = preload("res://Graphics/DecalFrames.gd")
 const AnimatedDecalComponent = preload("res://Graphics/AnimatedDecalComponent.gd")
@@ -16,6 +21,7 @@ func set_direction(dir: Vector3):
     direction = dir.normalized()
 
 func _ready():
+    collision_mask = 1 | 8
     body_entered.connect(_on_body_entered)
 
 func _physics_process(delta):

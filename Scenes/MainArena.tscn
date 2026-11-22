@@ -1,35 +1,32 @@
-[gd_scene format=4]
+[gd_scene format=3]
 
-[ext_resource type="Shader" path="res://Graphics/Sky/arena_sky.gdshader" id="1_n0p3e"]
-[ext_resource type="PackedScene" path="res://Scenes/arena.tscn" id="2_y3lcr"]
-[ext_resource type="Script" path="res://Logic/Props/FloorMonolith.gd" id="3_3l7o5"]
-[ext_resource type="PackedScene" path="res://Scenes/player.tscn" id="4_jg017"]
-[ext_resource type="Script" path="res://Logic/PlayerController.gd" id="5_kbsp7"]
-[ext_resource type="PackedScene" path="res://Scenes/dummy.tscn" id="6_xuslf"]
-[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="7_knhh8"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/training_dummy/training_dummy.tscn" id="8_lf0el"]
-[ext_resource type="Script" path="res://Graphics/NeuroDummyProp.gd" id="9_130tw"]
-[ext_resource type="Script" path="res://Logic/MovingDummy.gd" id="10_ckn3w"]
-[ext_resource type="Script" path="res://Logic/FriendlyDummy.gd" id="11_j3bk5"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/boulder_01/boulder_01.tscn" id="12_nnnht"]
-[ext_resource type="Script" path="res://Graphics/PropHLOD.gd" id="13_qgu1j"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/rock_moss_set_01/rock_moss_set_01.tscn" id="14_074kg"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/enchant_table/enchant_table.tscn" id="15_sdoax"]
-[ext_resource type="Script" path="res://Logic/SkillForge.gd" id="16_hx8ts"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/mushroom_bounce/mushroom_bounce.tscn" id="17_0woa2"]
-[ext_resource type="Script" path="res://Logic/Props/MushroomBounce.gd" id="18_4i2go"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/soft_ground/soft_ground.tscn" id="19_2qati"]
-[ext_resource type="Script" path="res://Logic/Props/SoftGround.gd" id="20_pe2qx"]
-[ext_resource type="Script" path="res://Logic/JellyMonster.gd" id="21_ttrb7"]
-[ext_resource type="Script" path="res://Logic/NPCTeleporter.gd" id="22_gs45t"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v4_cone_a.tscn" id="23_2s5gq"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v2_foliage_b.tscn" id="24_ourr0"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v4_cone_b.tscn" id="25_xiber"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/spruce_mtree/spruce_mtree.tscn" id="26_jx8lx"]
-[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/spruce_mtree_D/spruce_mtree_D.tscn" id="27_o43n5"]
+[ext_resource type="Shader" path="res://Graphics/Sky/arena_sky.gdshader" id="1_p30hg"]
+[ext_resource type="PackedScene" path="res://Scenes/arena.tscn" id="2_kg0h8"]
+[ext_resource type="Script" path="res://Logic/Props/FloorMonolith.gd" id="3_61vbw"]
+[ext_resource type="PackedScene" path="res://Scenes/player.tscn" id="4_n0p3e"]
+[ext_resource type="Script" path="res://Logic/PlayerController.gd" id="5_y3lcr"]
+[ext_resource type="PackedScene" path="res://Scenes/dummy.tscn" id="6_3l7o5"]
+[ext_resource type="Script" path="res://Logic/HealthComponent.gd" id="7_jg017"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/training_dummy/training_dummy.tscn" id="8_kbsp7"]
+[ext_resource type="Script" path="res://Graphics/NeuroDummyProp.gd" id="9_xuslf"]
+[ext_resource type="Script" path="res://Logic/MovingDummy.gd" id="10_knhh8"]
+[ext_resource type="Script" path="res://Logic/FriendlyDummy.gd" id="11_lf0el"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/boulder_01/boulder_01.tscn" id="12_130tw"]
+[ext_resource type="Script" path="res://Graphics/PropHLOD.gd" id="13_ckn3w"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/rock_moss_set_01/rock_moss_set_01.tscn" id="14_j3bk5"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/enchant_table/enchant_table.tscn" id="15_nnnht"]
+[ext_resource type="Script" path="res://Logic/SkillForge.gd" id="16_qgu1j"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/soft_ground/soft_ground.tscn" id="17_074kg"]
+[ext_resource type="Script" path="res://Logic/Props/SoftGround.gd" id="18_sdoax"]
+[ext_resource type="Script" path="res://Logic/NPCTeleporter.gd" id="19_hx8ts"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v4_cone_a.tscn" id="20_0woa2"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v2_foliage_b.tscn" id="21_4i2go"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/pine_tree_01/pine_tree_01_v4_cone_b.tscn" id="22_2qati"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/spruce_mtree/spruce_mtree.tscn" id="23_pe2qx"]
+[ext_resource type="PackedScene" path="res://Graphics/Environment/Props/spruce_mtree_D/spruce_mtree_D.tscn" id="24_ttrb7"]
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_md6ny"]
-shader = ExtResource("1_n0p3e")
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_gs45t"]
+shader = ExtResource("1_p30hg")
 shader_parameter/u_top = Color(0.13, 0.3, 0.62, 1)
 shader_parameter/u_horizon = Color(0.83, 0.72, 0.55, 1)
 shader_parameter/u_bottom = Color(0.28, 0.28, 0.26, 1)
@@ -44,14 +41,14 @@ shader_parameter/u_cloud_dark = 0.25
 shader_parameter/u_ember_color = Color(1, 0.42, 0.08, 1)
 shader_parameter/u_ember_amount = 0.0
 
-[sub_resource type="Sky" id="Sky_udbw7"]
-sky_material = SubResource("ShaderMaterial_md6ny")
+[sub_resource type="Sky" id="Sky_2s5gq"]
+sky_material = SubResource("ShaderMaterial_gs45t")
 process_mode = 3
 
-[sub_resource type="Environment" id="Environment_va2h3"]
+[sub_resource type="Environment" id="Environment_ourr0"]
 background_mode = 2
 background_color = Color(0.28, 0.42, 0.75, 1)
-sky = SubResource("Sky_udbw7")
+sky = SubResource("Sky_2s5gq")
 ambient_light_source = 2
 ambient_light_color = Color(0.17, 0.17, 0.24, 1)
 tonemap_mode = 2
@@ -61,166 +58,137 @@ volumetric_fog_density = 0.02
 volumetric_fog_albedo = Color(0.72, 0.78, 0.92, 1)
 volumetric_fog_anisotropy = 0.35
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_w6ui6"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_xiber"]
 size = Vector3(100, 8, 100)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_yrfn4"]
-albedo_color = Color(0.32, 0.85, 0.42, 1)
-roughness = 0.12
-rim_enabled = true
-rim = 0.7
-rim_tint = 0.4
+[node name="MainArena" type="Node3D" unique_id=433483555]
 
-[sub_resource type="ArrayMesh" id="ArrayMesh_x7wor"]
-_surfaces = [{
-"aabb": AABB(-2.6441603, -0.6684014, -2.635958, 5.2883205, 2.882466, 5.271916),
-"format": 34359742471,
-"index_count": 960,
-"index_data": PackedByteArray("AAARAA8ADwAQAAwAEQAOABAADwARABAADAAUABIAEgATAAsAFAANABMAEgAUABMADgAXABUAFQAWAA0AFwAFABYAFQAXABYADAAQABQAFAAVAA0AEAAOABUAFAAQABUAAAAbABEAEQAaAA4AGwAZABoAEQAbABoADgAdABcAFwAcAAUAHQAYABwAFwAdABwAGQAgAB4AHgAfABgAIAABAB8AHgAgAB8ADgAaAB0AHQAeABgAGgAZAB4AHQAaAB4AAAAkABsAGwAjABkAJAAiACMAGwAkACMAGQAmACAAIAAlAAEAJgAhACUAIAAmACUAIgApACcAJwAoACEAKQAHACgAJwApACgAGQAjACYAJgAnACEAIwAiACcAJgAjACcAAAAtACQAJAAsACIALQArACwAJAAtACwAIgAvACkAKQAuAAcALwAqAC4AKQAvAC4AKwAyADAAMAAxACoAMgAKADEAMAAyADEAIgAsAC8ALwAwACoALAArADAALwAsADAAAAAPAC0ALQA0ACsADwAMADQALQAPADQAKwA2ADIAMgA1AAoANgAzADUAMgA2ADUADAASADcANwA4ADMAEgALADgANwASADgAKwA0ADYANgA3ADMANAAMADcANgA0ADcAAQA8AB8AHwA7ABgAPAA6ADsAHwA8ADsAGAA+ABwAHAA9AAUAPgA5AD0AHAA+AD0AOgBBAD8APwBAADkAQQAJAEAAPwBBAEAAGAA7AD4APgA/ADkAOwA6AD8APgA7AD8ABQBFABYAFgBEAA0ARQBDAEQAFgBFAEQADQBHABMAEwBGAAsARwBCAEYAEwBHAEYAQwBKAEgASABJAEIASgAEAEkASABKAEkADQBEAEcARwBIAEIARABDAEgARwBEAEgACwBOADgAOABNADMATgBMAE0AOABOAE0AMwBQADUANQBPAAoAUABLAE8ANQBQAE8ATABTAFEAUQBSAEsAUwACAFIAUQBTAFIAMwBNAFAAUABRAEsATQBMAFEAUABNAFEACgBXADEAMQBWACoAVwBVAFYAMQBXAFYAKgBZAC4ALgBYAAcAWQBUAFgALgBZAFgAVQBcAFoAWgBbAFQAXAAGAFsAWgBcAFsAKgBWAFkAWQBaAFQAVgBVAFoAWQBWAFoABwBgACgAKABfACEAYABeAF8AKABgAF8AIQBiACUAJQBhAAEAYgBdAGEAJQBiAGEAXgBlAGMAYwBkAF0AZQAIAGQAYwBlAGQAIQBfAGIAYgBjAF0AXwBeAGMAYgBfAGMAAwBrAGkAaQBqAGYAawBoAGoAaQBrAGoAZgBuAGwAbABtAAkAbgBnAG0AbABuAG0AaABxAG8AbwBwAGcAcQAEAHAAbwBxAHAAZgBqAG4AbgBvAGcAagBoAG8AbgBqAG8AAwB1AGsAawB0AGgAdQBzAHQAawB1AHQAaAB3AHEAcQB2AAQAdwByAHYAcQB3AHYAcwB6AHgAeAB5AHIAegACAHkAeAB6AHkAaAB0AHcAdwB4AHIAdABzAHgAdwB0AHgAAwB+AHUAdQB9AHMAfgB8AH0AdQB+AH0AcwCAAHoAegB/AAIAgAB7AH8AegCAAH8AfACDAIEAgQCCAHsAgwAGAIIAgQCDAIIAcwB9AIAAgACBAHsAfQB8AIEAgAB9AIEAAwCHAH4AfgCGAHwAhwCFAIYAfgCHAIYAfACJAIMAgwCIAAYAiQCEAIgAgwCJAIgAhQCMAIoAigCLAIQAjAAIAIsAigCMAIsAfACGAIkAiQCKAIQAhgCFAIoAiQCGAIoAAwBpAIcAhwCOAIUAaQBmAI4AhwBpAI4AhQCQAIwAjACPAAgAkACNAI8AjACQAI8AZgBsAJEAkQCSAI0AbAAJAJIAkQBsAJIAhQCOAJAAkACRAI0AjgBmAJEAkACOAJEABABKAHAAcACTAGcASgBDAJMAcABKAJMAZwCUAG0AbQBAAAkAlAA5AEAAbQCUAEAAQwBFAJUAlQA9ADkARQAFAD0AlQBFAD0AZwCTAJQAlACVADkAkwBDAJUAlACTAJUAAgBTAHkAeQCWAHIAUwBMAJYAeQBTAJYAcgCXAHYAdgBJAAQAlwBCAEkAdgCXAEkATABOAJgAmABGAEIATgALAEYAmABOAEYAcgCWAJcAlwCYAEIAlgBMAJgAlwCWAJgABgBcAIIAggCZAHsAXABVAJkAggBcAJkAewCaAH8AfwBSAAIAmgBLAFIAfwCaAFIAVQBXAJsAmwBPAEsAVwAKAE8AmwBXAE8AewCZAJoAmgCbAEsAmQBVAJsAmgCZAJsABgCIAFsAWwCcAFQAiACEAJwAWwCIAJwAVACdAFgAWABgAAcAnQBeAGAAWACdAGAAhACLAJ4AngBlAF4AiwAIAGUAngCLAGUAVACcAJ0AnQCeAF4AnACEAJ4AnQCcAJ4ACQBBAJIAkgCfAI0AQQA6AJ8AkgBBAJ8AjQCgAI8AjwBkAAgAoABdAGQAjwCgAGQAOgA8AKEAoQBhAF0APAABAGEAoQA8AGEAjQCfAKAAoAChAF0AnwA6AKEAoACfAKEA"),
-"material": SubResource("StandardMaterial3D_yrfn4"),
-"primitive": 3,
-"uv_scale": Vector4(0, 0, 0, 0),
-"vertex_count": 162,
-"vertex_data": PackedByteArray("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")
-}]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1418137633]
+environment = SubResource("Environment_ourr0")
 
-[node name="MainArena" type="Node3D" unique_id=1788421213]
-
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1185976840]
-environment = SubResource("Environment_va2h3")
-
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1239043187]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1983491202]
 transform = Transform3D(0.70710677, -0.4055798, 0.579228, 0, 0.81915206, 0.57357645, -0.70710677, -0.4055798, 0.579228, 0, 0, 0)
 light_color = Color(1, 0.95, 0.88, 1)
 light_energy = 1.1
 shadow_enabled = true
 
-[node name="Arena" type="StaticBody3D" parent="." unique_id=1504988106 instance=ExtResource("2_y3lcr")]
+[node name="Arena" type="StaticBody3D" parent="." unique_id=1504988106 instance=ExtResource("2_kg0h8")]
 transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0)
 
-[node name="FloorBacking" type="StaticBody3D" parent="." unique_id=1743904448]
-script = ExtResource("3_3l7o5")
+[node name="FloorBacking" type="StaticBody3D" parent="." unique_id=2010552724]
+script = ExtResource("3_61vbw")
 
-[node name="@CollisionShape3D@2" type="CollisionShape3D" parent="FloorBacking" unique_id=524099880]
+[node name="@CollisionShape3D@2" type="CollisionShape3D" parent="FloorBacking" unique_id=714978237]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -4, 0)
-shape = SubResource("BoxShape3D_w6ui6")
+shape = SubResource("BoxShape3D_xiber")
 
-[node name="Player" type="CharacterBody3D" parent="." unique_id=1648716075 instance=ExtResource("4_jg017")]
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1648716075 instance=ExtResource("4_n0p3e")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
-script = ExtResource("5_kbsp7")
+script = ExtResource("5_y3lcr")
 
-[node name="Dummy" type="StaticBody3D" parent="." unique_id=413260237 instance=ExtResource("6_xuslf")]
+[node name="Dummy" type="StaticBody3D" parent="." unique_id=413260237 instance=ExtResource("6_3l7o5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -5)
-script = ExtResource("7_knhh8")
+script = ExtResource("7_jg017")
 
-[node name="Training Dummy" type="StaticBody3D" parent="Dummy" unique_id=745009711 instance=ExtResource("8_lf0el")]
+[node name="Training Dummy" type="StaticBody3D" parent="Dummy" unique_id=745009711 instance=ExtResource("8_kbsp7")]
 transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0)
-script = ExtResource("9_130tw")
+script = ExtResource("9_xuslf")
 
-[node name="DummyLine" type="StaticBody3D" parent="." unique_id=1900252928 instance=ExtResource("6_xuslf")]
+[node name="DummyLine" type="StaticBody3D" parent="." unique_id=2059626129 instance=ExtResource("6_3l7o5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 1, -15)
-script = ExtResource("10_ckn3w")
+script = ExtResource("10_knhh8")
 
-[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=1747967852 instance=ExtResource("6_xuslf")]
+[node name="DummyTriangle" type="StaticBody3D" parent="." unique_id=589733667 instance=ExtResource("6_3l7o5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, -10)
-script = ExtResource("10_ckn3w")
+script = ExtResource("10_knhh8")
 move_type = "complex_polygon"
 move_speed = 16.0
 
-[node name="FriendlyDummy" type="StaticBody3D" parent="." unique_id=1071277428 instance=ExtResource("6_xuslf")]
+[node name="FriendlyDummy" type="StaticBody3D" parent="." unique_id=1988086035 instance=ExtResource("6_3l7o5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 1, 10)
-script = ExtResource("11_j3bk5")
+script = ExtResource("11_lf0el")
 move_type = "triangle"
 move_speed = 12.0
 
-[node name="FriendlyDummyStill" type="StaticBody3D" parent="." unique_id=1262504689 instance=ExtResource("6_xuslf")]
+[node name="FriendlyDummyStill" type="StaticBody3D" parent="." unique_id=1325842864 instance=ExtResource("6_3l7o5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11, 1, 10)
-script = ExtResource("11_j3bk5")
+script = ExtResource("11_lf0el")
 walks = false
 
-[node name="Training Dummy" type="StaticBody3D" parent="FriendlyDummyStill" unique_id=1610376901 instance=ExtResource("8_lf0el")]
+[node name="Training Dummy" type="StaticBody3D" parent="FriendlyDummyStill" unique_id=1516617827 instance=ExtResource("8_kbsp7")]
 transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0)
-script = ExtResource("9_130tw")
+script = ExtResource("9_xuslf")
 tint = Color(0.6, 1, 0.6, 1)
 
-[node name="Boulder 01" type="StaticBody3D" parent="." unique_id=1236157228 instance=ExtResource("12_nnnht")]
+[node name="Boulder 01" type="StaticBody3D" parent="." unique_id=1236157228 instance=ExtResource("12_130tw")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -3)
-script = ExtResource("13_qgu1j")
+script = ExtResource("13_ckn3w")
 
-[node name="Rock Moss Set 01" type="StaticBody3D" parent="." unique_id=1652171532 instance=ExtResource("14_074kg")]
+[node name="Rock Moss Set 01" type="StaticBody3D" parent="." unique_id=1652171532 instance=ExtResource("14_j3bk5")]
 transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, -5, 0, -3)
-script = ExtResource("13_qgu1j")
+script = ExtResource("13_ckn3w")
 
-[node name="Enchant Table" type="StaticBody3D" parent="." unique_id=1072493801 instance=ExtResource("15_sdoax")]
+[node name="Enchant Table" type="StaticBody3D" parent="." unique_id=1072493801 instance=ExtResource("15_nnnht")]
 transform = Transform3D(1.2020816, 0, -1.2020816, 0, 1.7, 0, 1.2020816, 0, 1.2020816, 35.5, 0, 35.5)
-script = ExtResource("13_qgu1j")
+script = ExtResource("13_ckn3w")
 
-[node name="SkillForge" type="Area3D" parent="Enchant Table" unique_id=128630021]
-script = ExtResource("16_hx8ts")
+[node name="SkillForge" type="Area3D" parent="Enchant Table" unique_id=1122859232]
+script = ExtResource("16_qgu1j")
 
-[node name="MushroomBounce" type="Node3D" parent="." unique_id=1499034300 instance=ExtResource("17_0woa2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, -12)
-script = ExtResource("18_4i2go")
-
-[node name="SoftGround" type="Node3D" parent="." unique_id=1307568141 instance=ExtResource("19_2qati")]
+[node name="SoftGround" type="Node3D" parent="." unique_id=1307568141 instance=ExtResource("17_074kg")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, -14)
-script = ExtResource("20_pe2qx")
+script = ExtResource("18_sdoax")
 
-[node name="JellyMonster" type="SoftBody3D" parent="." unique_id=792647682]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0.75, -6)
-mesh = SubResource("ArrayMesh_x7wor")
-script = ExtResource("21_ttrb7")
-
-[node name="NPCTeleporter" type="StaticBody3D" parent="." unique_id=1283742738]
+[node name="NPCTeleporter" type="StaticBody3D" parent="." unique_id=961022543]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 38, 0, 38)
-script = ExtResource("22_gs45t")
+script = ExtResource("19_hx8ts")
 
-[node name="Q22TreeCompare" type="Node3D" parent="." unique_id=1245978053]
+[node name="Q22TreeCompare" type="Node3D" parent="." unique_id=2108099589]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -45)
 
-[node name="TreeA_AtlasCards" type="StaticBody3D" parent="Q22TreeCompare" unique_id=582019784 instance=ExtResource("23_2s5gq")]
+[node name="TreeA_AtlasCards" type="StaticBody3D" parent="Q22TreeCompare" unique_id=582019784 instance=ExtResource("20_0woa2")]
 
-[node name="@Label3D@3" type="Label3D" parent="Q22TreeCompare" unique_id=571266794]
+[node name="@Label3D@3" type="Label3D" parent="Q22TreeCompare" unique_id=467507905]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 17.2, 0)
 pixel_size = 0.01
 billboard = 1
 text = "A: конус + процедурный атлас"
 font_size = 96
 
-[node name="TreeE_OldCloudAtlasB" type="StaticBody3D" parent="Q22TreeCompare" unique_id=199454248 instance=ExtResource("24_ourr0")]
+[node name="TreeE_OldCloudAtlasB" type="StaticBody3D" parent="Q22TreeCompare" unique_id=199454248 instance=ExtResource("21_4i2go")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 0, 0)
 
-[node name="@Label3D@4" type="Label3D" parent="Q22TreeCompare" unique_id=483254852]
+[node name="@Label3D@4" type="Label3D" parent="Q22TreeCompare" unique_id=993288493]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 17.2, 0)
 pixel_size = 0.01
 billboard = 1
 text = "E: старая крона + CC0-атлас"
 font_size = 96
 
-[node name="TreeB_StockScanCards" type="StaticBody3D" parent="Q22TreeCompare" unique_id=400186520 instance=ExtResource("25_xiber")]
+[node name="TreeB_StockScanCards" type="StaticBody3D" parent="Q22TreeCompare" unique_id=400186520 instance=ExtResource("22_2qati")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 0)
 
-[node name="@Label3D@5" type="Label3D" parent="Q22TreeCompare" unique_id=349953056]
+[node name="@Label3D@5" type="Label3D" parent="Q22TreeCompare" unique_id=145121438]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 17.2, 0)
 pixel_size = 0.01
 billboard = 1
 text = "B: конус + CC0-фотоскан"
 font_size = 96
 
-[node name="TreeC_MTree" type="StaticBody3D" parent="Q22TreeCompare" unique_id=1183818708 instance=ExtResource("26_jx8lx")]
+[node name="TreeC_MTree" type="StaticBody3D" parent="Q22TreeCompare" unique_id=1183818708 instance=ExtResource("23_pe2qx")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 0, 0)
 
-[node name="@Label3D@6" type="Label3D" parent="Q22TreeCompare" unique_id=1077644077]
+[node name="@Label3D@6" type="Label3D" parent="Q22TreeCompare" unique_id=1673685304]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 17.2, 0)
 pixel_size = 0.01
 billboard = 1
 text = "C: MTree (живой скелет)"
 font_size = 96
 
-[node name="TreeD_MTreeAtlasA" type="StaticBody3D" parent="Q22TreeCompare" unique_id=447110860 instance=ExtResource("27_o43n5")]
+[node name="TreeD_MTreeAtlasA" type="StaticBody3D" parent="Q22TreeCompare" unique_id=447110860 instance=ExtResource("24_ttrb7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 48, 0, 0)
 
-[node name="@Label3D@7" type="Label3D" parent="Q22TreeCompare" unique_id=561236817]
+[node name="@Label3D@7" type="Label3D" parent="Q22TreeCompare" unique_id=1345031537]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 48, 17.2, 0)
 pixel_size = 0.01
 billboard = 1
