@@ -46,6 +46,11 @@ func _process(_delta: float) -> void:
         _smoothed[b] = lerpf(_smoothed[b], m, 0.4)
     _panel.queue_redraw()
 
+## Публичный доступ для других VFX (AcousticBarrierVFX, Q16 Шаг 7):
+## ленивый инстанс спектр-анализатора на шине Music.
+func get_analyzer() -> AudioEffectSpectrumAnalyzerInstance:
+    return _analyzer_instance()
+
 ## Спектр-анализатор на шине Music: находим среди эффектов, иначе добавляем.
 func _analyzer_instance() -> AudioEffectSpectrumAnalyzerInstance:
     var idx := AudioServer.get_bus_index("Music")

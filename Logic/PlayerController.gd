@@ -114,6 +114,38 @@ func _ready():
     aim_assist.set_script(load("res://Logic/AimAssistComponent.gd"))
     add_child(aim_assist)
 
+    # Система стоек (Q16): Logic-компонент стоек, создаётся кодом (без
+    # пересборки скинов). UI подключается к его сигналам сам (ActionBar).
+    if get_node_or_null("StanceComponent") == null:
+        var stance_comp := Node.new()
+        stance_comp.name = "StanceComponent"
+        stance_comp.set_script(load("res://Logic/StanceComponent.gd"))
+        add_child(stance_comp)
+
+    # Вход-вайб стойки «Концентрация маны» (Q16 Шаг 2): вспышка у кулаков.
+    if get_node_or_null("ManaStanceVFX") == null:
+        var vfx_comp := Node.new()
+        vfx_comp.name = "ManaStanceVFX"
+        vfx_comp.set_script(load("res://Graphics/ManaStanceVFX.gd"))
+        add_child(vfx_comp)
+
+    # «Поток Гармонии» (Q16 Шаг 6): топливо/барьер/tier/рикошет/полифония.
+    if get_node_or_null("BardFlowComponent") == null:
+        var bard_comp := Node.new()
+        bard_comp.name = "BardFlowComponent"
+        bard_comp.set_script(load("res://Logic/BardFlowComponent.gd"))
+        add_child(bard_comp)
+
+    # Визуал Потока (Q16 Шаг 7): купол-барьер + дуги вокруг прицела.
+    if get_node_or_null("AcousticBarrierVFX") == null:
+        var dome_vfx = preload("res://Graphics/AcousticBarrierVFX.gd").new()
+        dome_vfx.name = "AcousticBarrierVFX"
+        add_child(dome_vfx)
+    if get_node_or_null("BardFlowUI") == null:
+        var flow_ui = preload("res://Graphics/BardFlowUI.gd").new()
+        flow_ui.name = "BardFlowUI"
+        add_child(flow_ui)
+
 func _exit_tree():
     # Снапшот скиллов при уходе с карты (телепорт непися / меню I / смерть).
     # Дети к этому моменту вышли из дерева, но живы — ActionBar читается.
@@ -170,8 +202,14 @@ func heal(amount: int):
 
 ## Урон игроку (ад, 19.11.26): враги наносят % от MAX_HP (5% ближники, 2% дальники).
 ## Смерть в аду → респавн на обычной арене, где манекены (верб. юзера).
-func take_damage(amount: int):
+func take_damage(amount: int, attacker: Node = null):
     if is_dying:
+        return
+    # Q16 Шаг 6: купол «Потока Гармонии» перехватывает урон в Потоке
+    # (полное поглощение + Нота-Рикошет). Вне Потока — урон как обычно.
+    var bf = get_node_or_null("BardFlowComponent")
+    if bf != null and bf.has_method("player_damage_hook") \
+            and bool(bf.player_damage_hook(amount, attacker)):
         return
     player_hp = max(0, player_hp - amount)
     update_hud()

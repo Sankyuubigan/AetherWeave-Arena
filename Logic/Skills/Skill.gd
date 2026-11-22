@@ -33,6 +33,20 @@ extends Resource
 ## SpawnProjectileEffect: там момент удара, а не каста.
 @export var shake: float = 0.0
 
+## --- Система стоек (Q16, ТЗ спеца 06-ответ.md 22.11.26) ---
+## true — под-приём стойки: не продаётся в магазине (SkillDB.get_shop_skills),
+## не создаётся в Кузнице (сериализатор поля не знает), выдаётся игроку только
+## вместе с родительской стойкой через EnterStanceEffect.
+@export var is_sub_skill: bool = false
+## Только у скиллов-стоек: декларация под-приёмов для UI/биндов — элементы
+## {id: String, label: String, default_slot: String}. Сериализатор Кузницы
+## и магазин это поле игнорируют.
+@export var stance_sub_skills: Array[Dictionary] = []
+## Только у скиллов-стоек: любой удачный под-приём ЗАКРЫВАЕТ стойку
+## (вердикт юзера 22.11.26: под-приём = одноразовый заряд стойки —
+## мана-стойка). Кузница поле не сериализует — user-стойки невозможны.
+@export var stance_exit_on_sub: bool = false
+
 func execute(caster: Node, context: Dictionary) -> void:
     for eff in effects:
         if eff.has_method("apply"):

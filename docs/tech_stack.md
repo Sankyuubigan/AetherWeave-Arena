@@ -40,9 +40,11 @@
 * `volumetric_fog` + `tonemap_color_correction` → MainArena/ProceduralArena (fog + FILMIC).
 * `decals` → setting rendering/textures/decals/filter=5 (выручает для будущих текстурных декалей).
 * `labels_and_texts` → DamageNumbers на Label3D.
-* `rhythm_game` → ЗАПЛАНИРОВАНО под умения барда (заказ юзера 18.11.26): окна нажатий
-  в бит поверх кастуемой мелодии; берём техприёмы демо — синхронизация input↔audio
-  (стабильная позиция playback, как в MusicDirector) и 1€-фильтр гладкости нот.
+* `rhythm_game` → ВЗЯТО (Q16, 22.11.26): ритм-стойка барда — PLL-часы
+  (`Logic/RhythmConductor.gd`: снэп 0.08 с, подтяжка ×min(delta*6, 1),
+  lookahead 1.5 с), 1€-фильтр (`Logic/OneEuroFilter.gd`) гладкости нот,
+  окна нажатий (`Logic/RhythmJudge.gd`: Perfect −65..+90 мс, Good
+  −140..+165 мс). ССОТ механики — docs/stance_system.md.
 
 ### Взято 19.11.26 (батч качества QUEUE Q1-Q7)
 * `occlusion_culling_mesh_lod` → BoxOccluder3D на скаттерах Ада (Q2) + project setting

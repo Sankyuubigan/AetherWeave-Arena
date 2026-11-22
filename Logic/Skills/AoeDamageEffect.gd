@@ -7,9 +7,14 @@ const AnimatedDecalComponent = preload("res://Graphics/AnimatedDecalComponent.gd
 @export var radius: float = 5.0
 @export var damage: int = 30
 @export var vfx_scene: PackedScene
+## Центр AoE = кастер, а не точка прицела (Q16 Шаг 2: Бас-Дроп барда, Шаг 6).
+## false — старое поведение (центр в точке прицела), ничего не меняется.
+@export var center_on_caster: bool = false
 
 func apply(caster: Node, context: Dictionary) -> void:
     var target_pos: Vector3 = context.get("target_pos", caster.global_position)
+    if center_on_caster:
+        target_pos = caster.global_position
 
     # 1. Воспроизводим визуальный эффект в точке прицела
     if vfx_scene:
@@ -36,6 +41,11 @@ func apply(caster: Node, context: Dictionary) -> void:
         query.exclude = [caster.get_rid()]
         
     var results = space_state.intersect_shape(query)
+    # Q16 Шаг 6: context-множители Потока Барда: урон × stance_power
+    # (tier-карта через provider), отброс × knockback_mult (Бас-Дроп).
+    var dmg: int = int(round(float(damage) * float(context.get("damage_mult", 1.0)) \
+            * float(context.get("stance_power", 1.0))))
+    var kb: float = float(context.get("knockback_mult", 1.0))
     for res in results:
         var collider = res.collider
         if collider.has_method("take_damage"):
@@ -43,8 +53,8 @@ func apply(caster: Node, context: Dictionary) -> void:
             var from_blast := Vector3.ZERO
             var c3d := collider as Node3D
             if c3d:
-                from_blast = c3d.global_position - target_pos
-            collider.take_damage(damage, from_blast)
+                from_blast = (c3d.global_position - target_pos) * kb
+            collider.take_damage(dmg, from_blast)
 
 ## Кольцо ударной волны: ищем поверхность под точкой (прицел мог быть на
 ## стене — тогда кольцо ляжет на неё), диаметр = 2 * radius AoE.

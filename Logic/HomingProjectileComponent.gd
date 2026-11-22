@@ -164,6 +164,12 @@ func _on_body_entered(body: Node):
         return
 
     if body.has_method("take_damage"):
+        # Q16 Шаг 6: meta-override урона (Нота-Рикошет Потока Барда) —
+        # pooled-сцена шарится, урон живёт в meta до pooled_reset.
+        var dmg: int = damage
+        var refl := has_meta("is_reflected")
+        if has_meta("override_damage"):
+            dmg = int(get_meta("override_damage"))
         # Сигнатуры take_damage разнятся: PlayerController — (amount),
         # HealthComponent/HellEnemyBase — (amount, impulse_dir). Вызываем
         # по фактическому числу аргументов метода (иначе молния бота в
@@ -173,10 +179,13 @@ func _on_body_entered(body: Node):
             if m.name == "take_damage":
                 _td_args = m.args.size()
                 break
-        if _td_args >= 2:
-            body.take_damage(damage, current_velocity)
+        if _td_args >= 4 and refl:
+            # Гвард пинг-понга ТЗ: рикошет летит с is_reflected=true.
+            body.take_damage(dmg, current_velocity, caster, true)
+        elif _td_args >= 2:
+            body.take_damage(dmg, current_velocity)
         else:
-            body.take_damage(damage)
+            body.take_damage(dmg)
 
     # Электрический прожог (аним. декаль 4.8): мигающие дуги -> угасание.
     # Спавн ДО release — декаль живёт в current_scene независимо от пула.
@@ -197,6 +206,11 @@ func _on_body_entered(body: Node):
 func pooled_reset():
     # Полный сброс полёта: _ready при переиспользовании не вызывается.
     damage = BASE_DAMAGE  # Q38: сброс множителя элиты при возврате в пул
+    # Q16 Шаг 6: meta-override рикошета не переживает пул.
+    if has_meta("override_damage"):
+        remove_meta("override_damage")
+    if has_meta("is_reflected"):
+        remove_meta("is_reflected")
     target = null
     caster = null
     current_velocity = Vector3.ZERO

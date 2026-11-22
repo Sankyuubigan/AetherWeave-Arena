@@ -221,7 +221,8 @@ func _nav_dir_to(target: Vector3, delta: float) -> Vector3:
 
 func _attack() -> void:
 	if _player and _player.has_method("take_damage"):
-		_player.take_damage(_damage_amount())
+		# Q16 Шаг 6: атакующий — для Ноты-Рикошета «Потока Гармонии».
+		_player.take_damage(_damage_amount(), self)
 
 ## Урон = % от МАКС HP игрока (верб. юзера), не от текущего.
 func _damage_amount() -> int:

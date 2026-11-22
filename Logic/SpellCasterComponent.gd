@@ -58,7 +58,7 @@ func _ready():
 func is_channeling() -> bool:
 	return _channeling
 
-func cast_skill(skill_id: String):
+func cast_skill(skill_id: String, extra_context: Dictionary = {}):
 	var all_skills = SkillDB.get_skills()
 	if not all_skills.has(skill_id):
 		return
@@ -87,6 +87,8 @@ func cast_skill(skill_id: String):
 	var context = _aim_context(player, skill_id, skill, hand)
 	if context.is_empty():
 		return
+	if not extra_context.is_empty():
+		context.merge(extra_context, true)  # stance_power и пр. (Q16 Шаг 1)
 
 	var anim_comp = player.get_node_or_null("PlayerAnimationComponent")
 
@@ -116,6 +118,8 @@ func cast_skill(skill_id: String):
 		context = _aim_context(player, skill_id, skill, hand)
 		if context.is_empty():
 			return
+		if not extra_context.is_empty():
+			context.merge(extra_context, true)
 		skill.execute(player, context)
 	else:
 		if cast_anim_name != "" and anim_comp and anim_comp.has_method("play_cast_anim"):

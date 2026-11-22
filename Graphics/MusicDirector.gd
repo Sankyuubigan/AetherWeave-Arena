@@ -136,6 +136,23 @@ func _stable_pos(p: AudioStreamPlayer) -> float:
     return p.get_playback_position() + AudioServer.get_time_since_last_mix() \
             - AudioServer.get_output_latency() + (1.0 / FRAME_HZ) * POS_SMOOTH_FRAMES
 
+## Аудио-время для PLL ритма (Q16 Шаг 4): формула _stable_pos боевого лупа.
+## −1 = луп не играет (старт-прайм/headless) — RhythmConductor тикает сам.
+func audio_time() -> float:
+    if combat != null and combat.playing:
+        return _stable_pos(combat)
+    return -1.0
+
+## Duck фоновой музыки карт (Q16 Шаг 5): set_bg_duck_db(-14.0) на время
+## «Потока Барда», set_bg_duck_db(0.0) — точный возврат к BG_DB. Мгновенно,
+## без fade-твина — точность возврата важнее плавности (полировка Шага 7).
+## Боевой луп не трогаем (отдельный плеер). NOTE: если бой начнётся во время
+## Потока, его duck фона (BG_DUCK_DB) перекроет бард-duck — приемлемый edge.
+func set_bg_duck_db(db: float) -> void:
+    if bg == null:
+        return
+    bg.volume_db = BG_DB + db
+
 func _combat_release() -> void:
     if _combat_tween:
         _combat_tween.kill()

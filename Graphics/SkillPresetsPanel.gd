@@ -127,10 +127,16 @@ func _state_snapshot() -> Dictionary:
 	for sid in player.unlocked_skills:
 		if player.unlocked_skills[sid]:
 			skills.append(sid)
+	# Q16 Шаг 8: бинды под-приёмов стоек едут в пресете (round-trip JSON).
+	var binds := {}
+	if action_bar:
+		for sid in action_bar.stance_binds:
+			binds[sid] = (action_bar.stance_binds[sid] as Dictionary).duplicate()
 	return {
 		"skills": skills,
 		"sp": int(player.skill_points),
 		"bar": bar,
+		"stance_binds": binds,
 	}
 
 ## «+»: снапшот купленных навыков + SP + расстановка ActionBar.
@@ -196,6 +202,13 @@ func _on_load(index: int) -> void:
 		for i in action_bar.slots.size():
 			var sid: String = bar[i] if i < bar.size() else ""
 			action_bar.slots[i].set_skill(str(sid))
+	# Q16 Шаг 8: восстановление биндов под-приёмов стоек.
+	var binds = preset.get("stance_binds", {})
+	if action_bar != null and binds is Dictionary:
+		var restored := {}
+		for sid in binds:
+			restored[sid] = (binds[sid] as Dictionary).duplicate()
+		action_bar.stance_binds = restored
 	player.update_hud()
 	menu.refresh_sp()
 	menu.refresh_grid()

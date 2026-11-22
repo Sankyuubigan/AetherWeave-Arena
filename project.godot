@@ -34,6 +34,8 @@ MusicSpectrum="*res://Graphics/MusicSpectrum.gd"
 GraphicsQuality="*res://Graphics/GraphicsQuality.gd"
 SkillForgeWindow="*res://Graphics/SkillForgeWindow.gd"
 HudToggle="*res://Graphics/HudToggle.gd"
+RhythmConductor="*res://Logic/RhythmConductor.gd"
+RhythmJudge="*res://Logic/RhythmJudge.gd"
 
 [display]
 

@@ -1,14 +1,19 @@
 extends Node
 
-## Громкости (линейные 0..1): Master — общая, SFX — эффекты, Music — музыка.
-## Шины SFX и Music создаются кодом (SFX здесь, Music — в MusicDirector),
-## обе отправляются в Master. Значения хранятся в user://settings.cfg.
+## Громкости (линейные 0..1): Master — общая, SFX — эффекты, Music — музыка,
+## Bard — «Поток Барда» (Q16 Шаг 5). Шины SFX/Bard создаются здесь, Music —
+## в MusicDirector, все отправляются в Master. Значения в user://settings.cfg.
 
 const SETTINGS_PATH := "user://settings.cfg"
 
 var master_volume: float = 1.0
 var sfx_volume: float = 1.0
 var music_volume: float = 1.0
+var bard_volume: float = 1.0
+## Компенсация задержки звука (Q16 Шаг 5): −150..+150 мс. Пишется калибровкой
+## SettingsMenu («Калибровать»: 8 нажатий → медиана), читается RhythmJudge
+## через _eff_offset_ms() при каждой оценке (живое применение без перезапуска).
+var audio_offset_ms: float = 0.0
 
 ## Нет фокуса у окна игры (клик в другое окно, свёрнуто) → весь звук глушится
 ## (директива юзера 18.11.26: музыка/звуки не должны играть вне фокуса).
@@ -31,14 +36,27 @@ func _apply_all_buses() -> void:
     _apply_bus("Master", master_volume)
     _apply_bus("SFX", sfx_volume)
     _apply_bus("Music", music_volume)
+    _apply_bus("Bard", bard_volume)
 
 func _ready():
     _ensure_sfx_bus()
+    _ensure_bard_bus()
     _ensure_master_limiter()
     _load_settings()
     _apply_bus("Master", master_volume)
     _apply_bus("SFX", sfx_volume)
     _apply_bus("Music", music_volume)
+    _apply_bus("Bard", bard_volume)
+
+## Шина Bard (Q16 Шаг 5): полифонические ноты Потока + ритм-луп барда.
+## Лимитер на Master уже страхует сумму шин от клипа.
+func _ensure_bard_bus() -> void:
+    if AudioServer.get_bus_index("Bard") >= 0:
+        return
+    AudioServer.add_bus()
+    var i := AudioServer.bus_count - 1
+    AudioServer.set_bus_name(i, "Bard")
+    AudioServer.set_bus_send(i, "Master")
 
 ## Предохранитель от клипа на выходе (фишка из демо audio/audio_effects):
 ## ассеты нормированы K-LUFS по отдельности, но Music + боевой луп + SFX на
@@ -80,6 +98,16 @@ func set_music_volume(v: float) -> void:
     _apply_bus("Music", music_volume)
     _save_settings()
 
+func set_bard_volume(v: float) -> void:
+    bard_volume = clampf(v, 0.0, 1.0)
+    _apply_bus("Bard", bard_volume)
+    _save_settings()
+
+## Калибровка (SettingsMenu) пишет, RhythmJudge читает при каждой оценке.
+func set_audio_offset_ms(v: float) -> void:
+    audio_offset_ms = clampf(v, -150.0, 150.0)
+    _save_settings()
+
 ## Вызывается из MusicDirector ПОСЛЕ создания шины Music: автолоад AudioManager
 ## грузится раньше, шины ещё не было — теперь применяем сохранённое значение.
 func apply_music_volume() -> void:
@@ -109,6 +137,9 @@ func _load_settings() -> void:
     master_volume = clampf(float(cfg.get_value("audio", "master_volume", 1.0)), 0.0, 1.0)
     sfx_volume = clampf(float(cfg.get_value("audio", "sfx_volume", 1.0)), 0.0, 1.0)
     music_volume = clampf(float(cfg.get_value("audio", "music_volume", 1.0)), 0.0, 1.0)
+    bard_volume = clampf(float(cfg.get_value("audio", "bard_volume", 1.0)), 0.0, 1.0)
+    audio_offset_ms = clampf(float(cfg.get_value("audio", "audio_offset_ms", 0.0)),
+            -150.0, 150.0)
 
 func _save_settings() -> void:
     # Догруз существующего файла: GraphicsQuality пишет секцию [graphics] в тот
@@ -118,6 +149,8 @@ func _save_settings() -> void:
     cfg.set_value("audio", "master_volume", master_volume)
     cfg.set_value("audio", "sfx_volume", sfx_volume)
     cfg.set_value("audio", "music_volume", music_volume)
+    cfg.set_value("audio", "bard_volume", bard_volume)
+    cfg.set_value("audio", "audio_offset_ms", audio_offset_ms)
     cfg.save(SETTINGS_PATH)
 
 func _on_player_finished(player: AudioStreamPlayer):

@@ -79,3 +79,14 @@ ActionBar и касту: всё работает по `id` без дописыв
 * `Generators/probe_skill_forge_execute.gd` — сквозной: user-скилл
   «снаряд+взрыв» кастуется по манекену — AoE снимает ровно свой урон,
   fireball летит и долетает (13 чеков).
+
+## 5. Система стоек (Stance Override, Q16 — 22.11.26)
+
+Стойка временно подменяет слоты под-приёмами: пока активна — нажатия
+перехваченных слотов кастуют под-приёмы, после выхода обычные скиллы
+возвращаются. Контракт `StanceComponent`, правила `is_sub_skill`/
+`stance_sub_skills`/`stance_binds`/swap, Поток Барда и инварианты —
+**ССОТ: [docs/stance_system.md](stance_system.md)** (дочитай перед правкой
+перехвата слотов — там чек-лист новой стойки и история регрессий).
+Кирпичи стоек — `EnterStanceEffect`/`MeleeShoveEffect`/`CrescentWaveEffect`/
+`BardNoteEffect`/`BardDropEffect` в [skill_effects_catalog.md](skill_effects_catalog.md).

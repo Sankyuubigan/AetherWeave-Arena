@@ -159,7 +159,8 @@ func _attack_tick(m, edge: float, to_pl: Vector3) -> void:
 			if pls.size() > 0 and is_instance_valid(pls[0]) \
 					and pls[0].has_method("take_damage"):
 				var pc = pls[0]
-				pc.take_damage(ceili(pc.MAX_HP * ATK_DMG_PCT / 100.0))
+				# Q16 Шаг 6: атакующий (желе) — для Ноты-Рикошета Потока.
+				pc.take_damage(ceili(pc.MAX_HP * ATK_DMG_PCT / 100.0), m)
 		m._mover.apply_central_force(dir * ORBIT_FORCE * 2.0)
 	else:
 		var pulse := 0.35 + 0.65 * maxf(0.0, sin(_t * PULSE_RATE))

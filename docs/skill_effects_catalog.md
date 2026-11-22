@@ -4,12 +4,18 @@
 наследования, Skill + массив Effect, сборка в SkillDB). Здесь описаны все
 атомарные эффекты (`Effect`), из которых собираются умения.
 
-**Обновлён 21.11.26 по коду `Logic/Skills/*.gd`** (12 эффектов). Живые примеры
-сборки скиллов — `Logic/Skills/SkillDB.gd`.
+**Обновлён 22.11.26 по коду `Logic/Skills/*.gd`** (16 эффектов + хелпер; Q16
+добавил 12–16 — стоики/бард). Живые примеры сборки скиллов —
+`Logic/Skills/SkillDB.gd`.
 
 ## 0. Поля скилла (`Skill.gd`) — уровень сборки
 
 * `id`, `skill_name`, `description`, `icon` (путь-строка), `price` (1), `is_passive`.
+* `is_sub_skill` (Q16) — под-приём стойки: НЕ в магазине, не продаётся,
+  выдаётся только со стойкой-родителем (`get_shop_skills` и Кузница фильтруют).
+* `stance_sub_skills` (Q16) — у Skill-сборки СТОЙКИ: массив
+  `[{id, label, default_slot}]`, `default_slot` = «ЛКМ»/«ПКМ»/«self».
+  Правила биндов/swap — [stance_system.md](stance_system.md) §3.
 * `max_range` (200.0) — дальность штатного рейкаста прицела.
 * `requires_target` + `target_type` (`"enemy"` / `"friendly"`) — скиллы с наведением.
 * `effects: Array[Resource]` — кирпичики, исполняются по порядку в `execute()`.
@@ -36,6 +42,11 @@
   обновляет её через `Effect.hand_pos()` (живая позиция кости кисти).
 * `damage_mult` — множитель урона кастера (Q38 элита,
   `SpellCasterComponent @export damage_mult`); учитывают снарядные эффекты.
+* `stance_power` (Q16) — множитель стойки: зарядовая лестница маны
+  1.0/1.3/1.6 или TIER_POWER Потока через provider. Читают MeleeShove/
+  CrescentWave/AoeDamage/SpawnProjectile; без стойки = 1.0 — поведение не меняется.
+* `knockback_mult` (Q16) — множитель отброса AoE (Бас-Дроп: 1 + 0.25×tier),
+  читает AoeDamageEffect.
 
 ---
 
@@ -61,6 +72,10 @@
 * `projectile_scene`, `offset_y`, `spawn_from_hand`, `spawn_delay` — как выше.
 * **Примечание:** скиллу нужны `requires_target = true` + `target_type = "enemy"`.
 * Урон × `damage_mult`; самонаведение не бьёт кастера.
+* **Меты пула (Q16 рикошет Потока):** `override_damage` (= raw × RR[tier],
+  урон переопределён куполом барда) и `is_reflected` (гвард пинг-понга)
+  читаются в `HomingProjectileComponent._on_body_entered`, сбрасываются в
+  `pooled_reset` — не хранить в снаряде между жизнями.
 * **Применение:** шаровые молнии, магические ракеты, духи-преследователи.
 
 ### 3. `SpawnHomingHealProjectileEffect`
@@ -73,6 +88,9 @@
 Мгновенный урон всем целям в радиусе от точки прицела (сфера intersect_shape,
 кастер исключён). Урон с отбросом рэгдолла от центра взрыва.
 * `radius` (5.0, м), `damage` (30), `vfx_scene` (опц., GPUParticles3D в точке взрыва).
+* `center_on_caster` (false): true — сфера вокруг КАСТЕРА, а не точки прицела
+  (Бас-Дроп барда).
+* Урон × `damage_mult` × `stance_power`; отброс × `knockback_mult` (Q16).
 * Встроено: кольцо ударной волны на полу под точкой (аним. декаль,
   диаметр = 2×radius) — внешних ассетов не требует.
 * **Применение:** гранаты, взрывы, заклинания по площади.
@@ -133,7 +151,39 @@ A→B 0.45 с (дуга smoothstep + подпрыг 0.4 м в начале, «п
 * `volume_db` (0.0).
 * **Применение:** озвучка кастов, боевые крики, сердечко-дзынь.
 
-### 12. `Effect.hand_pos()` — статический хелпер (не эффект)
+### 12. `EnterStanceEffect`
+Атомарный вход в стойку (Q16): находит `StanceComponent` кастера и входит
+с конфигом; под-приёмы берёт у Skill-сборки стойки из SkillDB.
+* `stance_id` (обязателен — id Skill-сборки стойки), `duration` (4.0).
+* **Грабля:** SkillDB пре-лоадит эффект — внутри `load()`, НЕ preload
+  (цикл preload SkillDB↔EnterStanceEffect ломает загрузку).
+* **Применение:** «Концентрация маны» (Q, 4 с), «Поток Гармонии» (R, 99 с
+  — страховка; реальные выходы fuel_out/barrier_break/bard_drop/14 с).
+
+### 13. `MeleeShoveEffect`
+Сокрушение (Q16, ЛКМ в мана-стойке): урон+отброс вблизи (конус/сфера у руки).
+* `damage` (30), `reach` (2.5), `radius` (2.8), `shove_force` (9.0).
+* Урон × `stance_power` (заряд Q). Направление — `context.forward_dir`
+  или назад-вектор кастера.
+
+### 14. `CrescentWaveEffect`
+Серп (Q16, self мана-стойки): плоская дуга-волна перед кастером.
+* `radius` (12.0), `half_angle_deg` (60.0), `damage` (22), `wave_color`.
+* Урон × `stance_power`. Направление — как у MeleeShove.
+
+### 15. `BardNoteEffect`
+Ноты Гармонии (Q16, ЛКМ в Потоке): случайная нота пентатоники в полифонию
+Потока (уровень через `BardFlowComponent.play_random_note`). Урона НЕТ —
+суть приёма ритм-пресс и вердикт судьи (топливо/барьер/tier).
+* Экспортных свойств нет; вне Потока не звучит.
+
+### 16. `BardDropEffect`
+Финальный Бас-Дроп (Q16, self Потока): закрытие Потока AoE вокруг барда.
+* Экспортных свойств нет (radius 6, damage 45, knockback_mult = 1 + 0.25×tier).
+* Порядок: взрыв → `close_flow("bard_drop")` (снятие баффов/аудио после).
+* Вне Потока не летит.
+
+### 17. `Effect.hand_pos()` — статический хелпер (не эффект)
 Позиция кости кисти кастера (`mixamorig_RightHand`/`LeftHand`) для спавна
 из руки; фолбэк — центр тела +1.2 м. У ботов/врагов скелет ищется по всему
 поддереву (скин не всегда под `GraphicsWrapper/PlayerModel`).
@@ -198,3 +248,6 @@ _skills["meteor"] = meteor
 
 *(Сделано из старого вишлиста: RaycastDamageEffect → `SpawnHitscanEffect`
 19.11.26; порталы → v1+v2 19–20.11.26.)*
+
+*(Q16, 22.11.26: кирпичи 12–16 — стойки/бард; контекст-множители
+`stance_power`/`knockback_mult`; ССОТ стоек — [stance_system.md](stance_system.md).)*

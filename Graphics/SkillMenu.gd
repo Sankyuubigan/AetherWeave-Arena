@@ -14,6 +14,7 @@ class SkillSlot extends ColorRect:
     var skill_data: Dictionary
     var menu: CanvasLayer
     var icon_label: Label
+    var _gear: Label = null
     
     func _ready():
         custom_minimum_size = Vector2(70, 70)
@@ -26,17 +27,41 @@ class SkillSlot extends ColorRect:
         icon_label.text = skill_data["icon"]
         icon_label.add_theme_font_size_override("font_size", 32)
         add_child(icon_label)
-        
+
+        # ⚙-кнопка стойки (Q16 Шаг 8; вердикт юзера 22.11.26: панель приёмов
+        # открывает ШЕСТЕРЁНКА у изученной стойки, клик по карте = магазин).
+        if skill_data.get("stance", false):
+            var gear := Label.new()
+            gear.text = "⚙"
+            gear.position = Vector2(48, 2)
+            gear.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+            gear.mouse_filter = Control.MOUSE_FILTER_STOP
+            gear.gui_input.connect(_on_gear_input)
+            gear.visible = false
+            add_child(gear)
+            _gear = gear
+
         update_visuals()
 
     func _gui_input(event):
         if event is InputEventMouseButton and event.pressed:
             if event.button_index == MOUSE_BUTTON_LEFT:
+                # Вердикт юзера 22.11.26: карта = магазинные семантики (у
+                # изученной — no-op), панель приёмов открывает только ⚙.
                 menu.buy_skill(skill_data["id"], skill_data["price"])
                 update_visuals()
             elif event.button_index == MOUSE_BUTTON_RIGHT:
                 menu.sell_skill(skill_data["id"], skill_data["price"])
                 update_visuals()
+
+    func _on_gear_input(event):
+        # ⚙ = кнопка «Приёмы стойки» (видна только у изученной — update_visuals).
+        # Поглощаем клик, чтобы он не дошёл до карточки-магазина.
+        if event is InputEventMouseButton and event.pressed \
+                and event.button_index == MOUSE_BUTTON_LEFT \
+                and menu.player.unlocked_skills.get(skill_data["id"], false):
+            menu.open_stance_panel(skill_data["id"])
+            accept_event()
 
     func update_visuals():
         var is_unlocked = menu.player.unlocked_skills.get(skill_data["id"], false)
@@ -46,6 +71,8 @@ class SkillSlot extends ColorRect:
             color = Color(0.2, 0.2, 0.2, 1.0)
             
         var status = "ИЗУЧЕНО" if is_unlocked else "Не изучено (Цена: " + str(skill_data["price"]) + " SP)"
+        if _gear != null:
+            _gear.visible = is_unlocked
         
         # Собираем всплывающую подсказку с описанием
         tooltip_text = skill_data["name"] + "\n"
@@ -56,6 +83,8 @@ class SkillSlot extends ColorRect:
         
         if skill_data["id"] != "double_jump":
             tooltip_text += "\nПеретащите на нижнюю панель"
+        if skill_data.get("stance", false):
+            tooltip_text += "\n⚙ (в углу карточки) — приёмы стойки (слоты под-приёмов)"
 
     func _get_drag_data(at_position):
         var sid = skill_data["id"]
@@ -114,7 +143,7 @@ func _ready():
     grid.position = Vector2(40, 90)
     panel.add_child(grid)
     
-    var all_skills = SkillDB.get_skills()
+    var all_skills = SkillDB.get_shop_skills()
     for s_id in all_skills:
         var skill_obj = all_skills[s_id]
         var slot = SkillSlot.new()
@@ -123,7 +152,8 @@ func _ready():
             "price": skill_obj.price,
             "name": skill_obj.skill_name,
             "icon": skill_obj.icon,
-            "description": skill_obj.description
+            "description": skill_obj.description,
+            "stance": not skill_obj.stance_sub_skills.is_empty(),
         }
         slot.menu = self
         grid.add_child(slot)
@@ -161,8 +191,27 @@ func sell_skill(id: String, price: int):
         player.unlearn_cleanup(id)
 
 ## _unhandled_input: пока LineEdit пресетов держит фокус, «N» печатается
-## в поле, а не закрывает окно.
+## в поле, а не закрывает окно. Пока ловим слот для под-приёма (Шаг 8) —
+## нажатия слотов назначаются, прочие гасятся (N не закрывает окно).
 func _unhandled_input(event):
+    # «Клик → нажми слот» (Q16 Шаг 8): следующее нажатие из 14 слотов.
+    if _await_slot.size() > 0 and event.is_pressed() \
+            and (event is InputEventKey or event is InputEventMouseButton):
+        var lbl := _slot_label_from_event(event)
+        get_viewport().set_input_as_handled()
+        if lbl != "":
+            var bar = player.get_node_or_null("ActionBar")
+            if bar != null and bar.has_method("assign_stance_sub"):
+                _stance_status.text = bar.assign_stance_sub(
+                        str(_await_slot["stance_id"]),
+                        str(_await_slot["sub_id"]), lbl)
+            _await_slot = {}
+            var st = SkillDB.get_skills().get(_edit_stance_id)
+            if st != null:
+                _rebuild_stance_rows(st)
+        else:
+            _stance_status.text = "Это не слот — нажмите 1–7/Q/E/R/F/Shift/ЛКМ/ПКМ."
+        return
     if event is InputEventKey and event.pressed and event.keycode == KEY_N:
         is_open = !is_open
 
@@ -174,6 +223,7 @@ func _unhandled_input(event):
             presets_panel.refresh()
         else:
             panel.hide()
+            close_stance_panel()  # Шаг 8: режим «Слой стойки» гасим вместе с окном
             # МЫШЬ ССОТ v2 (docs/ui_input_rules.md): закрытие UI возвращает
             # мышь в игру (вердикт юзера 19.11.26: «мышь автоматом не
             # фокусится — исправь»). CAPTURED разрешён только здесь и в
@@ -185,3 +235,151 @@ func _process(_delta):
     # если другое окно закрылось и закапчурило курсор «мимо нас».
     if is_open and Input.get_mouse_mode() != Input.MOUSE_MODE_VISIBLE:
         Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+## ---------- Мини-панель приёмов стойки (Q16 Шаг 8) ----------
+
+var _stance_panel: Panel = null
+var _stance_title: Label
+var _stance_rows: VBoxContainer
+var _stance_status: Label
+var _await_slot := {}    # {stance_id, sub_id}: ловим следующее нажатие слота
+var _edit_stance_id := ""
+
+## Перетаскиваемая иконка под-приёма (drag-источник в мини-панели).
+class SubDrag extends ColorRect:
+    var stance_id: String
+    var sub_id: String
+    var sub_icon: String
+    var menu: CanvasLayer
+
+    func _ready():
+        custom_minimum_size = Vector2(28, 28)
+        color = Color(0.25, 0.35, 0.55, 0.9)
+        mouse_filter = Control.MOUSE_FILTER_STOP
+        var lbl := Label.new()
+        lbl.text = sub_icon
+        lbl.set_anchors_preset(Control.PRESET_CENTER)
+        lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        add_child(lbl)
+
+    func _get_drag_data(_at_position):
+        # Тащить приёмы можно только изученной стойки.
+        if not menu.player.unlocked_skills.get(menu._edit_stance_id, false):
+            return null
+        var preview := ColorRect.new()
+        preview.custom_minimum_size = Vector2(40, 40)
+        preview.color = Color(0.4, 0.2, 0.6, 0.7)
+        var lbl := Label.new()
+        lbl.text = sub_icon
+        lbl.set_anchors_preset(Control.PRESET_CENTER)
+        preview.add_child(lbl)
+        set_drag_preview(preview)
+        return {"type": "stance_sub", "stance_id": stance_id, "sub_id": sub_id}
+
+## Клик по изученной стойке (⚙-бейдж): мини-панель приёмов под сеткой +
+## ActionBar в режиме «Слой стойки» (drag-цель).
+func open_stance_panel(stance_id: String) -> void:
+    var st = SkillDB.get_skills().get(stance_id)
+    if st == null:
+        return
+    _edit_stance_id = stance_id
+    if _stance_panel == null:
+        _build_stance_panel()
+    _stance_title.text = "Приёмы внутри «%s»" % st.skill_name
+    _rebuild_stance_rows(st)
+    _stance_status.text = "Перетащите приём на слот или «Клик → слот»."
+    _stance_panel.visible = true
+    var bar = player.get_node_or_null("ActionBar")
+    if bar != null and bar.has_method("set_stance_edit_mode"):
+        bar.set_stance_edit_mode(true, st.skill_name, stance_id)
+
+func close_stance_panel() -> void:
+    if _stance_panel != null:
+        _stance_panel.visible = false
+    _await_slot = {}
+    _edit_stance_id = ""
+    var bar = player.get_node_or_null("ActionBar")
+    if bar != null and bar.has_method("set_stance_edit_mode"):
+        bar.set_stance_edit_mode(false)
+
+func _build_stance_panel() -> void:
+    _stance_panel = Panel.new()
+    _stance_panel.position = Vector2(40, 348)
+    _stance_panel.custom_minimum_size = Vector2(462, 118)
+    panel.add_child(_stance_panel)
+    var vb := VBoxContainer.new()
+    vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+    vb.offset_left = 8
+    vb.offset_top = 6
+    vb.offset_right = -8
+    vb.offset_bottom = -6
+    vb.add_theme_constant_override("separation", 4)
+    _stance_panel.add_child(vb)
+    _stance_title = Label.new()
+    _stance_title.add_theme_font_size_override("font_size", 14)
+    _stance_title.add_theme_color_override("font_color", Color(0.8, 0.5, 1.0))
+    vb.add_child(_stance_title)
+    _stance_rows = VBoxContainer.new()
+    _stance_rows.add_theme_constant_override("separation", 3)
+    vb.add_child(_stance_rows)
+    _stance_status = Label.new()
+    _stance_status.add_theme_font_size_override("font_size", 12)
+    _stance_status.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+    vb.add_child(_stance_status)
+
+func _rebuild_stance_rows(st) -> void:
+    for c in _stance_rows.get_children():
+        c.queue_free()
+    var bar = player.get_node_or_null("ActionBar")
+    var binds: Dictionary = {}
+    if bar != null and bar.has_method("get_stance_binds"):
+        binds = bar.get_stance_binds(_edit_stance_id)
+    var skills = SkillDB.get_skills()
+    for sd in st.stance_sub_skills:
+        var sub_id := str(sd.get("id", ""))
+        if sub_id == "":
+            continue
+        var sub = skills.get(sub_id)
+        var row := HBoxContainer.new()
+        row.add_theme_constant_override("separation", 8)
+        var drag := SubDrag.new()
+        drag.stance_id = _edit_stance_id
+        drag.sub_id = sub_id
+        drag.sub_icon = sub.icon if sub != null else "?"
+        drag.menu = self
+        row.add_child(drag)
+        var nm := Label.new()
+        nm.text = str(sd.get("label", sub_id))
+        nm.custom_minimum_size = Vector2(140, 0)
+        row.add_child(nm)
+        var cur := Label.new()
+        var eff := str(binds.get(sub_id, sd.get("default_slot", "")))
+        cur.text = "слот: %s" % ("дефолт" if eff == "" else eff)
+        cur.custom_minimum_size = Vector2(110, 0)
+        cur.modulate = Color(1, 1, 1, 0.8)
+        row.add_child(cur)
+        var btn := Button.new()
+        btn.text = "Клик → слот"
+        btn.pressed.connect(_on_pick_slot.bind(_edit_stance_id, sub_id))
+        row.add_child(btn)
+        _stance_rows.add_child(row)
+
+func _on_pick_slot(stance_id: String, sub_id: String) -> void:
+    _await_slot = {"stance_id": stance_id, "sub_id": sub_id}
+    _stance_status.text = "Нажмите слот: 1–7, Q/E/R/F, Shift, ЛКМ, ПКМ…"
+
+## Лейбл слота по событию (та же таблица, что у ActionBar — keycode ИЛИ
+## physical_keycode, как в его обработчике).
+func _slot_label_from_event(event) -> String:
+    var bar = player.get_node_or_null("ActionBar")
+    if bar == null:
+        return ""
+    for b in bar.key_bindings:
+        if b["type"] == "key" and event is InputEventKey \
+                and event.pressed and not event.echo \
+                and (event.keycode == b["code"] or event.physical_keycode == b["code"]):
+            return str(b["label"])
+        if b["type"] == "mouse" and event is InputEventMouseButton \
+                and event.pressed and event.button_index == b["code"]:
+            return str(b["label"])
+    return ""

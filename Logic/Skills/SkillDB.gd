@@ -296,7 +296,7 @@ static func get_skills() -> Dictionary:
     wg.skill_name = "Крылья ускорения"
     wg.description = "Светящиеся крылья на 10 с.
 Пока раскрыты — скорость +35% и рывок обзора."
-    wg.icon = "🪽"
+    wg.icon = "🕊"  # U+1FABD 🪽 не рендерился в Win10 (белый квадрат) — фикс Q16 Шаг 9
     wg.price = 2
     wg.max_range = 200.0
     wg.cast_anim = ""
@@ -342,7 +342,149 @@ static func get_skills() -> Dictionary:
     ptl2.effects.append(pts2)
     _skills["portals2"] = ptl2
 
+    # ---------- Стойка «Концентрация маны» (Q16 Шаг 2, ТЗ спеца) ----------
+    # Под-приёмы — НЕ в магазине (is_sub_skill=true, Шаг 0): выдаются только
+    # вместе со стойкой-родителем. Базовые регистрируются НАПРЯМУЮ в _skills:
+    # гварды register/replace требуют user_ (Кузница).
+    var mcrush = preload("res://Logic/Skills/Skill.gd").new()
+    mcrush.id = "mana_crush"
+    mcrush.skill_name = "Сокрушение маны"
+    mcrush.description = "Мили-удар перед собой: урон и отброс."
+    mcrush.icon = "🤜"
+    mcrush.is_sub_skill = true
+    mcrush.max_range = 6.0
+    mcrush.effects.append(preload("res://Logic/Skills/MeleeShoveEffect.gd").new())
+    _skills["mana_crush"] = mcrush
+
+    var mbolt = preload("res://Logic/Skills/Skill.gd").new()
+    mbolt.id = "mana_bolt"
+    mbolt.skill_name = "Сгусток маны"
+    mbolt.description = "Снаряд по прицелу (урон множится зарядом стойки)."
+    mbolt.icon = "🔹"
+    mbolt.is_sub_skill = true
+    mbolt.max_range = 100.0
+    var mb_proj = preload("res://Logic/Skills/SpawnProjectileEffect.gd").new()
+    if ResourceLoader.exists("res://Scenes/mana_bolt.tscn"):
+        mb_proj.projectile_scene = load("res://Scenes/mana_bolt.tscn")
+    mb_proj.spawn_from_hand = true
+    mbolt.effects.append(mb_proj)
+    _skills["mana_bolt"] = mbolt
+
+    var mcres = preload("res://Logic/Skills/Skill.gd").new()
+    mcres.id = "mana_crescent"
+    mcres.skill_name = "Серп маны"
+    mcres.description = "Широкий разрез: все враги в секторе ±60° перед тобой."
+    mcres.icon = "🌙"
+    mcres.is_sub_skill = true
+    mcres.max_range = 14.0
+    mcres.effects.append(preload("res://Logic/Skills/CrescentWaveEffect.gd").new())
+    _skills["mana_crescent"] = mcres
+
+    # Стойка-родитель (Q-скилл): вход в стойку + звук входа (reuse нейро-молния).
+    var mconc = preload("res://Logic/Skills/Skill.gd").new()
+    mconc.id = "mana_concentration"
+    mconc.skill_name = "Концентрация маны"
+    mconc.description = "Стойка 4 с: ЛКМ/ПКМ/Q подменяются приёмами.
+Заряд (до 1.5 с) усиливает приёмы: x1.0 → x1.3 → x1.6.
+Esc — отмена."
+    mconc.icon = "✨"
+    mconc.price = 4
+    mconc.max_range = 200.0
+    var m_ent = preload("res://Logic/Skills/EnterStanceEffect.gd").new()
+    m_ent.stance_id = "mana_concentration"
+    m_ent.duration = 4.0
+    mconc.effects.append(m_ent)
+    var mc_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
+    mc_sound.audio_stream = load("res://Audio/SFX/neural_ball_lightning.res")
+    mc_sound.volume_db = 0.0
+    mconc.effects.append(mc_sound)
+    var m_subs: Array[Dictionary] = [
+        {"id": "mana_crush", "label": "Сокрушение", "default_slot": "ЛКМ"},
+        {"id": "mana_bolt", "label": "Сгусток", "default_slot": "ПКМ"},
+        {"id": "mana_crescent", "label": "Серп", "default_slot": "self"},
+    ]
+    mconc.stance_sub_skills = m_subs
+    mconc.stance_exit_on_sub = true  # вердикт юзера 22.11.26: приём = разряд стойки
+    _skills["mana_concentration"] = mconc
+
+    # Стойка «Поток Гармонии» (Q16 Шаг 6, R-скилл): ритм-куполов-стойка барда.
+    var bflow = preload("res://Logic/Skills/Skill.gd").new()
+    bflow.id = "bard_flow"
+    bflow.skill_name = "Поток Гармонии"
+    bflow.description = "Стойка-концерт: ЛКМ/ПКМ подменяются ритм-нотами.
+Топливо 5 с: Perfect +1.2 / Good +0.5 / Miss −0.5, потолок 14 с.
+Купол поглощает урон (15→50% по tier), рикошет 15→60%. Esc/Бас-Дроп — выход."
+    bflow.icon = "🎵"  # U+1FABD 🪽 не рендерился в Win10 (белый квадрат) — фикс Q16 Шаг 9
+    bflow.price = 5
+    bflow.max_range = 200.0
+    var b_ent = preload("res://Logic/Skills/EnterStanceEffect.gd").new()
+    b_ent.stance_id = "bard_flow"
+    # Топливо живёт в BardFlowComponent (99 с — только страховка; выход по
+    # fuel_out / barrier_break / bard_drop / max_duration / Esc).
+    b_ent.duration = 99.0
+    bflow.effects.append(b_ent)
+    var b_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
+    b_sound.audio_stream = load("res://Audio/Bard/note_a4.res")
+    b_sound.volume_db = 0.0
+    bflow.effects.append(b_sound)
+    var b_subs: Array[Dictionary] = [
+        {"id": "bard_note", "label": "Ноты Гармонии", "default_slot": "ЛКМ"},
+        {"id": "bard_chord", "label": "Ударный Аккорд", "default_slot": "ПКМ"},
+        {"id": "bard_drop", "label": "Бас-Дроп", "default_slot": "self"},
+    ]
+    bflow.stance_sub_skills = b_subs
+    _skills["bard_flow"] = bflow
+
+    # Под-приёмы Потока (Q16 Шаг 6).
+    var bnote = preload("res://Logic/Skills/Skill.gd").new()
+    bnote.id = "bard_note"
+    bnote.skill_name = "Ноты Гармонии"
+    bnote.description = "Каждое нажатие — консонансная нота пентатоники.
+Ритм-сетка: восьмые доли. Perfect +1.2 с топлива, Miss −1.5 с."
+    bnote.icon = "🎼"
+    bnote.is_sub_skill = true
+    bnote.max_range = 200.0
+    bnote.effects.append(preload("res://Logic/Skills/BardNoteEffect.gd").new())
+    _skills["bard_note"] = bnote
+
+    var bchord = preload("res://Logic/Skills/Skill.gd").new()
+    bchord.id = "bard_chord"
+    bchord.skill_name = "Ударный Аккорд"
+    bchord.description = "Звуковая волна урона по прицелу (сильные доли).
+Урон × tier-множитель Потока (1.0→1.3)."
+    bchord.icon = "🔊"
+    bchord.is_sub_skill = true
+    bchord.max_range = 14.0
+    var bc_aoe = preload("res://Logic/Skills/AoeDamageEffect.gd").new()
+    bc_aoe.radius = 5.0
+    bc_aoe.damage = 30
+    bc_aoe.center_on_caster = false
+    bchord.effects.append(bc_aoe)
+    _skills["bard_chord"] = bchord
+
+    var bdrop = preload("res://Logic/Skills/Skill.gd").new()
+    bdrop.id = "bard_drop"
+    bdrop.skill_name = "Финальный Бас-Дроп"
+    bdrop.description = "Финал Потока: AoE вокруг барда, урон × tier,
+отброс × tier, закрывает Поток."
+    bdrop.icon = "🎹"
+    bdrop.is_sub_skill = true
+    bdrop.max_range = 8.0
+    bdrop.effects.append(preload("res://Logic/Skills/BardDropEffect.gd").new())
+    _skills["bard_drop"] = bdrop
+
     # Кузница скиллов (Q36): пользовательские скиллы вливаются в реестр в конце
     # ленивой инициализации — магазин/ActionBar/каст/персист работают по id сами.
     UserSkillDBScript.load_all(_skills)
     return _skills
+
+
+static func get_shop_skills() -> Dictionary:
+    ## Скиллы для магазина/Кузницы: без под-приёмов стоек (Q16). Под-приём
+    ## (is_sub_skill=true) выдаётся только вместе со стойкой-родителем.
+    var all := get_skills()
+    var out := {}
+    for id in all:
+        if not all[id].is_sub_skill:
+            out[id] = all[id]
+    return out

@@ -53,8 +53,9 @@ func apply(caster: Node, context: Dictionary) -> void:
     # по meta вместо старого body.name == "Player" — боты кастуют fireball В
     # игрока). set каждый каст: пул шарит tscn между скиллами/кастерами.
     proj.set_meta("cast_caster", caster)
-    # damage_mult (Q38 элита): урон снаряда × множителю кастера.
-    var dmg_mult := float(context.get("damage_mult", 1.0))
+    # damage_mult (Q38 элита) + stance_power (Q16 стойки): урон × обоим
+    # множителям. Без стойки stance_power=1.0 — поведение не меняется.
+    var dmg_mult := float(context.get("damage_mult", 1.0)) * float(context.get("stance_power", 1.0))
     if dmg_mult != 1.0 and "damage" in proj:
         proj.damage = int(proj.damage * dmg_mult)
 
