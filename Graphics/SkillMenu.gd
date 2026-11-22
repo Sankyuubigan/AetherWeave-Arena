@@ -2,11 +2,13 @@ extends CanvasLayer
 
 const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
 const SkillPresetsPanel = preload("res://Graphics/SkillPresetsPanel.gd")
+const SkillBranchGrouping = preload("res://Graphics/SkillBranchGrouping.gd")
 
 var panel: Panel
 var is_open: bool = false
 var player: CharacterBody3D
-var grid: GridContainer
+var grid: VBoxContainer
+var scroll: ScrollContainer
 var sp_label: Label
 var presets_panel
 
@@ -140,27 +142,39 @@ func _ready():
     sp_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
     panel.add_child(sp_label)
 
-    grid = GridContainer.new()
-    grid.columns = 5
-    grid.add_theme_constant_override("h_separation", 15)
-    grid.add_theme_constant_override("v_separation", 15)
-    grid.position = Vector2(40, 90)
-    panel.add_child(grid)
-    
-    var all_skills = SkillDB.get_shop_skills()
-    for s_id in all_skills:
-        var skill_obj = all_skills[s_id]
-        var slot = SkillSlot.new()
-        slot.skill_data = {
-            "id": skill_obj.id,
-            "price": skill_obj.price,
-            "name": skill_obj.skill_name,
-            "icon": skill_obj.icon,
-            "description": skill_obj.description,
-            "stance": not skill_obj.stance_sub_skills.is_empty(),
-        }
-        slot.menu = self
-        grid.add_child(slot)
+    # Секции по веткам (Q50 Шаг 2): прокрутка, заголовок ветки + грид 5 колонок.
+    scroll = ScrollContainer.new()
+    scroll.position = Vector2(40, 90)
+    scroll.custom_minimum_size = Vector2(460, 370)
+    panel.add_child(scroll)
+
+    grid = VBoxContainer.new()
+    grid.add_theme_constant_override("separation", 10)
+    scroll.add_child(grid)
+
+    for g in SkillBranchGrouping.grouped(SkillDB.get_shop_skills()):
+        var head = Label.new()
+        head.text = "%s %s" % [g["icon"], g["name"]]
+        head.add_theme_font_size_override("font_size", 18)
+        head.add_theme_color_override("font_color", Color(0.72, 0.85, 1.0))
+        grid.add_child(head)
+        var row_grid = GridContainer.new()
+        row_grid.columns = 5
+        row_grid.add_theme_constant_override("h_separation", 15)
+        row_grid.add_theme_constant_override("v_separation", 15)
+        grid.add_child(row_grid)
+        for skill_obj in g["skills"]:
+            var slot = SkillSlot.new()
+            slot.skill_data = {
+                "id": skill_obj.id,
+                "price": skill_obj.price,
+                "name": skill_obj.skill_name,
+                "icon": skill_obj.icon,
+                "description": skill_obj.description,
+                "stance": not skill_obj.stance_sub_skills.is_empty(),
+            }
+            slot.menu = self
+            row_grid.add_child(slot)
 
     # Боковая панель пресетов (снапшоты по skill id, JSON user://).
     presets_panel = SkillPresetsPanel.new(self)
@@ -175,9 +189,14 @@ func refresh_sp() -> void:
         sp_label.text = "Очки навыков: %d/%d" % [player.skill_points, player.SP_MAX]
 
 func refresh_grid() -> void:
-    for child in grid.get_children():
+    _refresh_visuals(grid)
+
+func _refresh_visuals(node: Node) -> void:
+    ## Рекурсивный обход секций веток: update_visuals у каждой карточки.
+    for child in node.get_children():
         if child.has_method("update_visuals"):
             child.update_visuals()
+        _refresh_visuals(child)
 
 func buy_skill(id: String, price: int):
     if not player.unlocked_skills.get(id, false) and player.skill_points >= price:

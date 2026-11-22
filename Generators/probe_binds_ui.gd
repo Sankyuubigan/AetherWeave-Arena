@@ -121,9 +121,14 @@ func update_hud():
 	# 10b) ⚙-кнопка открывает панель; карта = магазинные семантики (вердикт
 	# юзера 22.11.26); слоты показывают превью назначенных приёмов.
 	var stance_slot = null
-	for c in menu.grid.get_children():
-		if c.skill_data.get("id", "") == "bard_flow":
-			stance_slot = c
+	# Q50 Шаг 2: карточки теперь в секциях веток (заголовок + грядка) — поиск рекурсивный.
+	var stack := [menu.grid]
+	while not stack.is_empty():
+		var n = stack.pop_back()
+		for c in n.get_children():
+			stack.push_back(c)
+			if c.get("skill_data") != null and c.skill_data.get("id", "") == "bard_flow":
+				stance_slot = c
 	_ck(stance_slot != null, "карточка bard_flow найдена в сетке")
 	if stance_slot != null:
 		var cev := InputEventMouseButton.new()

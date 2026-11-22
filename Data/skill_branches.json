@@ -1,0 +1,94 @@
+{
+  "branches": [
+    {
+      "id": "elemental",
+      "name": "Стихийная магия",
+      "icon": "🔥",
+      "order": 1
+    },
+    {
+      "id": "stealth",
+      "name": "Скрытность",
+      "icon": "🌀",
+      "order": 2
+    },
+    {
+      "id": "astral",
+      "name": "Астральная магия",
+      "icon": "🔮",
+      "order": 3
+    },
+    {
+      "id": "necro",
+      "name": "Некромантия",
+      "icon": "💀",
+      "order": 4
+    },
+    {
+      "id": "bard",
+      "name": "Бард",
+      "icon": "🎵",
+      "order": 5
+    }
+  ],
+  "overrides": {
+    "fireball": {
+      "branch": "elemental"
+    },
+    "thunderclap": {
+      "branch": "elemental"
+    },
+    "ball_lightning": {
+      "branch": "elemental"
+    },
+    "meteor": {
+      "branch": "elemental"
+    },
+    "beam": {
+      "branch": "elemental"
+    },
+    "mana_crush": {
+      "branch": "astral"
+    },
+    "mana_bolt": {
+      "branch": "astral"
+    },
+    "mana_crescent": {
+      "branch": "astral"
+    },
+    "mana_concentration": {
+      "branch": "astral"
+    },
+    "teleport": {
+      "branch": "astral"
+    },
+    "bard_flow": {
+      "branch": "bard"
+    },
+    "bard_note": {
+      "branch": "bard"
+    },
+    "bard_chord": {
+      "branch": "bard"
+    },
+    "bard_drop": {
+      "branch": "bard"
+    },
+    "bard_groove": {
+      "branch": "bard"
+    },
+    "groove_pulse": {
+      "branch": "bard"
+    },
+    "groove_step": {
+      "branch": "bard"
+    },
+    "groove_crescendo": {
+      "branch": "bard"
+    }
+  },
+  "misc": {
+    "name": "Базовые умения",
+    "icon": "📦"
+  }
+}

@@ -5,6 +5,7 @@ static var _initialized: bool = false
 
 # Кузница скиллов (Q36): персист пользовательских скиллов (user://custom_skills.json).
 const UserSkillDBScript := preload("res://Logic/Skills/UserSkillDB.gd")
+const SkillBranchDBScript := preload("res://Logic/Skills/SkillBranchDB.gd")
 
 static func register(id: String, skill: Resource) -> bool:
     # Единственная легальная точка входа пользовательских скиллов в реестр.
@@ -575,6 +576,9 @@ Esc — отмена."
     # Кузница скиллов (Q36): пользовательские скиллы вливаются в реестр в конце
     # ленивой инициализации — магазин/ActionBar/каст/персист работают по id сами.
     UserSkillDBScript.load_all(_skills)
+    # Ветки умений (Q50): метаданные (имя-отображение, ветка) поверх кода —
+    # админка (admin/start_admin.bat), файл Data/skill_branches.json.
+    SkillBranchDBScript.apply_from_file(_skills)
     return _skills
 
 

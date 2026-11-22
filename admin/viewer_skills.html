@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Скиллы — админка (Q51)</title>
+<style>
+  :root { --bg:#14161c; --card:#1d212b; --edge:#2c3242; --txt:#d8dce6; --dim:#8b92a3; --acc:#7fb069; --bad:#e07070; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--txt); font:14px/1.45 "Segoe UI",system-ui,sans-serif; padding:24px; }
+  .wrap { max-width:1000px; margin:0 auto; }
+  h1 { font-size:22px; } .sub { color:var(--dim); margin:4px 0 18px; }
+  button { background:#2a2f3d; color:var(--txt); border:1px solid #3a4152; border-radius:6px;
+           padding:6px 14px; cursor:pointer; font-size:14px; }
+  button:hover { border-color:var(--acc); }
+  button.primary { background:#2e5d3f; border-color:#3f7d55; font-weight:600; }
+  button.primary:disabled { opacity:.4; cursor:default; }
+  button.danger:hover { border-color:var(--bad); }
+  input, select { background:#262b38; color:var(--txt); border:1px solid #3a4152; border-radius:5px;
+                  padding:4px 8px; font-size:14px; }
+  input:focus, select:focus { outline:none; border-color:var(--acc); }
+  #banner { background:#5d2e2e; border-left:3px solid var(--bad); border-radius:6px;
+            padding:10px 14px; margin-bottom:14px; display:none; }
+  #branches { background:var(--card); border:1px solid var(--edge); border-radius:10px; padding:14px; margin-bottom:20px; }
+  #branches h2 { font-size:15px; margin-bottom:10px; color:var(--acc); }
+  .brow { display:flex; gap:8px; align-items:center; margin-bottom:6px; }
+  .brow .id { color:var(--dim); font-size:12px; width:110px; overflow:hidden; text-overflow:ellipsis; }
+  .brow input.bi { width:44px; text-align:center; }
+  .brow input.bn { width:220px; }
+  .brow input.bo { width:52px; }
+  .miscrow { border-top:1px dashed var(--edge); padding-top:8px; margin-top:4px; }
+  .miscrow .id { width:auto; padding-right:76px; }
+  #badd { display:flex; gap:8px; margin-top:10px; align-items:center; }
+  #badd input { width:220px; } #badd input.bi { width:44px; text-align:center; }
+  section { background:var(--card); border:1px solid var(--edge); border-radius:10px; padding:12px 14px; margin-bottom:14px; }
+  section h2 { font-size:16px; margin-bottom:10px; }
+  section h2 small { color:var(--dim); font-weight:400; }
+  .srow { display:flex; gap:8px; align-items:center; padding:4px 6px; border-radius:6px; cursor:grab; }
+  .srow:hover { background:#ffffff08; }
+  .srow:active { cursor:grabbing; }
+  .srow.dragging { opacity:.35; }
+  .srow.sub { opacity:.62; }
+  .srow input.ni { width:44px; text-align:center; font-size:16px; }
+  .srow input.nn { width:240px; }
+  section.droptarget { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc) inset; background:#7fb06910; }
+  body.dragging-any section, body.dragging-any #branches { pointer-events:auto; }
+  body.dragging-any section *, body.dragging-any #branches * { pointer-events:none; }
+  .emptyhint { padding:6px 4px; font-style:italic; }
+  .badge { background:#242a37; border-radius:999px; padding:1px 10px; font-size:12px; color:var(--dim); white-space:nowrap; }
+  .badge.acc { color:var(--acc); }
+  .brick { background:#1b2230; border:1px solid #26304a; border-radius:4px; padding:0 6px;
+           font-size:11px; color:#8fa8d8; }
+  .bricks { display:flex; flex-wrap:wrap; gap:3px; flex:1; min-width:140px; }
+  #toast { position:fixed; bottom:22px; right:22px; background:#1d2b1f; border:1px solid var(--acc);
+           color:var(--txt); border-radius:8px; padding:12px 18px; display:none; z-index:10; max-width:420px; }
+  #toast.err { background:#2b1d1d; border-color:var(--bad); }
+  #top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .dim { color:var(--dim); font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="top">
+    <div><h1>Скиллы и ветки</h1>
+    <div class="sub">Перетаскивай умения между ветками мышью (в «Разное» = без ветки). Имя и иконка правятся в строке. Логика — только в коде (SkillDB). Дамп: <span id="gen"></span></div></div>
+    <div><button id="reload">↺ Обновить</button> <button id="save" class="primary" disabled>💾 Сохранить</button></div>
+  </div>
+  <div id="banner"></div>
+
+  <div id="branches">
+    <h2>Ветки умений</h2>
+    <div id="brows"></div>
+    <div id="badd">
+      <input id="an_icon" class="bi" maxlength="8" placeholder="🧪" title="Иконка (до 8 симв.)">
+      <input id="an_name" placeholder="Название новой ветки">
+      <button id="badd_btn">+ Добавить ветку</button>
+    </div>
+  </div>
+
+  <div id="sections"></div>
+</div>
+<div id="toast"></div>
+<script>
+let DATA = null;          // {branches, overrides, skills, generated}
+let original = null;      // снапшот для dirty-индикатора
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const TR = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'i','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'c','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya',' ':'_'};
+const translit = s => s.toLowerCase().split('').map(c=>TR[c]??c).filter(c=>/[a-z0-9_]/.test(c)).join('').replace(/_+/g,'_').replace(/^_|_$/g,'');
+
+function toast(msg, err=false) {
+  const t = $('toast'); t.textContent = msg; t.className = err ? 'err' : '';
+  t.style.display = 'block'; clearTimeout(t._h);
+  t._h = setTimeout(()=>{ t.style.display='none'; }, err ? 6000 : 3500);
+}
+function dirty() {
+  $('save').disabled = JSON.stringify({b:DATA.branches,o:DATA.overrides}) === JSON.stringify({b:original.branches,o:original.overrides});
+}
+function ovOf(id) { if (!DATA.overrides[id]) DATA.overrides[id] = {}; return DATA.overrides[id]; }
+
+async function load() {
+  const r = await fetch('/skills/api/data');
+  DATA = await r.json();
+  if (DATA.error) { const b=$('banner'); b.style.display='block'; b.textContent='⚠ '+DATA.error; }
+  original = JSON.parse(JSON.stringify({b:DATA.branches, o:DATA.overrides}));
+  $('gen').textContent = DATA.generated || '—';
+  render();
+}
+
+function render() {
+  // --- ветки ---
+  const br = $('brows'); br.innerHTML = '';
+  DATA.branches.slice().sort((a,b)=>a.order-b.order).forEach(b => {
+    const row = document.createElement('div'); row.className = 'brow';
+    row.innerHTML = `<input class="bi" maxlength="8" title="Иконка"><input class="bn" title="Название">
+      <input class="bo" type="number" title="Порядок в книге"><span class="id" title="id (не меняется)"></span>
+      <button class="danger">✕</button>`;
+    const [ic, nm, od, idl, del] = row.children;
+    ic.value = b.icon; nm.value = b.name; od.value = b.order; idl.textContent = b.id;
+    ic.oninput = () => { b.icon = ic.value; dirty(); };
+    nm.oninput = () => { b.name = nm.value; dirty(); renderSections(); };
+    od.oninput = () => { b.order = parseInt(od.value)||100; dirty(); };
+    del.onclick = () => {
+      if (!confirm(`Удалить ветку «${b.name}»? Её скиллы уедут в «Разное».`)) return;
+      DATA.branches = DATA.branches.filter(x => x.id !== b.id);
+      for (const k in DATA.overrides) if (DATA.overrides[k].branch === b.id) DATA.overrides[k].branch = '';
+      for (const s of DATA.skills) if (s.branch === b.id) s.branch = '';
+      render(); dirty();
+    };
+    br.appendChild(row);
+  });
+  // Служебная секция «без ветки» — тоже переименуемая (вердикт юзера 22.11.26)
+  const m = DATA.misc || (DATA.misc = {name: 'Разное', icon: '📦'});
+  const mrow = document.createElement('div'); mrow.className = 'brow miscrow';
+  mrow.innerHTML = `<input class="bi" maxlength="8" title="Иконка секции"><input class="bn" title="Название секции — отображается в книге навыков"><span class="id" title="Секция для умений без ветки, всегда последняя">без ветки</span>`;
+  const [mic, mnm] = mrow.children;
+  mic.value = m.icon || '📦'; mnm.value = m.name || 'Разное';
+  mic.oninput = () => { m.icon = mic.value; dirty(); };
+  mnm.oninput = () => { m.name = mnm.value; dirty(); renderSections(); };
+  br.appendChild(mrow);
+  renderSections();
+}
+
+function effBranch(s) {
+  const ov = DATA.overrides[s.id];
+  return (ov && ov.branch !== undefined) ? ov.branch : (s.branch || '');
+}
+
+function renderSections() {
+  const sec = $('sections'); sec.innerHTML = '';
+  const byBranch = {};
+  for (const s of DATA.skills) (byBranch[effBranch(s)] = byBranch[effBranch(s)] || []).push(s);
+  const order = DATA.branches.slice().sort((a,b)=>a.order-b.order).map(b=>b.id).concat(['']);
+  for (const bid of order) {
+    const list = byBranch[bid] || [];
+    const meta = DATA.branches.find(x => x.id === bid);
+    const mm = DATA.misc || {};
+    const el = document.createElement('section');
+    el.dataset.branch = bid;
+    el.innerHTML = `<h2>${esc(meta ? meta.icon+' '+meta.name : (mm.icon||'📦')+' '+(mm.name||'Разное'))} <small>— ${list.length} шт.</small></h2>`;
+    if (!list.length) { const d = document.createElement('div'); d.className = 'dim emptyhint';
+      d.textContent = 'пусто — перетащи сюда умение мышью'; el.appendChild(d); }
+    for (const s of list) {
+      const ov = DATA.overrides[s.id] || {};
+      const row = document.createElement('div');
+      row.className = 'srow' + (s.is_sub_skill ? ' sub' : '');
+      row.draggable = true;
+      row.dataset.sid = s.id;
+      row.title = 'тяни меня на другую ветку';
+      const ic = document.createElement('input'); ic.className = 'ni'; ic.maxLength = 8;
+      ic.value = ov.icon !== undefined ? ov.icon : s.icon;
+      ic.oninput = () => { ovOf(s.id).icon = ic.value; dirty(); };
+      const nm = document.createElement('input'); nm.className = 'nn'; nm.maxLength = 32;
+      nm.value = ov.skill_name !== undefined ? ov.skill_name : s.name;
+      nm.title = 'id: ' + s.id;
+      nm.oninput = () => { ovOf(s.id).skill_name = nm.value; dirty(); };
+      row.append(ic, nm);
+      wireRowDrag(row);
+      const price = document.createElement('span'); price.className = 'badge acc'; price.textContent = s.price + ' SP';
+      row.appendChild(price);
+      if (s.is_sub_skill) { const b = document.createElement('span'); b.className='badge'; b.textContent='под-приём стойки'; row.appendChild(b); }
+      const bricks = document.createElement('span'); bricks.className = 'bricks';
+      for (const e of s.effects) { const b = document.createElement('span'); b.className='brick'; b.textContent = e; bricks.appendChild(b); }
+      row.appendChild(bricks);
+      el.appendChild(row);
+    }
+    makeDroppable(el, bid);
+    sec.appendChild(el);
+  }
+}
+
+// --- Drag & Drop умений между ветками (верdict юзера 22.11.26: список = костыль) ---
+function wireRowDrag(row) {
+  row.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', row.dataset.sid);
+    e.dataTransfer.effectAllowed = 'move';
+    row.classList.add('dragging');
+    document.body.classList.add('dragging-any');
+  });
+  const undrag = () => { row.classList.remove('dragging'); document.body.classList.remove('dragging-any'); };
+  row.addEventListener('dragend', undrag);
+  row.addEventListener('mouseup', () => { row.draggable = true; });
+  // текст в input тащится как текст, не как строка-скилл — на инпутах drag off
+  row.addEventListener('mousedown', e => { row.draggable = e.target.tagName !== 'INPUT'; });
+}
+function makeDroppable(el, bid) {
+  el.addEventListener('dragover', e => {
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    el.classList.add('droptarget');
+  });
+  el.addEventListener('dragleave', () => { el.classList.remove('droptarget'); });
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('droptarget');
+    const s = DATA.skills.find(x => x.id === e.dataTransfer.getData('text/plain'));
+    if (!s || effBranch(s) === bid) return;
+    ovOf(s.id).branch = bid;
+    const meta = DATA.branches.find(x => x.id === bid);
+    const mm = DATA.misc || {};
+    dirty(); renderSections();
+    toast(`«${s.name}» → ${meta ? meta.name : (mm.name || 'Разное')}`);
+  });
+}
+
+$('badd_btn').onclick = () => {
+  const name = $('an_name').value.trim();
+  if (!name) { toast('Введите название ветки', true); return; }
+  let id = translit(name) || 'branch';
+  let base = id, n = 2;
+  while (DATA.branches.some(b => b.id === id)) id = base + '_' + (n++);
+  DATA.branches.push({ id, name, icon: $('an_icon').value.trim() || '🏷', order: Math.max(0,...DATA.branches.map(b=>b.order)) + 1 });
+  $('an_name').value = ''; $('an_icon').value = '';
+  render(); dirty();
+  toast(`Ветка «${name}» добавлена (id: ${id})`);
+};
+$('reload').onclick = () => { if (confirm('Отменить несохранённые правки и перечитать данные?')) load(); };
+$('save').onclick = async () => {
+  const r = await fetch('/skills/api/save', { method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({branches: DATA.branches, overrides: DATA.overrides, misc: DATA.misc}) });
+  const res = await r.json();
+  if (res.ok) { toast('💾 Сохранено в Data/skill_branches.json. Перезапусти игру — изменения появятся в книге навыков.');
+    original = JSON.parse(JSON.stringify({b:DATA.branches, o:DATA.overrides})); dirty(); }
+  else toast('ОТКАЗ: ' + res.error, true);
+};
+load();
+</script>
+</body>
+</html>

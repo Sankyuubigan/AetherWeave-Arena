@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Админка проекта — 3D Arena Game</title>
+<style>
+  :root { --bg:#14161c; --card:#1d212b; --edge:#2c3242; --txt:#d8dce6; --dim:#8b92a3; --acc:#7fb069; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--txt); font:15px/1.5 "Segoe UI",system-ui,sans-serif; padding:40px 24px; }
+  .wrap { max-width:880px; margin:0 auto; }
+  h1 { font-size:26px; margin-bottom:6px; }
+  .sub { color:var(--dim); margin-bottom:28px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+  a.card { display:block; background:var(--card); border:1px solid var(--edge); border-radius:10px;
+           padding:20px; text-decoration:none; color:var(--txt); transition:border-color .15s, transform .15s; }
+  a.card:hover { border-color:var(--acc); transform:translateY(-2px); }
+  a.card.soon { opacity:.55; }
+  .icon { font-size:30px; margin-bottom:10px; }
+  .name { font-size:17px; font-weight:600; margin-bottom:4px; }
+  .desc { color:var(--dim); font-size:13px; }
+  .count { display:inline-block; margin-top:12px; background:#242a37; border-radius:999px;
+           padding:2px 12px; font-size:13px; color:var(--acc); }
+  .count.unknown { color:var(--dim); }
+  .foot { margin-top:26px; color:var(--dim); font-size:12px; }
+  .note { margin-top:18px; background:#242a37; border-left:3px solid var(--acc);
+          border-radius:6px; padding:10px 14px; font-size:13px; color:var(--txt); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Админка проекта</h1>
+  <div class="sub">Единая точка входа (Q51): каталоги ассетов + админка скиллов. Один сервер, один порт.</div>
+  <div class="grid" id="grid"></div>
+  <div class="note">⚙ <b>Скиллы:</b> переименование и перенос по веткам сохраняются в
+  <code>Data/skill_branches.json</code> — изменения видны в игре ПОСЛЕ её перезапуска.
+  Логика скиллов через админку не меняется (только код).</div>
+  <div class="foot">Запуск: <code>admin\start_admin.bat</code> — сервер на localhost:8181
+  живёт, пока открыто его консольное окно. Дамп скиллов регенерируется батником при каждом старте.</div>
+</div>
+<script>
+const CATALOGS = [
+  { icon:"🛠", name:"Скиллы", desc:"Переименование, ветки умений, сохранение в игру.",
+    href:"/admin/viewer_skills.html", json:null, fixed:null, cnt:"26 скиллов" },
+  { icon:"🗿", name:"3D-объекты", desc:"Пропы арены: камни, деревья, грибы, стол зачарований…",
+    href:"/tools/object_catalog/viewer.html", json:"/tools/object_catalog/catalog.json" },
+  { icon:"👹", name:"Враги", desc:"Скины противников (FBX → glTF), полигональный вес.",
+    href:"/tools/enemy_catalog/viewer.html", json:"/tools/enemy_catalog/models.json" },
+  { icon:"🎬", name:"Анимации", desc:"Нейро-касты и локомоция (SOMA), исходники движений.",
+    href:"/tools/animation_catalog/viewer.html", json:null, fixed:2 },
+  { icon:"🔊", name:"A/B-звук скиллов", desc:"Прослушка: нейро в игре vs кандидаты.",
+    href:"/tools/ab_audio/viewer.html", json:null, fixed:null, cnt:"жив, пока bat открыт" },
+  { icon:"🧍", name:"Скины игрока", desc:"Играбельные скины (raw FBX). Превью — в разработке.",
+    href:null, json:null, fixed:2 },
+];
+const grid = document.getElementById("grid");
+for (const c of CATALOGS) {
+  const a = document.createElement("a");
+  a.className = "card" + (c.href ? "" : " soon");
+  if (c.href) a.href = c.href;
+  a.innerHTML = `<div class="icon">${c.icon}</div><div class="name">${c.name}</div>
+    <div class="desc">${c.desc}</div><span class="count unknown" id="cnt_${c.name}">…</span>`;
+  grid.appendChild(a);
+  const el = a.querySelector(".count");
+  if (c.json) {
+    fetch(c.json).then(r=>r.json()).then(list=>{
+      el.textContent = (Array.isArray(list)?list.length:Object.keys(list).length) + " шт.";
+      el.classList.remove("unknown");
+    }).catch(()=>{ el.textContent = "json не найден"; });
+  } else {
+    el.textContent = (c.cnt !== undefined && c.cnt !== null) ? c.cnt : (c.fixed||0) + " шт.";
+  }
+}
+</script>
+</body>
+</html>

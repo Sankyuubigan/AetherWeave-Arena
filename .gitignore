@@ -19,6 +19,7 @@ export_presets.cfg
 # Heavy local assets & temp
 /_tmp_probe/
 /tools/
+/temp/
 /game_live*.log
 /game_live*.err.log
 __pycache__/

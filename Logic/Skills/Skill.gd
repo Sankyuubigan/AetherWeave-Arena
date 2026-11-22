@@ -4,6 +4,10 @@ extends Resource
 @export var skill_name: String
 @export var description: String = ""
 @export var icon: String
+## Ветка умений (Q50): id из Data/skill_branches.json (SkillBranchDB). ""
+## = секция «Разное». Метаданные поверх кода — админка меняет только это
+## поле, id и логика не трогаются.
+@export var branch: String = ""
 @export var price: int = 1
 @export var is_passive: bool = false
 @export var max_range: float = 200.0
