@@ -18,11 +18,18 @@ func apply(caster: Node, _context: Dictionary) -> void:
 		push_warning("EnterStanceEffect: у «%s» нет StanceComponent" % caster.name)
 		return
 	var subs: Array = []
+	var sub_kinds := {}
 	# load() в рантайме (не preload): SkillDB в Шаге 2 пре-лоадит этот эффект —
 	# цикл preload SkillDB↔EnterStanceEffect в Godot ломается.
 	var sk = load("res://Logic/Skills/SkillDB.gd").get_skills().get(stance_id)
 	if sk != null and not sk.stance_sub_skills.is_empty():
 		subs = sk.stance_sub_skills
+		# Ритм-гейт (вердикт спеца В.1.3): {sub_id: judge_kind} из декларации
+		# стойки; пустой kind = под-приём без ритма (self-приёмы).
+		for s in subs:
+			var k := str(s.get("judge_kind", ""))
+			if k != "":
+				sub_kinds[str(s.get("id", ""))] = k
 	stance.enter_stance({
 		"stance_id": stance_id,
 		"stance_skill_id": stance_id,
@@ -30,4 +37,7 @@ func apply(caster: Node, _context: Dictionary) -> void:
 		"sub_skills": subs,
 		# Вердикт юзера 22.11.26: мана-стойка — приём = разряд (закрывает стойку).
 		"exit_on_sub": bool(sk.get("stance_exit_on_sub")) if sk != null else false,
+		# Вердикт спеца 09-ответ В.1: bard_flow=true — каст только за попадание.
+		"rhythm_gate": bool(sk.get("stance_rhythm_gate")) if sk != null else false,
+		"sub_kinds": sub_kinds,
 	})

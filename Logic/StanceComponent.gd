@@ -10,6 +10,9 @@ signal stance_entered(overrides: Dictionary, stance_skill_id: String)
 ## tier: ступень стойки (мана — ступень заряда, бард — Tier нот, Шаг 6 PRP).
 signal stance_updated(tier: int, charge: float)
 signal stance_exited(reason: String)
+## Отказ входа в стойку (В.6.3, вердикт спеца: никаких тихих отказов — тост
+## в HUD). Слушает ActionBar.show_toast.
+signal stance_reject(text: String)
 
 ## Окно заряда до полной ступени (ТЗ спеца: 0–1.5 с → power 1.0/1.3/1.6).
 const CHARGE_WINDOW := 1.5
@@ -32,11 +35,30 @@ var power_provider: Callable = Callable()
 ## стойку (приём = разряд). Ставится из config["exit_on_sub"] (SkillDB:
 ## mana_concentration.stance_exit_on_sub=true). Поток Барда — false.
 var exit_on_sub := false
+## Ритм-гейт (вердикт спеца 09-ответ В.1.3): под-приёмы с judge_kind кастуются
+## только за попадание в ритм (perfect/good). Из config["rhythm_gate"]
+## (SkillDB: bard_flow=true, mana_concentration=false).
+var rhythm_gate := false
+## {sub_id: judge_kind} — вид ноты под-приёма ("harmony"/"chord"); пустой
+## kind = под-приём без ритма (self-приёмы).
+var sub_kinds := {}
+## Судья ритма (прокидывается BardFlowComponent на входе Потока; фолбэк —
+## автолоад /root/RhythmJudge).
+var judge: Node = null
+## Self-защита (В.6.3): повторное нажатие self в первые 0.45 с после входа
+## игнорируется целиком — быстрый дабл-тап не закрывает стойку.
+const SELF_GUARD_S := 0.45
+## Множители каста за попадание (В.1.3): perfect ×1.25, good ×0.85.
+const HIT_MULT_PERFECT := 1.25
+const HIT_MULT_GOOD := 0.85
+var _enter_usec := 0
 
 func enter_stance(config: Dictionary) -> bool:
-	## Вход в стойку. Одна активная за раз — повторный запрос игнорируется.
+	## Вход в стойку. Одна активная за раз — повторный запрос ОТКЛОНЯЕТСЯ
+	## с тостом (В.6.3: никаких тихих отказов).
 	if is_active:
-		print("StanceComponent: стойка «%s» активна — вход «%s» игнорирован" % [
+		stance_reject.emit("Сначала закрой текущую стойку (Esc)")
+		_log_event("стойка «%s»: вход «%s» отклонён (уже активна)" % [
 			stance_id, str(config.get("stance_id", "?"))])
 		return false
 	var subs: Array = config.get("sub_skills", [])
@@ -50,6 +72,9 @@ func enter_stance(config: Dictionary) -> bool:
 	charge = 0.0
 	tier = 0
 	exit_on_sub = bool(config.get("exit_on_sub", false))
+	rhythm_gate = bool(config.get("rhythm_gate", false))
+	sub_kinds = config.get("sub_kinds", {})
+	_enter_usec = Time.get_ticks_usec()
 	_bind_overrides(subs)
 	is_active = true
 	_log_event("стойка «%s»: вход (%.1f с), подмены %s" % [stance_id, duration, overrides])
@@ -65,6 +90,8 @@ func exit_stance(reason: String) -> void:
 	charge = 0.0
 	tier = 0
 	exit_on_sub = false
+	rhythm_gate = false
+	sub_kinds = {}
 	stance_id = ""
 	stance_skill_id = ""
 	_log_event("стойка «%s»: выход (%s)" % [was, reason])
@@ -72,7 +99,10 @@ func exit_stance(reason: String) -> void:
 
 func try_handle_slot(slot_key: String) -> bool:
 	## Перехват нажатия слота: если слот подменён стойкой — каст под-приёма
-	## через SpellCasterComponent (context["stance_power"] = ступень заряда).
+	## через SpellCasterComponent (context["stance_power"] = ступень мощности).
+	## Ритм-гейт (вердикт спеца 09-ответ В.1.3): под-приём с judge_kind
+	## кастуется ТОЛЬКО при perfect/good (×1.25 / ×0.85); miss/empty_press —
+	## каста нет (штраф топлива/tier на стороне BardFlowComponent).
 	## false = слот не подменён (ActionBar ведёт обычный каст).
 	if not is_active or not overrides.has(slot_key):
 		return false
@@ -81,11 +111,30 @@ func try_handle_slot(slot_key: String) -> bool:
 	if sc == null:
 		push_warning("StanceComponent: нет SpellCasterComponent — под-приём не кастован")
 		return false
+	# Self-защита (В.6.3): первые 0.45 с после входа повторное нажатие self
+	# игнорируется ЦЕЛИКОМ (глотается) — дабл-тап не закрывает стойку.
+	if slot_key == "self":
+		var elapsed := float(Time.get_ticks_usec() - _enter_usec) / 1000000.0
+		if elapsed < SELF_GUARD_S:
+			return true
+	# Ритм-гейт: пресс в судью СТРОГО своего вида (В.1.1), каст только за
+	# попадание. Вердикт "" = анти-дребезг проглотил дабл / судья на паузе.
+	var kind := str(sub_kinds.get(sub_id, ""))
+	if rhythm_gate and kind != "":
+		var j = judge
+		if j == null:
+			j = get_node_or_null("/root/RhythmJudge")
+		var verdict := ""
+		if j != null:
+			verdict = str(j.submit_press(kind))
+		if verdict == "" or verdict == "empty_press":
+			return true  # штрафа/фидбека нет или уже наложены — каста нет
+		var mult := HIT_MULT_PERFECT if verdict == "perfect" else HIT_MULT_GOOD
+		sc.cast_skill(sub_id, {"stance_power": stance_power() * mult})
+		if exit_on_sub:
+			exit_stance("sub_used")
+		return true
 	sc.cast_skill(sub_id, {"stance_power": stance_power()})
-	# Ритм-нажатие (Q16 Шаги 5/6): каждый под-приём = пресс в судью с usec.
-	var judge = get_node_or_null("/root/RhythmJudge")
-	if judge != null:
-		judge.submit_press()
 	# Вердикт юзера 22.11.26: приём = разряд стойки (мана) — выход СРАЗУ после
 	# успешного каста (Поток Барда exit_on_sub=false — играет до fuel_out).
 	if exit_on_sub:

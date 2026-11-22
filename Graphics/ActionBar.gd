@@ -26,6 +26,102 @@ var stance_binds := {}
 func get_stance_binds(stance_id: String) -> Dictionary:
     return stance_binds.get(stance_id, {})
 
+## Эффективная метка слота под-приёма (явный бинд или default_slot) — бейджи
+## клавиш дорожек BardFlowUI (В.3) и подписи в стойке.
+func get_stance_sub_slot_label(stance_id: String, sub_id: String) -> String:
+    var binds: Dictionary = stance_binds.get(stance_id, {})
+    var slot := str(binds.get(sub_id, ""))
+    if slot != "":
+        return slot
+    var skills = preload("res://Logic/Skills/SkillDB.gd").get_skills()
+    if skills.has(stance_id):
+        for sd in skills[stance_id].stance_sub_skills:
+            if str(sd.get("id", "")) == sub_id:
+                return str(sd.get("default_slot", ""))
+    return ""
+
+## ---------- Тосты и кулдауны (В.6, вердикт спеца 09-ответ) ----------
+
+var _toast: Label = null
+var _toast_t := 0.0
+var _sc: Node = null  # SpellCasterComponent: cd_left для цифр на слотах
+
+## Жёлтый тост 1.5 с вместо тихих отказов (В.6.3): «Сначала закрой текущую
+## стойку (Esc)» / «Идёт другой каст» / «Откат: N с» / «Навык не изучен».
+func show_toast(text: String) -> void:
+    if _toast == null:
+        _toast = Label.new()
+        _toast.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+        _toast.position.y = -134
+        _toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        _toast.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+        _toast.add_theme_font_size_override("font_size", 14)
+        add_child(_toast)
+    _toast.text = text
+    _toast.visible = true
+    _toast.modulate.a = 1.0
+    _toast_t = 1.5
+
+func _process(delta: float) -> void:
+    if _toast_t > 0.0:
+        _toast_t -= delta
+        _toast.modulate.a = clampf(_toast_t / 0.4, 0.0, 1.0)
+        if _toast_t <= 0.0:
+            _toast.visible = false
+    _update_cd_labels()
+    _update_stance_status()
+
+## Числовой таймер отката на слоте (В.6.4): КД скилла = видимая цифра.
+func _update_cd_labels() -> void:
+    for slot in slots:
+        var cd := 0.0
+        if _sc != null and slot.skill_id != "":
+            cd = float(_sc.cd_left(str(slot.skill_id)))
+        slot.set_cd("%.1f" % cd if cd > 0.0 else "")
+
+## ---------- Статус активной стойки (плейтест-4, 22.11.26) ----------
+
+## Юзер не видел ни таймера жизни стойки («когда завершится»), ни заряда
+## (3 ступени x1.0/x1.3/x1.6 — «вроде 3 заряда было?»). Поллинг
+## StanceComponent каждый кадр — сигналы не дают непрерывности.
+var _stance_label: Label = null
+
+func _update_stance_status() -> void:
+    var stance = get_parent().get_node_or_null("StanceComponent")
+    if stance == null or not stance.is_active:
+        if _stance_label != null:
+            _stance_label.visible = false
+        return
+    if _stance_label == null:
+        _stance_label = Label.new()
+        _stance_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+        _stance_label.position.y = -158
+        _stance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        _stance_label.add_theme_color_override("font_color", Color(0.8, 0.5, 1.0))
+        _stance_label.add_theme_font_size_override("font_size", 13)
+        add_child(_stance_label)
+    _stance_label.visible = true
+    var sname := str(stance.stance_id)
+    var skills = preload("res://Logic/Skills/SkillDB.gd").get_skills()
+    if skills.has(str(stance.stance_skill_id)):
+        sname = str(skills[str(stance.stance_skill_id)].skill_name)
+    if stance.power_provider.is_valid():
+        # Бард: время жизни показываэт таймер Потока у прицела (fuel/лимит),
+        # здесь только ступень нот — дублировать «99 с» страховки бессмысленно.
+        _stance_label.text = "%s · Tier %d/3 (таймер — у прицела)" % [
+                sname, int(stance.tier)]
+        return
+    var step := 1
+    if float(stance.charge) >= float(stance.CHARGE_WINDOW) * 2.0 / 3.0:
+        step = 3
+    elif float(stance.charge) >= float(stance.CHARGE_WINDOW) / 3.0:
+        step = 2
+    var bars := ""
+    for i in 3:
+        bars += "█" if i < step else "░"
+    _stance_label.text = "%s: %.1f с · заряд %s x%.1f" % [
+            sname, maxf(float(stance.time_left), 0.0), bars, float(stance.stance_power())]
+
 ## ---------- Редактор биндов стоек (Q16 Шаг 8) ----------
 
 var _edit_mode := false
@@ -132,6 +228,7 @@ class ActionSlot extends ColorRect:
     var skill_id: String = ""
     var label_key: Label
     var label_skill: Label
+    var label_cd: Label  # цифры отката (В.6.4)
 
     func _ready():
         custom_minimum_size = Vector2(55, 55)
@@ -150,6 +247,21 @@ class ActionSlot extends ColorRect:
         label_skill.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         label_skill.mouse_filter = Control.MOUSE_FILTER_IGNORE
         add_child(label_skill)
+
+        label_cd = Label.new()
+        label_cd.set_anchors_preset(Control.PRESET_CENTER)
+        label_cd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        label_cd.add_theme_font_size_override("font_size", 18)
+        label_cd.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        label_cd.visible = false
+        add_child(label_cd)
+
+    ## Число отката на слоте; пустая строка = скрыть.
+    func set_cd(text: String) -> void:
+        if label_cd == null:
+            return
+        label_cd.text = text
+        label_cd.visible = text != ""
 
     func _bar():
         return get_parent().get_parent()  # hbox → ActionBar
@@ -244,17 +356,23 @@ func remove_skill(id: String):
 var _icon_backup := {}  # index слота → {text, color} для возврата после стойки
 
 ## Подключение к StanceComponent (создаётся позже ActionBar в _ready игрока).
+## Заодно: тосты отказов (В.6.3) и источник cd_left для цифр КД (В.6.4).
 func _hook_stance() -> void:
     var stance = get_parent().get_node_or_null("StanceComponent")
-    if stance == null:
-        return
-    if not stance.stance_entered.is_connected(_on_stance_entered):
-        stance.stance_entered.connect(_on_stance_entered)
-    if not stance.stance_exited.is_connected(_on_stance_exited):
-        stance.stance_exited.connect(_on_stance_exited)
+    if stance != null:
+        if not stance.stance_entered.is_connected(_on_stance_entered):
+            stance.stance_entered.connect(_on_stance_entered)
+        if not stance.stance_exited.is_connected(_on_stance_exited):
+            stance.stance_exited.connect(_on_stance_exited)
+        if not stance.stance_reject.is_connected(show_toast):
+            stance.stance_reject.connect(show_toast)
+    _sc = get_parent().get_node_or_null("SpellCasterComponent")
+    if _sc != null and not _sc.cast_rejected.is_connected(show_toast):
+        _sc.cast_rejected.connect(show_toast)
 
-## Вход стойки: key-слоты — подмена иконки на иконку под-приёма; mouse-слоты
-## (М1/М2) — только фиолетовая подсветка без иконки (вердикт спеца).
+## Вход стойки: подмена иконки на иконку под-приёма на ВСЕХ подменённых
+## слотах — key И мышиные (В.7, вердикт 09: «те же иконки, что в превью
+## редактора»). Фиолетовая подсветка — у всех подменённых слотов.
 func _on_stance_entered(overrides: Dictionary, stance_skill_id: String) -> void:
     _icon_backup.clear()
     var sdb = preload("res://Logic/Skills/SkillDB.gd").get_skills()
@@ -266,9 +384,8 @@ func _on_stance_entered(overrides: Dictionary, stance_skill_id: String) -> void:
         if not overrides.has(label):
             continue
         _icon_backup[i] = {"text": slot.label_skill.text, "color": slot.color}
-        if slot.key_info["type"] == "key":
-            var sub_id := str(overrides[label])
-            slot.label_skill.text = sdb[sub_id].icon if sdb.has(sub_id) else "?"
+        var sub_id := str(overrides[label])
+        slot.label_skill.text = sdb[sub_id].icon if sdb.has(sub_id) else "?"
         slot.color = Color(0.55, 0.25, 0.8, 0.85)
 
 ## Выход стойки: возврат иконок/цвета всех подменённых слотов.

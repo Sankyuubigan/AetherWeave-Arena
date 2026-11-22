@@ -10,6 +10,12 @@ extends Node
 signal fuel_changed(fuel: float)
 signal barrier_changed(barrier: int)
 signal flow_tier_changed(tier: int)
+## Фактическая дельта топлива последнего вердикта (В.4.1: попап «+1.2с»/«−1.2с»
+## у таймера Потока).
+signal fuel_delta(delta: float)
+## Причина последнего выхода (В.4.2: баннер причины живёт в UI после закрытия
+## стойки; UI читает при переходе is_flowing true→false).
+var last_exit_reason := ""
 
 ## ── Конфиг (ТЗ спеца, правится только здесь) ─────────────────────────────
 const STANCE_SKILL_ID := "bard_flow"
@@ -18,6 +24,10 @@ const FUEL_CAP := 14.0
 const FUEL_PERFECT := 1.2
 const FUEL_GOOD := 0.5
 const FUEL_MISS := -0.5  # вердикт юзера 22.11.26: −1.5 убивало Поток за <1 с простоя
+## Пустой пресс (вердикт спеца 09-ответ В.1.2): пресс без ноты СВОЕЙ дорожки
+## в окне Good — штраф сильнее промаха: спам мышкой сжигает Поток за ~2 с.
+## Вместе с ним −1 tier (у обработки ниже).
+const FUEL_EMPTY := -1.2
 const BARRIER_START := 100
 const BARRIER_MAX := 120
 const BARRIER_PERFECT := 14
@@ -29,10 +39,26 @@ const RR := [0.15, 0.25, 0.40, 0.60]
 const SPEED_BONUS := [0.0, 0.10, 0.20, 0.25]
 ## Множитель урона под-приёмов по tier (ТЗ не задаёт — моё решение: линейно).
 const TIER_POWER := [1.0, 1.1, 1.2, 1.3]
+## Пул однотактовых фраз (вердикт спеца 09-ответ В.2): [b0..b3], L = harmony
+## (ЛКМ-дорожка), R = chord (ПКМ), "." = пауза. ОДНА нота на долю —
+## одновременных harmony+chord не бывает; ноты строго на четвертях (0.5 с),
+## зазор same-lane ≥ 0.5 с. Фраза на каждый такт — случайная из пула
+## текущего tier, БЕЗ повтора той же фразы 2 раза подряд.
+const PHRASES := {
+	0: ["L..R", "LL.R", ".LR.", "R.LL"],  # Tier 0–1: плавный вход, 2–3 ноты
+	1: ["L..R", "LL.R", ".LR.", "R.LL"],
+	2: ["LRL.", "LLRL", "RL.R", ".RLR"],  # Tier 2: живой разнобой, 3–4 ноты
+	3: ["LRLR", "LLRR", "RLLR", "LRRL"],  # Tier 3 «РЕЗОНАНС»: драйв, 4 ноты
+}
+## Синкопы (В.2): только Tier 3, редкие, сдвиг последней доли на восьмую
+## +0.25 с; гард — первая нота следующего такта не той же дорожки
+## (зазор same-lane остаётся ≥ 0.5 с).
+const SYNCOPA_CHANCE := 0.15
 ## Реген HP Tier 2+: каждые REGEN_PERIOD секунд — REGEN_AMOUNT HP.
 ## Жёсткий потолок суммарной длительности Потока (ТЗ: PvP-честность —
-## даже 100% Perfect завершает Поток не позже 14 с).
-const MAX_FLOW_DURATION := 14.0
+## даже 100% Perfect завершает Поток не позже 60 с — вердикт юзера
+## 22.11.26, было 14 с по В.4).
+const MAX_FLOW_DURATION := 60.0
 const REGEN_PERIOD := 2.0
 const REGEN_AMOUNT := 5
 const REGEN_MIN_TIER := 2
@@ -63,6 +89,9 @@ var _flow_elapsed := 0.0
 var _last_loop_bar := -999
 var _note_res := {}   # имя → AudioStreamWAV
 const PENTA := ["d4", "f4", "g4", "a4", "c5", "d5"]
+var _prev_phrase := ""   # фраза текущего такта (анти-повтор, В.2)
+var _next_phrase := ""   # ЗАРАНЕЕ выбранная фраза следующего такта (гард синкоп)
+var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_stance = _sibling("StanceComponent")
@@ -98,6 +127,13 @@ func _on_stance_entered(_overrides: Dictionary, stance_skill_id: String) -> void
 			_judge.conductor = _cond
 		_judge.reset()
 		_judge.note_judged.connect(_on_note_judged)
+		_judge.empty_press.connect(_on_empty_press)
+	# Судья — в стойку (гейт каста под-приёмов читает StanceComponent.judge).
+	if _stance != null:
+		_stance.judge = _judge
+	_prev_phrase = ""
+	_next_phrase = ""
+	_rng.randomize()
 	# Tier-множитель урона под-приёмов через provider (Expand StanceComponent).
 	if _stance != null and "power_provider" in _stance:
 		_stance.power_provider = Callable(self, "_tier_power")
@@ -121,10 +157,13 @@ func _on_stance_exited(reason: String) -> void:
 	if not is_flowing:
 		return
 	is_flowing = false
+	last_exit_reason = reason
 	_loop_pending = false
 	if _judge != null:
 		if _judge.note_judged.is_connected(_on_note_judged):
 			_judge.note_judged.disconnect(_on_note_judged)
+		if _judge.empty_press.is_connected(_on_empty_press):
+			_judge.empty_press.disconnect(_on_empty_press)
 		_judge.reset()
 	if _cond != null and _cond.is_running:
 		_cond.stop()
@@ -143,6 +182,10 @@ func _on_stance_exited(reason: String) -> void:
 		_player.speed_mult = 1.0
 	if _stance != null and "power_provider" in _stance:
 		_stance.power_provider = Callable()
+	if _stance != null and "judge" in _stance:
+		_stance.judge = null
+	_prev_phrase = ""
+	_next_phrase = ""
 	if _hp != null and "damage_interceptor" in _hp:
 		_hp.damage_interceptor = Callable()
 	tier = 0
@@ -164,23 +207,46 @@ func close_flow(reason: String) -> void:
 	_on_stance_exited(reason)
 
 ## ── Математика вердиктов ──────────────────────────────────────────────────
-func _on_note_judged(_note_id: int, verdict: String) -> void:
+func _on_note_judged(_note_id: int, verdict: String, _kind: String = "") -> void:
 	if not is_flowing:
 		return
+	var delta := 0.0
 	match verdict:
 		"perfect":
+			var old := fuel
 			fuel = minf(fuel + FUEL_PERFECT, FUEL_CAP)
+			delta = fuel - old
 			barrier = mini(barrier + BARRIER_PERFECT, BARRIER_MAX)
 			notes_hit += 1
 			tier = _tier_from_hits(notes_hit)
 		"good":
+			var old := fuel
 			fuel = minf(fuel + FUEL_GOOD, FUEL_CAP)
+			delta = fuel - old
 			notes_hit += 1
 			tier = _tier_from_hits(notes_hit)
 		"miss":
 			fuel = fuel + FUEL_MISS
+			delta = FUEL_MISS
 			tier = maxi(tier - 1, 0)  # откат tier, без выброса из Потока
 			play_poly(SFX_BREAK, -3.0, 1.0)  # диссонанс промаха
+	_after_fuel_change(delta)
+
+## Пустой пресс (вердикт спеца В.1.2): пресс без ноты СВОЕЙ дорожки в окне
+## Good. Штраф: −1.2 топлива, −1 tier (не ниже 0), фальшивая глухая струна.
+## Анти-дребезг 0.18 с — на стороне судьи (чаще сигнал не придёт).
+func _on_empty_press(_kind: String) -> void:
+	if not is_flowing:
+		return
+	fuel = fuel + FUEL_EMPTY
+	tier = maxi(tier - 1, 0)
+	play_poly(SFX_BREAK, -4.0, 0.5)  # фальшивая глухая струна
+	_after_fuel_change(FUEL_EMPTY)
+
+## Общий хвост вердикта: сигналы (включая дельту для попапа у таймера),
+## баффы, проверки срыва купола и нулевого топлива.
+func _after_fuel_change(delta: float) -> void:
+	fuel_delta.emit(delta)
 	fuel_changed.emit(fuel)
 	barrier_changed.emit(barrier)
 	flow_tier_changed.emit(tier)
@@ -203,6 +269,10 @@ func _tier_from_hits(hits: int) -> int:
 func _tier_power() -> float:
 	return TIER_POWER[tier]
 
+func max_duration_left() -> float:
+	## Остаток жёсткого потолка Потока (В.4.1: таймер = min(fuel, это)).
+	return maxf(MAX_FLOW_DURATION - _flow_elapsed, 0.0)
+
 func _apply_buffs() -> void:
 	if _hp != null:
 		_hp.damage_reduction = DR[tier]
@@ -221,7 +291,7 @@ func _process(delta: float) -> void:
 		close_flow("fuel_out")
 		return
 	if _flow_elapsed >= MAX_FLOW_DURATION:
-		close_flow("max_duration")  # ТЗ: даже 100% Perfect ≤ 14 с
+		close_flow("max_duration")  # ТЗ: даже 100% Perfect ≤ 60 с (вердикт 22.11.26)
 		return
 	if tier >= REGEN_MIN_TIER and _hp != null:
 		_regen_t += delta
@@ -238,21 +308,45 @@ func _process(delta: float) -> void:
 			if _loop != null:
 				_loop.play()
 
-## ── Ноты: планирование по lookahead + полифония ──────────────────────────
+## ── Ноты: пул фраз (В.2) + полифония ─────────────────────────────────────
 func _on_subdivision_tick(bar: int, eighth: int) -> void:
-	## ЛКМ-«Ноты Гармонии» на ЧЕТВЕРТЯХ (eighth 0/2/4/6) — вердикт юзера
-	## 22.11.26: восьмые давили 4 промаха/с при простое (смерть Потока <1 с).
+	## Планировщик фраз (вердикт спеца 09-ответ В.2): на границе такта
+	## (eighth == 0; тики conductor приходят с lookahead 1.5 с) выбирается
+	## случайная фраза пула текущего tier и регистрируются её ноты — строго
+	## на четвертях сетки, ОДНА нота на долю (без дублей harmony+chord).
 	if not is_flowing or _judge == null:
 		return
-	if eighth % 2 == 0:
-		_judge.register_note("harmony", bar * 2.0 + eighth * 0.25)
+	if eighth != 0:
+		return
+	var pool: Array = PHRASES[mini(tier, 3)]
+	var phrase := _next_phrase
+	if phrase == "":
+		phrase = _pick_phrase(pool)
+	_prev_phrase = phrase
+	# Фраза следующего такта — заранее (гард синкопы через границу такта).
+	_next_phrase = _pick_phrase(pool)
+	var bar_t := bar * 2.0
+	for b in 4:
+		var sym := phrase[b]
+		if sym == ".":
+			continue
+		var kind := "harmony" if sym == "L" else "chord"
+		var t := bar_t + b * 0.5
+		# Синкопа: только Tier 3, редкая, на последней доле такта; гард —
+		# первая нота СЛЕДУЮЩЕГО такта не той же дорожки (зазор ≥ 0.5 с).
+		if tier >= 3 and b == 3 and _next_phrase[0] != sym \
+				and _rng.randf() < SYNCOPA_CHANCE:
+			t += 0.25
+		_judge.register_note(kind, t)
 
-func _on_beat_tick(bar: int, beat: int) -> void:
-	## ПКМ-«Ударный Аккорд» на сильные доли (beat 0 и 2 такта) — редкие золотые.
-	if not is_flowing or _judge == null:
-		return
-	if beat % 2 == 0:
-		_judge.register_note("chord", bar * 2.0 + beat * 0.5)
+func _pick_phrase(pool: Array) -> String:
+	## Случайная фраза пула, не равная предыдущей (В.2: без повтора подряд).
+	var p := ""
+	for _i in 8:
+		p = str(pool[_rng.randi() % pool.size()])
+		if p != _prev_phrase:
+			break
+	return p
 
 func _load_notes() -> void:
 	for nm in PENTA:
@@ -280,6 +374,20 @@ func play_poly(path: String, volume_db: float = 0.0, pitch: float = 1.0) -> void
 	if pb != null and pb.has_method("play_stream"):
 		pb.play_stream(load(path), 0.0, volume_db, pitch)
 
+## Аккорд: три РАЗНЫЕ ноты пентатоники одновременно (плейтест 22.11.26:
+## у «Ударного Аккорда» не было звука вообще — только AoE-урон). Три голоса
+## чуть тише одиночной ноты, чтобы не перекричать микс.
+func play_chord(volume_db: float = -4.0) -> void:
+	if _note_res.is_empty():
+		return
+	var keys := _note_res.keys()
+	keys = keys.filter(func(k): return k != "miss")
+	if keys.size() < 3:
+		return
+	keys.shuffle()
+	for i in 3:
+		play_poly("res://Audio/Bard/note_%s.res" % keys[i], volume_db)
+
 func _ensure_audio() -> void:
 	if _poly == null:
 		_poly = AudioStreamPlayer.new()
@@ -301,8 +409,6 @@ func _ensure_audio() -> void:
 	if _cond != null:
 		if not _cond.subdivision_tick.is_connected(_on_subdivision_tick):
 			_cond.subdivision_tick.connect(_on_subdivision_tick)
-		if not _cond.beat_tick.is_connected(_on_beat_tick):
-			_cond.beat_tick.connect(_on_beat_tick)
 
 ## ── Купол: перехват урона (Callable-хук HealthComponent) ─────────────────
 func _absorb_damage(amount: int, impulse_dir: Vector3, attacker: Node,
@@ -366,10 +472,10 @@ func player_damage_hook(amount: int, attacker: Node) -> bool:
 
 ## ── Утилиты ───────────────────────────────────────────────────────────────
 func _log(what: String) -> void:
-	## SSOT логов (как StanceComponent._log_event): StallLogger в игре,
-	## print в headless-пробах (автолоада нет) — Logger.log не существует.
+	## Сессии юзера читаемы (плейтест 22.11.26): ВСЕГДА print — попадает в
+	## godot.log и консоль. StallLogger — дополнительно (связь с фризами;
+	## его буфер всплывает только при фризе, там бард-события терялись).
+	print("BardFlow: " + what)
 	var sl = get_node_or_null("/root/StallLogger")
 	if sl != null and sl.has_method("event"):
 		sl.event("BardFlow: " + what)
-	else:
-		print("BardFlow: " + what)

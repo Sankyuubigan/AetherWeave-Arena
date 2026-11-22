@@ -171,7 +171,16 @@ func _run() -> void:
 	_ck(exit_box[0] == "sub_used", "reason приёма = sub_used")
 
 	# 5) Ступень 2 (power 1.3): повторный вход — exit_on_sub закрыл стойку
-	#    после Сокрушения; Сгусток летит и попадает, снова разряд.
+	#    после Сокрушения. В.6.4: КД повторного входа 2.0 — вход сразу после
+	#    разряда ЗАБЛОКИРОВАН с жёлтым тостом (тихих отказов больше нет);
+	#    КД снимаем тест-швом и входим.
+	bar._unhandled_input(_key_event(KEY_Q))
+	await process_frame
+	await process_frame
+	_ck(not stance.is_active, "КД 2.0 (В.6.4): повторный вход сразу после разряда заблокирован")
+	_ck(sc_node.cd_left("mana_concentration") > 0.0, "cd_left > 0 во время отката")
+	_ck(bar._toast != null and bar._toast.text.length() > 0, "жёлтый тост об отказе (не тихий)")
+	sc_node._cd_until.clear()  # тест-шов: КД снят для дальнейших секций
 	bar._unhandled_input(_key_event(KEY_Q))
 	await process_frame
 	await process_frame
@@ -194,6 +203,7 @@ func _run() -> void:
 
 	# 6) Ступень 3 (power 1.6): повторный вход; Серп бьёт сектор ±60°, за спину
 	#    не достаёт; снова разряд.
+	sc_node._cd_until.clear()  # В.6.4: КД от Сгустка снят тест-швом
 	bar._unhandled_input(_key_event(KEY_Q))
 	await process_frame
 	await process_frame
@@ -219,6 +229,7 @@ func _run() -> void:
 
 	# 7) Таймаут закрывает стойку (ускорение ×5; повторный вход — exit_on_sub
 	#    закрыл стойку после Серпа)
+	sc_node._cd_until.clear()  # В.6.4: КД от Серпа снят тест-швом
 	bar._unhandled_input(_key_event(KEY_Q))
 	await process_frame
 	await process_frame
@@ -233,6 +244,7 @@ func _run() -> void:
 	_ck(exit_box[0] == "timeout", "reason таймаута = timeout (получено «%s»)" % exit_box[0])
 
 	# 8) Esc отменяет активную стойку (UI-гард: окон нет — отмена разрешена)
+	sc_node._cd_until.clear()
 	bar._unhandled_input(_key_event(KEY_Q))
 	await process_frame
 	await process_frame

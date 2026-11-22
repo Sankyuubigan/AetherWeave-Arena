@@ -46,6 +46,13 @@ extends Resource
 ## (вердикт юзера 22.11.26: под-приём = одноразовый заряд стойки —
 ## мана-стойка). Кузница поле не сериализует — user-стойки невозможны.
 @export var stance_exit_on_sub: bool = false
+## Только у скиллов-стоек: под-приём с judge_kind (в stance_sub_skills) кастуется
+## ТОЛЬКО за попадание в ритм (вердикт спеца 09-ответ В.1.3): perfect → ×1.25,
+## good → ×0.85, miss/empty_press → каста нет. Мана-стойка — false.
+@export var stance_rhythm_gate: bool = false
+## Кулдаун скилла, с (вердикт спеца В.6.4: 2.0 с на стойки для тестов, 0 = нет).
+## Отсчёт от начала каста; отказ = тост + цифры отката на слоте ActionBar.
+@export var cooldown: float = 0.0
 
 func execute(caster: Node, context: Dictionary) -> void:
     for eff in effects:

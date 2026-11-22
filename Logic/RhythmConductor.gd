@@ -12,8 +12,15 @@ signal subdivision_tick(bar: int, eighth: int)
 
 const OneEuro := preload("res://Logic/OneEuroFilter.gd")
 
-## |err| > 80 мс — жёсткий снэп часов; мягкая подтяжка иначе (ТЗ спеца).
-const SYNC_SNAP := 0.08
+## Плейтест 22.11.26: жёсткий снэп УБРАН. audio_time() — позиция БОЕВОГО
+## лупа (длина ≠ ритм-сетки loop_len): снэп телепортировал часы на секунды →
+## все ноты разом в прошлом → масс-Miss → fuel_out при честных попаданиях.
+## Подтяжка только мягкая со скоростным плечом; |err| > PLL_TRACK_MAX =
+## чужой луп — часы вообще не трогаем (грид честный, музыка фазой уплывает —
+## играбельность важнее фазовой точности).
+const PLL_TRACK_MAX := 0.35
+## Скоростное плечо подтяжки: ≤0.5 с коррекции на 1 с реального времени.
+const PULL_SPEED_CAP := 0.5
 ## Горизонт расписания: события выдаются заранее на 1.5 с.
 const LOOKAHEAD := 1.5
 ## Мягкая подтяжка: err * min(delta * RATE, 1).
@@ -69,10 +76,12 @@ func _process(delta: float) -> void:
 	var at := _audio_time()
 	if at >= 0.0:
 		var err := _loop_diff(at, song_time)
-		if absf(err) > SYNC_SNAP:
-			song_time = at  # жёсткий снэп за 1 кадр
+		if absf(err) > PLL_TRACK_MAX:
+			pass  # чужой луп: телепорт часов = масс-Miss, не трогаем
 		else:
-			song_time += err * minf(delta * PULL_RATE, 1.0)
+			var pull := err * minf(delta * PULL_RATE, 1.0)
+			pull = clampf(pull, -delta * PULL_SPEED_CAP, delta * PULL_SPEED_CAP)
+			song_time += pull
 	filtered_time = _filter.filter(song_time, maxf(delta, 0.000001))
 	_schedule()
 

@@ -56,11 +56,15 @@ class SkillSlot extends ColorRect:
 
     func _on_gear_input(event):
         # ⚙ = кнопка «Приёмы стойки» (видна только у изученной — update_visuals).
-        # Поглощаем клик, чтобы он не дошёл до карточки-магазина.
+        # В.6.1 (вердикт спеца): СТРОГИЙ ТУГЛ — повторный клик закрывает панель.
         if event is InputEventMouseButton and event.pressed \
                 and event.button_index == MOUSE_BUTTON_LEFT \
                 and menu.player.unlocked_skills.get(skill_data["id"], false):
-            menu.open_stance_panel(skill_data["id"])
+            if menu._edit_stance_id == skill_data["id"] \
+                    and menu._stance_panel != null and menu._stance_panel.visible:
+                menu.close_stance_panel()
+            else:
+                menu.open_stance_panel(skill_data["id"])
             accept_event()
 
     func update_visuals():
@@ -191,44 +195,89 @@ func sell_skill(id: String, price: int):
         player.unlearn_cleanup(id)
 
 ## _unhandled_input: пока LineEdit пресетов держит фокус, «N» печатается
-## в поле, а не закрывает окно. Пока ловим слот для под-приёма (Шаг 8) —
-## нажатия слотов назначаются, прочие гасятся (N не закрывает окно).
+## в поле, а не закрывает окно. Ловля слота (В.6.2, вердикт спеца): ввод
+## НЕ глотается до проверки — Esc отменяет ловлю (книга жива), N отменяет
+## ловлю И закрывает книгу, прочие клавиши проходят дальше; мышь — в _input.
 func _unhandled_input(event):
-    # «Клик → нажми слот» (Q16 Шаг 8): следующее нажатие из 14 слотов.
-    if _await_slot.size() > 0 and event.is_pressed() \
-            and (event is InputEventKey or event is InputEventMouseButton):
-        var lbl := _slot_label_from_event(event)
-        get_viewport().set_input_as_handled()
-        if lbl != "":
-            var bar = player.get_node_or_null("ActionBar")
-            if bar != null and bar.has_method("assign_stance_sub"):
-                _stance_status.text = bar.assign_stance_sub(
-                        str(_await_slot["stance_id"]),
-                        str(_await_slot["sub_id"]), lbl)
+    # «Клик → нажми слот» (Q16 Шаг 8): клавиатурная часть ловли.
+    if _await_slot.size() > 0 and event is InputEventKey \
+            and event.pressed and not event.echo:
+        if event.keycode == KEY_ESCAPE:
+            get_viewport().set_input_as_handled()
             _await_slot = {}
-            var st = SkillDB.get_skills().get(_edit_stance_id)
-            if st != null:
-                _rebuild_stance_rows(st)
-        else:
-            _stance_status.text = "Это не слот — нажмите 1–7/Q/E/R/F/Shift/ЛКМ/ПКМ."
+            _stance_status.text = "Назначение отменено (Esc)."
+            return
+        if event.keycode == KEY_N:
+            get_viewport().set_input_as_handled()
+            _await_slot = {}
+            _close_book()
+            return
+        var lbl := _slot_label_from_event(event)
+        if lbl != "":
+            get_viewport().set_input_as_handled()
+            _assign_awaited_slot(lbl)
+            return
+        # Прочие клавиши НЕ глотаются (вердикт В.6.2) — уходят дальше.
+        return
+    # Дошедшая сюда мышь = клик мимо мини-панели и мимо ActionBar (STOP-контролы
+    # съели бы раньше) → отмена ловли; клик НЕ глотается (уходит в мир).
+    if _await_slot.size() > 0 and event is InputEventMouseButton and event.pressed:
+        _await_slot = {}
+        _stance_status.text = "Назначение отменено."
         return
     if event is InputEventKey and event.pressed and event.keycode == KEY_N:
-        is_open = !is_open
-
         if is_open:
+            _close_book()
+        else:
+            is_open = true
             panel.show()
             Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
             refresh_grid()
             refresh_sp()
             presets_panel.refresh()
-        else:
-            panel.hide()
-            close_stance_panel()  # Шаг 8: режим «Слой стойки» гасим вместе с окном
-            # МЫШЬ ССОТ v2 (docs/ui_input_rules.md): закрытие UI возвращает
-            # мышь в игру (вердикт юзера 19.11.26: «мышь автоматом не
-            # фокусится — исправь»). CAPTURED разрешён только здесь и в
-            # PlayerController (клик по миру).
-            Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+## Закрытие книги (N): режим «Слой стойки» гасим вместе с окном; мышь
+## возвращается в игру (ССОТ ui_input_rules, вердикт юзера 19.11.26).
+func _close_book() -> void:
+    is_open = false
+    panel.hide()
+    close_stance_panel()
+    Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+## Ловля слота — мышь в _input (сырой ввод): STOP-слоты ActionBar съедают
+## клик до _unhandled_input, а клик ПО слоту панели должен назначать именно
+## этот слот (В.6.2); клик мимо панели и ActionBar — отмена (не глотается).
+func _input(event):
+    if _await_slot.size() == 0 \
+            or not (event is InputEventMouseButton and event.pressed):
+        return
+    var lbl := _slot_label_at(event.position)
+    if lbl == "":
+        return  # не над слотом: GUI/мир обработает, отмена — в _unhandled_input
+    get_viewport().set_input_as_handled()  # не даём слоту съесть/очиститься
+    _assign_awaited_slot(lbl)
+
+func _assign_awaited_slot(lbl: String) -> void:
+    var bar = player.get_node_or_null("ActionBar")
+    if bar != null and bar.has_method("assign_stance_sub"):
+        _stance_status.text = bar.assign_stance_sub(
+                str(_await_slot["stance_id"]),
+                str(_await_slot["sub_id"]), lbl)
+    _await_slot = {}
+    var st = SkillDB.get_skills().get(_edit_stance_id)
+    if st != null:
+        _rebuild_stance_rows(st)
+
+## Метка слота ActionBar ПОД ПОЗИЦИЕЙ клика (клик → слот: назначается
+## именно тот слот, по которому кликнули).
+func _slot_label_at(pos: Vector2) -> String:
+    var bar = player.get_node_or_null("ActionBar")
+    if bar == null:
+        return ""
+    for slot in bar.slots:
+        if slot is Control and slot.get_global_rect().has_point(pos):
+            return str(slot.key_info.get("label", ""))
+    return ""
 
 func _process(_delta):
     # Гард симметричен SettingsMenu: пока книга открыта, мышь видима, даже
@@ -366,7 +415,7 @@ func _rebuild_stance_rows(st) -> void:
 
 func _on_pick_slot(stance_id: String, sub_id: String) -> void:
     _await_slot = {"stance_id": stance_id, "sub_id": sub_id}
-    _stance_status.text = "Нажмите слот: 1–7, Q/E/R/F, Shift, ЛКМ, ПКМ…"
+    _stance_status.text = "Нажми клавишу слота (Esc — отмена)."
 
 ## Лейбл слота по событию (та же таблица, что у ActionBar — keycode ИЛИ
 ## physical_keycode, как в его обработчике).

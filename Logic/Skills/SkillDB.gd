@@ -405,14 +405,16 @@ Esc — отмена."
     ]
     mconc.stance_sub_skills = m_subs
     mconc.stance_exit_on_sub = true  # вердикт юзера 22.11.26: приём = разряд стойки
+    mconc.cooldown = 2.0  # В.6.4 (вердикт спеца): КД повторного входа, тестовый
     _skills["mana_concentration"] = mconc
 
     # Стойка «Поток Гармонии» (Q16 Шаг 6, R-скилл): ритм-куполов-стойка барда.
     var bflow = preload("res://Logic/Skills/Skill.gd").new()
     bflow.id = "bard_flow"
     bflow.skill_name = "Поток Гармонии"
-    bflow.description = "Стойка-концерт: ЛКМ/ПКМ подменяются ритм-нотами.
-Топливо 5 с: Perfect +1.2 / Good +0.5 / Miss −0.5, потолок 14 с.
+    bflow.description = "Стойка-концерт: ЛКМ в такт нот слева, ПКМ — аккорды справа.
+Каст только за попадание: Perfect ×1.25 / Good ×0.85, мимо — фальшивая нота и штраф.
+Топливо 5 с: Perfect +1.2 / Good +0.5 / Miss −0.5 / пустой пресс −1.2 (−1 tier), потолок 60 с.
 Купол поглощает урон (15→50% по tier), рикошет 15→60%. Esc/Бас-Дроп — выход."
     bflow.icon = "🎵"  # U+1FABD 🪽 не рендерился в Win10 (белый квадрат) — фикс Q16 Шаг 9
     bflow.price = 5
@@ -428,19 +430,21 @@ Esc — отмена."
     b_sound.volume_db = 0.0
     bflow.effects.append(b_sound)
     var b_subs: Array[Dictionary] = [
-        {"id": "bard_note", "label": "Ноты Гармонии", "default_slot": "ЛКМ"},
-        {"id": "bard_chord", "label": "Ударный Аккорд", "default_slot": "ПКМ"},
+        {"id": "bard_note", "label": "Ноты Гармонии", "default_slot": "ЛКМ", "judge_kind": "harmony"},
+        {"id": "bard_chord", "label": "Ударный Аккорд", "default_slot": "ПКМ", "judge_kind": "chord"},
         {"id": "bard_drop", "label": "Бас-Дроп", "default_slot": "self"},
     ]
     bflow.stance_sub_skills = b_subs
+    bflow.stance_rhythm_gate = true  # В.1.3 (вердикт спеца): каст только за попадание
+    bflow.cooldown = 2.0  # В.6.4: КД повторного входа (тестовый; PvP потом 12–15 с)
     _skills["bard_flow"] = bflow
 
     # Под-приёмы Потока (Q16 Шаг 6).
     var bnote = preload("res://Logic/Skills/Skill.gd").new()
     bnote.id = "bard_note"
     bnote.skill_name = "Ноты Гармонии"
-    bnote.description = "Каждое нажатие — консонансная нота пентатоники.
-Ритм-сетка: восьмые доли. Perfect +1.2 с топлива, Miss −1.5 с."
+    bnote.description = "ЛКМ в такт — консонансная нота пентатоники.
+Каст только за попадание в ноту левой дорожки: Perfect +1.2 с топлива (×1.25), Good +0.5 (×0.85)."
     bnote.icon = "🎼"
     bnote.is_sub_skill = true
     bnote.max_range = 200.0
@@ -460,6 +464,8 @@ Esc — отмена."
     bc_aoe.damage = 30
     bc_aoe.center_on_caster = false
     bchord.effects.append(bc_aoe)
+    # Звук аккорда (плейтест 22.11.26: ПКМ-попадание было немым).
+    bchord.effects.append(preload("res://Logic/Skills/BardChordEffect.gd").new())
     _skills["bard_chord"] = bchord
 
     var bdrop = preload("res://Logic/Skills/Skill.gd").new()

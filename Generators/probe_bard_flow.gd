@@ -3,7 +3,7 @@ extends SceneTree
 ## Гейт Q16 Шаг 6 (PRP): топливо (+1.2/+0.5/−1.5/кап 14/fuel_out), tier 2/5/8
 ## + откат на Miss, барьер +14/≤120/срыв при 0, купол перехватывает урон
 ## (HP не тронут), рикошет ровно raw×ratio + гвард пинг-понга, баффы в полях
-## HealthComponent и снимаются на выходе, потолок 14 с, Бас-Дроп закрывает
+## HealthComponent и снимаются на выходе, потолок 60 с, Бас-Дроп закрывает
 ## стойку, пресс-wiring через try_handle_slot, фокус-аут без Miss.
 ## EXIT 0 = PASS. Автолоады: get-or-make (урок 22.11.26). cfg не трогаем.
 
@@ -32,7 +32,7 @@ func _get_or_make(script_path: String, node_name: String) -> Node:
 func _on_exit(reason: String) -> void:
 	_exit_reason = reason
 
-func _on_judged(_id: int, v: String) -> void:
+func _on_judged(_id: int, v: String, _k: String = "") -> void:
 	if v == "miss":
 		_misses += 1
 
@@ -48,6 +48,8 @@ func _enter_bard(stance: Node) -> void:
 		"stance_id": "bard_flow",
 		"stance_skill_id": "bard_flow",
 		"duration": 99.0,
+		"rhythm_gate": true,  # В.1.3: конфиг как у EnterStanceEffect для bard_flow
+		"sub_kinds": {"bard_note": "harmony", "bard_chord": "chord"},
 		"sub_skills": [
 			{"id": "bard_note", "label": "Ноты", "default_slot": "ЛКМ"},
 			{"id": "bard_chord", "label": "Аккорд", "default_slot": "ПКМ"},
@@ -214,6 +216,7 @@ func _run() -> void:
 	flow.barrier = 5
 	hp.take_damage(100, Vector3.ZERO, enemy, false)
 	_ck(_exit_reason == "barrier_break", "срыв барьера → выход «barrier_break»")
+	_ck(str(flow.last_exit_reason) == "barrier_break", "last_exit_reason = barrier_break (баннер В.4.2)")
 	_ck(not flow.is_flowing and not stance.is_active, "Поток и стойка закрыты")
 	_ck(hp.damage_reduction == 0.0 and hp.reflect_ratio == 0.0,
 			"баффы сняты на выходе (0/0)")
@@ -232,16 +235,18 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_ck(_exit_reason == "fuel_out", "нулевое топливо → «fuel_out»")
+	_ck(str(flow.last_exit_reason) == "fuel_out", "last_exit_reason = fuel_out")
 
-	# ── 6) Жёсткий потолок 14 с ───────────────────────────────────────────
+	# ── 6) Жёсткий потолок (60 с — вердикт юзера 22.11.26) ────────────────
 	_enter_bard(stance)
 	_exit_reason = ""
 	flow.fuel = 14.0
-	flow._flow_elapsed = 13.999
+	flow._flow_elapsed = float(flow.MAX_FLOW_DURATION) - 0.001
 	await process_frame
 	await process_frame
 	await process_frame
-	_ck(_exit_reason == "max_duration", "потолок 14 с → «max_duration» (PvP-честность)")
+	_ck(_exit_reason == "max_duration", "потолок %d с → «max_duration» (PvP-честность)" % int(round(float(flow.MAX_FLOW_DURATION))))
+	_ck(str(flow.last_exit_reason) == "max_duration", "last_exit_reason = max_duration")
 
 	# ── 7) Provider: tier-карта и мана-лестница не перепутались ──────────
 	_ck(not stance.power_provider.is_valid(), "после выхода provider пуст")
@@ -258,9 +263,17 @@ func _run() -> void:
 	_ck(absf(stance.stance_power() - 1.3) < 0.0001,
 			"после Потока провайдер сброшен (мана-лестница снова жива)")
 
-	# ── 8) Бас-Дроп закрывает стойку + урон/отброс × tier ────────────────
+	# ── 8) Бас-Дроп: self-защита 0.45 с + закрытие стойки + урон × tier ──
 	_enter_bard(stance)
 	_exit_reason = ""
+	# В.6.3: первые 0.45 с self-пресс глотается ЦЕЛИКОМ (дабл-тап не роняет
+	# свежевходящий Поток).
+	var calls8: int = caster.calls.size()
+	_ck(stance.try_handle_slot("self"), "self-слот перехвачен стойкой (и в защите)")
+	_ck(caster.calls.size() == calls8, "self-защита 0.45 с: каста НЕТ сразу после входа")
+	_ck(flow.is_flowing, "self-защита: Поток НЕ закрыт дабл-тапом")
+	# Отматываем часы входа — защита истекла, дроп проходит.
+	stance._enter_usec = Time.get_ticks_usec() - 500000
 	var drop_ok: bool = stance.try_handle_slot("self")
 	_ck(drop_ok, "self-слот перехвачен стойкой")
 	_ck(caster.calls.size() > 0 and str(caster.calls[caster.calls.size() - 1][0]) == "bard_drop",
@@ -279,15 +292,43 @@ func _run() -> void:
 	aoe.apply(player, {"stance_power": 1.3, "knockback_mult": 1.5})
 	_ck(ehp2.current_health == 16, "аккорд: 55 − int(30×1.3) = 16")
 
-	# ── 10) Пресс-wiring: под-приём → judge.submit_press ─────────────────
+	# ── 10) Ритм-гейт: каст ТОЛЬКО за perfect/good (В.1.3, sync-семантика) ─
+	# Блок синхронный (ни одного await): часы conductor заморожены между
+	# прессами, miss-скан не тикает — окно детерминировано.
 	_enter_bard(stance)
-	var pending_before: int = judge._pending.size()
+	judge.paused = false  # гейту нужен живой судья (секция 11 сама рулит паузой)
+	var calls0: int = caster.calls.size()
+	var fuel0: float = flow.fuel
+	var tier0: int = flow.tier
+	var press_cnt := [0]
+	judge.press_received.connect(func(_k): press_cnt[0] += 1)
+	# 10a) пустой пресс (нот в окне нет): empty_press → каста НЕТ, −1.2/−1 tier
+	judge.reset()  # снести фразовые ноты Потока — окно чистое
 	_ck(stance.try_handle_slot("ЛКМ"), "ЛКМ подменён bard_note")
-	_ck(str(caster.calls[caster.calls.size() - 1][0]) == "bard_note", "каст bard_note")
-	_ck(stance.try_handle_slot("ПКМ"), "ПКМ подменён bard_chord")
-	_ck(str(caster.calls[caster.calls.size() - 1][0]) == "bard_chord", "каст bard_chord")
-	_ck(judge._pending.size() >= pending_before + 2,
-			"прессы уходят в судью (usec, через try_handle_slot)")
+	_ck(caster.calls.size() == calls0, "пустой пресс: каста НЕТ (В.1.3)")
+	_ck(absf(flow.fuel - (fuel0 - 1.2)) < 0.0001, "empty_press: −1.2 топлива")
+	_ck(flow.tier == tier0, "empty_press: tier не падает ниже 0")
+	# 10b) perfect (нота «сейчас») → каст bard_note ×1.25. Множитель считаем
+	# относительно живого provider, захваченного ПОСЛЕ пресса: judge эмитит
+	# note_judged СИНХРОННО внутри submit_press (tier/fuel обновляются до
+	# вычисления множителя), поэтому post-press provider = provider каста.
+	judge.reset()
+	judge.register_note("harmony", cond.song_time)
+	_ck(stance.try_handle_slot("ЛКМ"), "пресс уходит в судью (usec)")
+	var sp1: float = stance.stance_power()
+	_ck(str(caster.calls[caster.calls.size() - 1][0]) == "bard_note", "каст bard_note за perfect")
+	var got1: float = float(caster.calls[caster.calls.size() - 1][1].get("stance_power", 0.0))
+	_ck(absf(got1 - sp1 * 1.25) < 0.0001, "гейт: perfect → ×1.25 (%.3f = %.3f×1.25)" % [got1, sp1])
+	# 10c) good (нота на +80 мс) → каст bard_note ×0.85
+	judge.reset()
+	judge.register_note("harmony", cond.song_time + 0.08)
+	_ck(stance.try_handle_slot("ЛКМ"), "пресс уходит в судью (usec, 2)")
+	var sp2: float = stance.stance_power()
+	_ck(str(caster.calls[caster.calls.size() - 1][0]) == "bard_note", "каст bard_note за good")
+	var got2: float = float(caster.calls[caster.calls.size() - 1][1].get("stance_power", 0.0))
+	_ck(absf(got2 - sp2 * 0.85) < 0.0001, "гейт: good → ×0.85 (%.3f = %.3f×0.85)" % [got2, sp2])
+	_ck(press_cnt[0] == 3, "все 3 пресса дошли до судьи (press_received)")
+	_ck(absf(flow.fuel - 5.5) < 0.0001, "fuel: 5.0 → −1.2 → +1.2 → +0.5 = 5.5")
 	stance.exit_stance("probe")
 
 	# ── 11) Фокус-аут: пауза судьи, Miss невозможен ──────────────────────
@@ -346,6 +387,17 @@ func _run() -> void:
 	_ck(bd_eff.get_script() != null
 			and String(bd_eff.get_script().resource_path).ends_with("BardDropEffect.gd"),
 			"bard_drop: BardDropEffect на месте")
+	# В.1.3/В.6.4: ритм-гейт, judge_kind под-приёмов, КД повторного входа.
+	_ck(bool(bf_skill.get("stance_rhythm_gate")) == true,
+			"bard_flow: stance_rhythm_gate=true (В.1.3)")
+	_ck(absf(float(bf_skill.get("cooldown")) - 2.0) < 0.001,
+			"bard_flow: КД повторного входа 2.0 (В.6.4)")
+	var b_subs: Array = bf_skill.get("stance_sub_skills")
+	_ck(b_subs.size() == 3 and str(b_subs[0].get("judge_kind", "")) == "harmony"
+			and str(b_subs[1].get("judge_kind", "")) == "chord",
+			"judge_kind: note=harmony, chord=chord (В.1.1)")
+	_ck(absf(float(skills["mana_concentration"].get("cooldown")) - 2.0) < 0.001,
+			"mana_concentration: КД повторного входа 2.0 (В.6.4)")
 
 	# ── Cleanup ───────────────────────────────────────────────────────────
 	if flow.is_flowing or stance.is_active:

@@ -13,9 +13,12 @@ const BANDS := 12
 const FREQ_MIN := 40.0
 const FREQ_MAX := 16000.0
 const DOME_RADIUS := 1.9
-const DOME_CENTER_Y := 1.0   # купол от −0.9 до 2.9: тело внутри, низ в полу
-const RING_INNER := 1.5
-const RING_OUTER := 1.8
+## Центр купола (Фикс Б, 10-ответ): Hips X/Z + player.y + 0.95 — каждый _process.
+const DOME_CENTER_Y := 0.95
+## Кольцо основания (Фикс Б + плейтест-4 22.11.26): бублик шириной 0.18 м
+## на полу y+0.03. Радиус = СЕЧЕНИЕ сферы полом (sqrt(r²−cy²)), НЕ радиус
+## сферы: при 1.90 кольцо торчало из-под купола («кривой купол» на скрине).
+const RING_WIDTH := 0.18
 
 const COL_T := Color(0.2, 0.9, 1.0)    # T0–1: бирюза
 const COL_P := Color(0.72, 0.3, 1.0)   # T2: фиолет-неон
@@ -29,24 +32,34 @@ uniform vec3 tier_color : source_color = vec3(0.2, 0.9, 1.0);
 uniform vec3 impact_pos = vec3(0.0, 1.0, 0.0);
 uniform float impact_time = -100.0;
 uniform float u_time = 0.0;
+uniform float u_floor_y = 0.2;  // Фикс Б: мир y пола (player_y + 0.20)
 uniform float beat = 0.0;
 uniform float bands[12];
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 
 varying vec3 v_view_pos;
 varying vec3 v_local;
+varying float v_world_y;
 
 void vertex() {
 	v_local = VERTEX;
 	v_view_pos = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	v_world_y = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y;
 }
 
 void fragment() {
-	// Fresnel: центр почти невидим, кромка светится.
-	float fres = pow(1.0 - abs(dot(normalize(NORMAL), normalize(VIEW))), 2.5);
-	// 12 частотных полос: вертикальные пояса по UV.y.
-	int bi = clamp(int(UV.y * 12.0), 0, 11);
-	float band = bands[bi];
+	// В.7 (вердикт 09): fresnel 3.0 — центр купола чище, кромка резче.
+	float fres = pow(1.0 - abs(dot(normalize(NORMAL), normalize(VIEW))), 3.0);
+	// В.7: тонкие волны эквалайзера от MusicSpectrum вместо широких поясов:
+	// каждая полоса — узкая горизонтальная линия на своей высоте UV.y,
+	// яркость = магнитуда полосы, лёгкое дыхание по высоте и яркости.
+	float eq = 0.0;
+	for (int i = 0; i < 12; i++) {
+		float mag = bands[i];
+		float cy = (float(i) + 0.5) / 12.0 + sin(u_time * 1.7 + float(i) * 1.3) * 0.015;
+		float d = (UV.y - cy) * 28.0;
+		eq += exp(-d * d) * mag * (0.55 + 0.45 * sin(u_time * 2.3 + float(i) * 0.9));
+	}
 	// Бегущие световые кольца от бита (conductor.beat_tick).
 	float rings = pow(max(0.0, sin(UV.y * 9.0 - u_time * 2.2)), 6.0) * (0.25 + beat);
 	// Концентрическая рябь от попадания (impact_pos/impact_time).
@@ -64,11 +77,16 @@ void fragment() {
 	vs.xyz /= vs.w;
 	float diff = abs(-vs.z - (-v_view_pos.z));
 	float edge = 1.0 - smoothstep(0.0, 0.35, diff);
+	// Фикс Б: DEPTH-пересечение только у ПОЛА (мир y ниже player_y+0.20) —
+	// стены/препятствия больше не «прожигают» купол насквозь.
+	edge *= 1.0 - smoothstep(u_floor_y - 0.05, u_floor_y, v_world_y);
 
-	vec3 col = tier_color * (fres * 1.2 + band * 0.55 + rings * 0.9 + edge * 0.8);
+	vec3 col = tier_color * (fres * 1.2 + eq * 1.8 + rings * 0.9 + edge * 0.8);
 	col += vec3(1.0, 0.95, 0.8) * ripple;
 	ALBEDO = col;
-	ALPHA = clamp(fres * 0.85 + band * 0.3 + rings * 0.6 + edge * 0.7 + ripple, 0.0, 1.0);
+	// В.7: base alpha 0.03 — тело купола чуть читается, не только линии;
+	// clamp ≤ 0.55 (Фикс Б) — купол не превращается в белое пятно.
+	ALPHA = clamp(0.03 + fres * 0.85 + eq * 0.5 + rings * 0.6 + edge * 0.7 + ripple, 0.0, 0.55);
 }
 """
 
@@ -119,12 +137,15 @@ func _build_dome() -> void:
 
 func _build_ring() -> void:
 	# Кольцо-аура на полу (пульс от басов — те же полосы спектра).
+	# Фикс Б: строго на полу y+0.03, бублик (не залитый круг) шириной 0.18.
+	# Плейтест-4: радиус = окружность встречи купола с полом.
+	var fit := sqrt(DOME_RADIUS * DOME_RADIUS - DOME_CENTER_Y * DOME_CENTER_Y)
 	var torus := TorusMesh.new()
-	torus.inner_radius = RING_INNER
-	torus.outer_radius = RING_OUTER
+	torus.inner_radius = fit - RING_WIDTH
+	torus.outer_radius = fit
 	_ring = MeshInstance3D.new()
 	_ring.mesh = torus
-	_ring.position = Vector3(0, 0.06, 0)
+	_ring.position = Vector3(0, 0.03, 0)
 	_ring_mat = StandardMaterial3D.new()
 	_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -155,16 +176,19 @@ func _build_notes() -> void:
 	var ramp := GradientTexture1D.new()
 	ramp.gradient = grad
 	m.color_ramp = ramp
-	var ctex := GradientTexture2D.new()
-	var cgrad := Gradient.new()
-	cgrad.colors = [Color(1, 1, 1, 1), Color(1, 1, 1, 0)]
-	cgrad.offsets = [0.0, 1.0]
-	ctex.gradient = cgrad
-	ctex.fill = GradientTexture2D.FILL_RADIAL
-	ctex.fill_from = Vector2(0.5, 0.5)
-	ctex.fill_to = Vector2(1.0, 0.5)
-	ctex.width = 64
-	ctex.height = 64
+	# В.7 (вердикт 09): процедурная 64×64 чёткая текстура — острая 4-лучевая
+	# искра-нота вместо размытого кружка (GradientTexture2D FILL_RADIAL).
+	var img := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	for py in 64:
+		for px in 64:
+			var dx := (float(px) + 0.5) / 64.0 - 0.5
+			var dy := (float(py) + 0.5) / 64.0 - 0.5
+			var star := pow(absf(dx) / 0.5, 0.35) + pow(absf(dy) / 0.5, 0.35)
+			var a := clampf((1.0 - star) * 4.0, 0.0, 1.0)
+			var dist := sqrt(dx * dx + dy * dy)
+			var core := clampf(1.0 - dist / 0.16, 0.0, 1.0)  # яркая головка
+			img.set_pixel(px, py, Color(1, 1, 1, maxf(a, core)))
+	var ctex := ImageTexture.create_from_image(img)
 	var dm := StandardMaterial3D.new()
 	dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -195,6 +219,21 @@ func _process(delta: float) -> void:
 		return
 	_elapsed += delta
 	_beat = maxf(0.0, _beat - delta * 2.5)
+	# Фикс Б: центр купола = кость Hips X/Z + player.y + 0.95 КАЖДЫЙ кадр —
+	# купол едет с телом (наклоны/анимация), не с origin коллбокса.
+	var player := get_parent() as Node3D
+	if player != null:
+		var cx := player.global_position.x
+		var cz := player.global_position.z
+		var bp := _hips_pos(player)
+		if bp != Vector3.INF:
+			cx = bp.x
+			cz = bp.z
+		_mesh.global_position = Vector3(cx, player.global_position.y + DOME_CENTER_Y, cz)
+		# Кольцо пиним в мир тем же способом, что и сферу: узел VFX висит на
+		# игроке с его локальным сдвигом — локальной (0,0.03,0) недостаточно.
+		_ring.global_position = Vector3(cx, player.global_position.y + 0.03, cz)
+		_mat.set_shader_parameter("u_floor_y", player.global_position.y + 0.20)
 	# Цвет по tier (опрос — надёжнее сигналов при позднем подключении VFX).
 	var t: int = int(_flow.tier)
 	if t != _tier:
@@ -225,3 +264,31 @@ func _process(delta: float) -> void:
 func notify_impact(world_pos: Vector3) -> void:
 	_mat.set_shader_parameter("impact_pos", _mesh.to_local(world_pos))
 	_mat.set_shader_parameter("impact_time", _elapsed)
+
+## ── Фикс Б: привязка купола к кости Hips ─────────────────────────────────
+var _hips_bone := -1
+var _skel: Skeleton3D = null
+
+## Мировая позиция кости mixamorig_Hips (кеш скелета/индекса); INF — нет.
+func _hips_pos(player: Node3D) -> Vector3:
+	if _skel == null or not is_instance_valid(_skel):
+		_skel = _find_skeleton(player.get_node_or_null("GraphicsWrapper/PlayerModel"))
+		_hips_bone = -1
+	if _skel == null:
+		return Vector3.INF
+	if _hips_bone < 0:
+		_hips_bone = _skel.find_bone("mixamorig_Hips")
+	if _hips_bone < 0:
+		return Vector3.INF
+	return (_skel.global_transform * _skel.get_bone_global_pose(_hips_bone)).origin
+
+static func _find_skeleton(node: Node) -> Skeleton3D:
+	if not node:
+		return null
+	if node is Skeleton3D:
+		return node
+	for c in node.get_children():
+		var r = _find_skeleton(c)
+		if r:
+			return r
+	return null

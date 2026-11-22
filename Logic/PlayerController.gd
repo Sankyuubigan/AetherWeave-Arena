@@ -56,6 +56,16 @@ var _shoulder := Vector3.ZERO # локальный оффсет пивота н�
 var _p2_cam_prev := 1e9       # локальный z камеры у входного портала (кадр назад)
 var _p2_t0_seen := 0          # t0 последнего захода (сброс prev на новый проход)
 
+## В.7 (вердикт 09): поза-боб в активной стойке — модель качается по синусу
+## в такт биту (beat_len от /root/RhythmConductor); T3 «Потока» — плавная
+## левитация +0.18 м. База позиции модели запоминается на входе в стойку,
+## при выходе модель возвращается на базу.
+const STANCE_BOB_AMP := 0.04
+const STANCE_LEVITATE := 0.18
+var _bob_base_y := INF
+var _bob_lift := 0.0
+var _bob_active := false
+
 func _ready():
     process_physics_priority = 100 # перенос портала в тике РАНЬШЕ камеры (спец)
     add_to_group("player") # цель для врагов ада (HellEnemyBase)
@@ -234,6 +244,10 @@ func take_damage(amount: int, attacker: Node = null):
 
 func use_skill(skill_id: String):
     if not unlocked_skills.get(skill_id, false):
+        # В.6.3 (вердикт спеца): никаких тихих отказов — тост в HUD.
+        var ab = get_node_or_null("ActionBar")
+        if ab != null and ab.has_method("show_toast"):
+            ab.show_toast("Навык не изучен")
         return
     if skill_id == "double_jump":
         return 
@@ -296,6 +310,39 @@ func _gui_blocks_capture() -> bool:
         return true
     return false
 
+## В.7: поза-боб стойки — визуал, каждый кадр (не физика). Пока стойка
+## активна, модель = база + плавная левитация (T3 Потока) + покачивание
+## в такт биту sin(beat_phase·TAU)·0.04; при выходе — возврат на базу.
+func _process(delta: float) -> void:
+    if graphics_wrapper == null:
+        return
+    var model = graphics_wrapper.get_node_or_null("PlayerModel")
+    if model == null:
+        return
+    var stance = get_node_or_null("StanceComponent")
+    var active: bool = stance != null and bool(stance.is_active)
+    if active != _bob_active:
+        _bob_active = active
+        if not active:
+            model.position.y = _bob_base_y
+            _bob_lift = 0.0
+            return
+        _bob_base_y = model.position.y
+    if not active:
+        return
+    # T3 «Потока»: цель левитации +0.18, лерп к цели — без рывка.
+    var bf = get_node_or_null("BardFlowComponent")
+    var target_lift := 0.0
+    if bf != null and bool(bf.is_flowing) and int(bf.tier) >= 3:
+        target_lift = STANCE_LEVITATE
+    _bob_lift = lerpf(_bob_lift, target_lift, minf(delta * 6.0, 1.0))
+    # Покачивание в такт биту: фаза = song_time / beat_len (120 BPM → 0.5 с).
+    var phase := 0.0
+    var cond = get_node_or_null("/root/RhythmConductor")
+    if cond != null and float(cond.beat_len) > 0.0:
+        phase = float(cond.song_time) / float(cond.beat_len)
+    model.position.y = _bob_base_y + _bob_lift + sin(phase * TAU) * STANCE_BOB_AMP
+
 func _physics_process(delta):
     # Смерть (Q30, фидбэк юзера «перс падает сквозь пол»): тело заморожено —
     # коллизия отключена, гравитация не тянет капсулу под пол, камера не ныряет.
@@ -325,8 +372,15 @@ func _physics_process(delta):
 
     # Множитель ускорения (Q20 крылья: 1.35 на окно активности, ставит
     # WingsComponent.activate/deactivate; остальные скиллы не трогают).
-    velocity.x = global_dir.x * speed * speed_mult
-    velocity.z = global_dir.z * speed * speed_mult
+    # Стойка барда (вердикт юзера 22.11.26): «Поток Гармонии» режет скорость
+    # передвижения на 50% — концерт требует стоять в ритме.
+    var stance_mult := 1.0
+    var stance_c = get_node_or_null("StanceComponent")
+    if stance_c != null and stance_c.is_active \
+            and str(stance_c.stance_skill_id) == "bard_flow":
+        stance_mult = 0.5
+    velocity.x = global_dir.x * speed * speed_mult * stance_mult
+    velocity.z = global_dir.z * speed * speed_mult * stance_mult
 
     var space_pressed = (not locked) and Input.is_key_pressed(KEY_SPACE)
 

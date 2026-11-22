@@ -72,14 +72,20 @@ func _run() -> void:
 			e_ok = false
 	_ck(e_ok, "восьмые на сетке 0.25 с (±1 мс)")
 
-	# 4) Снэп: err 0.2 > 0.08 → song_time = аудио-время (poll: до 100 кадров)
+	# 4) Подтяжка err 0.2 (≤ PLL_TRACK_MAX): БЕЗ телепорта часов (плейтест
+	# 22.11.26: жёсткий снэп телепортировал song_time → масс-Miss). Кап
+	# скорости 0.5 с/с: err 0.2 закрывается за ~0.4 с СТЕНОЧНОГО времени —
+	# headless-кадры с микроскопическим delta кадровым гардом не ловятся.
 	cond.debug_audio_time = cond.song_time + 0.2
-	var snap_guard := 0
-	while absf(cond.song_time - cond.debug_audio_time) > 0.001 and snap_guard < 100:
-		snap_guard += 1
+	var max_step := 0.0
+	var wall0 := Time.get_ticks_usec()
+	while absf(cond.song_time - cond.debug_audio_time) > 0.01 and Time.get_ticks_usec() - wall0 < 2000000:
+		var prev_st: float = cond.song_time
 		await process_frame
-	_ck(absf(cond.song_time - cond.debug_audio_time) <= 0.001,
-			"err > 0.08 → снэп (сошлось за %d кадров)" % snap_guard)
+		max_step = maxf(max_step, cond.song_time - prev_st)
+	_ck(max_step < 0.06, "нет телепорта: шаг часов за кадр ≤ %.3f с" % max_step)
+	_ck(absf(cond.song_time - cond.debug_audio_time) <= 0.01,
+			"err 0.2 → сходится ограниченной подтяжкой (остаток %.3f с)" % absf(cond.song_time - cond.debug_audio_time))
 	cond.debug_audio_time = -1.0
 	await process_frame
 

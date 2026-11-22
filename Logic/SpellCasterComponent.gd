@@ -19,6 +19,12 @@ const SkillDB = preload("res://Logic/Skills/SkillDB.gd")
 ## снаряда. Игрок — 1.0; элита ставит 2.5 (урон «повышенный» — заказ юзера).
 @export var damage_mult: float = 1.0
 
+## Отказ каста (вердикт спеца В.6.3: никаких тихих отказов — тост в HUD):
+## «Идёт другой каст» / «Откат: N с». Слушает ActionBar.show_toast.
+signal cast_rejected(text: String)
+
+var _cd_until := {}  # skill_id → msec-граница конца отката
+
 var _channeling := false
 var _alt_left := false  # чередование рук для alternate_hands-скиллов
 var _bar_layer: CanvasLayer
@@ -58,6 +64,12 @@ func _ready():
 func is_channeling() -> bool:
 	return _channeling
 
+## Остаток отката скилла, с (для цифр на слоте ActionBar, В.6.4).
+func cd_left(skill_id: String) -> float:
+	if not _cd_until.has(skill_id):
+		return 0.0
+	return maxf(float(int(_cd_until[skill_id]) - Time.get_ticks_msec()) / 1000.0, 0.0)
+
 func cast_skill(skill_id: String, extra_context: Dictionary = {}):
 	var all_skills = SkillDB.get_skills()
 	if not all_skills.has(skill_id):
@@ -66,7 +78,16 @@ func cast_skill(skill_id: String, extra_context: Dictionary = {}):
 	var skill = all_skills[skill_id]
 	if skill.is_passive:
 		return
+	# Кулдаун (вердикт спеца В.6.4): отказ с тостом; цифры отката на слоте
+	# ActionBar рисуются по cd_left().
+	if skill.cooldown > 0.0:
+		var until := int(_cd_until.get(skill_id, 0))
+		var now := Time.get_ticks_msec()
+		if now < until:
+			cast_rejected.emit("Откат: %.1f с" % (float(until - now) / 1000.0))
+			return
 	if _channeling:
+		cast_rejected.emit("Идёт другой каст")
 		return  # канал идёт — новые касты заблокированы
 
 	var player = get_parent()
@@ -91,6 +112,10 @@ func cast_skill(skill_id: String, extra_context: Dictionary = {}):
 		context.merge(extra_context, true)  # stance_power и пр. (Q16 Шаг 1)
 
 	var anim_comp = player.get_node_or_null("PlayerAnimationComponent")
+
+	# Отсчёт кулдауна от НАЧАЛА каста (и канала, и инсты).
+	if skill.cooldown > 0.0:
+		_cd_until[skill_id] = Time.get_ticks_msec() + int(skill.cooldown * 1000.0)
 
 	if skill.cast_time > 0.0:
 		# Канал: Enter → Loop (заморозка автомата), по таймеру Shoot + execute.

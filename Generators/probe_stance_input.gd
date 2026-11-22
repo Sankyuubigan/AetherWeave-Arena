@@ -145,7 +145,7 @@ func _run() -> void:
 	_ck(slot5.label_skill.text == "🅰", "иконка слота 5 подменена (была 🅝)")
 	_ck(slotQ.label_skill.text == "🅱", "self-слот Q показывает иконку под-приёма")
 	_ck(slotLMB.color == Color(0.55, 0.25, 0.8, 0.85), "mouse-слот подсвечен")
-	_ck(slotLMB.label_skill.text == "", "mouse-слот без иконки (по ТЗ спеца)")
+	_ck(slotLMB.label_skill.text == "🅲", "mouse-слот показывает иконку под-приёма (В.7)")
 
 	# 5) Заряд тикает, сигнал updated живой
 	var upd := [0]
@@ -160,6 +160,12 @@ func _run() -> void:
 	_ck(player.get_meta("probe_cast_a", "нет") == "1.0", "KEY_5 → probe_sub_a исполняется (power 1.0)")
 	_ck(not player.has_meta("probe_normal_cast"), "обычный скилл слота 5 НЕ вызван")
 
+	# 6b) Self-защита 0.45 с (В.6.3, вердикт спеца 09): self-пресс сразу после
+	# входа глотается ЦЕЛИКОМ — дабл-тап не роняет свежевходящую стойку.
+	bar._unhandled_input(_key_event(KEY_Q))
+	_ck(not player.has_meta("probe_cast_b"),
+			"self-защита 0.45 с: пресс сразу после входа глотается")
+	stance._enter_usec = Time.get_ticks_usec() - 500000  # защита истекла
 	bar._unhandled_input(_key_event(KEY_Q))
 	_ck(player.get_meta("probe_cast_b", "нет") == "1.0", "KEY_Q (self) → probe_sub_b")
 	_ck(not player.has_meta("probe_stance_cast"), "обычный скилл стойки (Q) НЕ вызван")
