@@ -342,6 +342,29 @@ static func get_skills() -> Dictionary:
     ptl2.effects.append(pts2)
     _skills["portals2"] = ptl2
 
+    # Эфирный захват (Q48, ТЗ 21.11.26 / PRP tasks/tether_swing_prp.md):
+    # магический трос — зацеп за точку прицела или воздушный эфирный якорь,
+    # маятник-свинг / рывок-зип, инерция после отрыва. Паттерн Blade/Wings:
+    # cast_anim="" (жест Cast_Shoot играет эффект), повторный каст в полёте =
+    # срыв с бустом. В SkillSerializer не добавляем — встроенный скилл.
+    var eth = preload("res://Logic/Skills/Skill.gd").new()
+    eth.id = "ether_tether"
+    eth.skill_name = "Эфирный захват"
+    eth.description = "Магический трос: зацеп за точку прицела
+(или за воздух — эфирный якорь) и скоростной маятник.
+Повторный каст в полёте — срыв с бустом. Пробел — отрыв."
+    eth.icon = "🕸"  # 🪝 (U+1FA9D) не рендерился в Win10 — как 🪽 в Q16 Шаг 9
+    eth.price = 3
+    eth.max_range = 45.0
+    eth.cast_anim = ""
+    eth.cast_hand = "Left"  # Cast_Shoot — леворукий клип (как beam/ball_lightning)
+    eth.effects.append(preload("res://Logic/Skills/TetherSwingEffect.gd").new())
+    var eth_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
+    eth_sound.audio_stream = load("res://Audio/SFX/neural_teleport.res")
+    eth_sound.volume_db = 0.0
+    eth.effects.append(eth_sound)
+    _skills["ether_tether"] = eth
+
     # ---------- Стойка «Концентрация маны» (Q16 Шаг 2, ТЗ спеца) ----------
     # Под-приёмы — НЕ в магазине (is_sub_skill=true, Шаг 0): выдаются только
     # вместе со стойкой-родителем. Базовые регистрируются НАПРЯМУЮ в _skills:

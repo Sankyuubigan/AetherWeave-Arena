@@ -66,6 +66,14 @@ var _bob_base_y := INF
 var _bob_lift := 0.0
 var _bob_active := false
 
+## Q48 «Эфирный захват» (ТЗ §4.2): данные инерции в воздухе и банни-хопа.
+## _air_hvel — горизонталь последнего воздушного тика; при приземлении она
+## уходит в _landed_hvel и прыжок в первые 0.14 с возвращает ~80% импульса.
+var _air_hvel := Vector2.ZERO
+var _landed_hvel := Vector2.ZERO
+var _was_airborne := false
+var _since_landing := 1e9
+
 func _ready():
     process_physics_priority = 100 # перенос портала в тике РАНЬШЕ камеры (спец)
     add_to_group("player") # цель для врагов ада (HellEnemyBase)
@@ -362,7 +370,32 @@ func _physics_process(delta):
     )
 
     var local_dir = Vector3(input_dir.x, 0, input_dir.y)
-    
+
+    var space_pressed = (not locked) and Input.is_key_pressed(KEY_SPACE)
+
+    # Эфирный захват (Q48): пока нить активна, физика тела — у TetherSwingComponent
+    # (перезапись velocity ходьбой убила бы маятник/зип, ТЗ §4.1). Мышь свободна —
+    # пивот камеры top_level, обновляем его вручную и выходим. Свип телепорта
+    # (input_locked) владеет телом — нить тихо рвём.
+    var tether = get_node_or_null("TetherSwing")
+    if tether != null and tether.is_active():
+        if input_locked:
+            tether.release(false)
+        else:
+            tether.physics_step(delta, input_dir, space_pressed)
+            # Приземление может случиться и внутри троса (низкий зип скользит
+            # по полу) — окно банни-хопа открываем здесь же, как в штатной ветке.
+            if not is_on_floor():
+                _air_hvel = Vector2(velocity.x, velocity.z)
+                _was_airborne = true
+            elif _was_airborne:
+                _since_landing = 0.0
+                _landed_hvel = _air_hvel
+                _was_airborne = false
+            was_space_pressed = space_pressed
+            _update_camera_pivot()
+            return
+
     if local_dir.length() > 0.1:
         local_dir = local_dir.normalized()
         var target_angle = atan2(local_dir.x, local_dir.z)
@@ -379,10 +412,28 @@ func _physics_process(delta):
     if stance_c != null and stance_c.is_active \
             and str(stance_c.stance_skill_id) == "bard_flow":
         stance_mult = 0.5
-    velocity.x = global_dir.x * speed * speed_mult * stance_mult
-    velocity.z = global_dir.z * speed * speed_mult * stance_mult
+    var run_speed := speed * speed_mult * stance_mult
 
-    var space_pressed = (not locked) and Input.is_key_pressed(KEY_SPACE)
+    # Q48 Momentum Preservation (ТЗ §4.2): в воздухе быструю горизонталь
+    # (после отрыва троса/бустов) НЕ клампим до run_speed — излишек над
+    # run_speed гасится лёгким air drag (exp 0.5/с), WASD мягко подруливают
+    # направление (slerp 3/с), не сжигая модуль. На полу / крылья / медленный
+    # полёт — штатная жёсткая запись (без троса поведение не меняется).
+    var hvel := Vector2(velocity.x, velocity.z)
+    if not is_on_floor() and not wings_fly and hvel.length() > run_speed * 1.05:
+        var sp: float = hvel.length()
+        var new_sp: float = run_speed + (sp - run_speed) * exp(-0.5 * delta)
+        var wish2 := Vector2(global_dir.x, global_dir.z)
+        if local_dir.length() > 0.1 and wish2.length() > 0.1:
+            hvel = hvel.normalized().slerp(wish2.normalized(), minf(delta * 3.0, 1.0)).normalized() * new_sp
+        else:
+            hvel = hvel.normalized() * new_sp
+            # без ввода модель смотрит по полёту
+            graphics_wrapper.rotation.y = lerp_angle(graphics_wrapper.rotation.y, atan2(hvel.x, hvel.y), delta * 8.0)
+    else:
+        hvel = Vector2(global_dir.x, global_dir.z) * run_speed
+    velocity.x = hvel.x
+    velocity.z = hvel.y
 
     if not is_on_floor():
         velocity.y -= GRAVITY * delta
@@ -393,13 +444,28 @@ func _physics_process(delta):
                 velocity.y = move_toward(velocity.y, WINGS_LIFT, delta * 24.0)
             elif velocity.y < WINGS_GLIDE:
                 velocity.y = WINGS_GLIDE
+        _air_hvel = hvel
     else:
         can_double_jump = unlocked_skills.get("double_jump", false)
+        if _was_airborne:
+            # Приземление (Q48): открываем окно банни-хопа, запоминаем
+            # горизонталь последнего воздушного тика.
+            _since_landing = 0.0
+            _landed_hvel = _air_hvel
+        else:
+            _since_landing += delta
+    _was_airborne = not is_on_floor()
 
     if space_pressed and not was_space_pressed:
         var anim_comp = get_node_or_null("PlayerAnimationComponent")
         if is_on_floor():
             velocity.y = jump_velocity
+            # Bunny-hop (Q48, ТЗ §4.2): прыжок в первые 0.14 с после приземления
+            # на высокой скорости сохраняет ~80% воздушной горизонтальной скорости
+            # (без банни-хопа земля мгновенно съела бы импульс штатной записью).
+            if _since_landing < 0.14 and _landed_hvel.length() > run_speed:
+                velocity.x = _landed_hvel.x * 0.8
+                velocity.z = _landed_hvel.y * 0.8
             if anim_comp and anim_comp.has_method("play_jump"):
                 anim_comp.play_jump()
         elif can_double_jump:
