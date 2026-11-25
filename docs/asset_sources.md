@@ -127,8 +127,12 @@
 ## 4. Анимации
 
 - **Mixamo.com** — огромная бесплатная библиотека анимаций под Humanoid Rig.
-  Ключевые слова: `sword attack`, `magic cast`, `spell cast`, `hit reaction`,
-  `death`, `dodge`. Скачивание — FBX.
+  **Мы больше не ходим на сайт:** локальная оффлайн-копия всех 2 317 анимаций +
+  114 скинов с VLM-описаниями и MP4-превью лежит на диске — ССОТ и полный
+  разбор: **docs/mixamo_library.md** (`D:\Projects\3d_game\Graphics\mixamo-lib\`, поиск
+  `_tools/mixamo_search.py`, проверка глазами через `agent-tools vision`).
+  Ключевые слова для поиска: `sword attack`, `magic cast`, `spell cast`,
+  `hit reaction`, `death`, `dodge`. Скачивание — FBX.
 - **Наш конвейер** (не Mixamo-путь, а свой): FBX → `Graphics/Animations/raw/` →
   `build_animations.gd` → `shared_animations.res` (AGENTS §7; фикс пути
   `mixamorig1_` → `mixamorig_`). Нейро-касты — через тул `anim` (ССОТ

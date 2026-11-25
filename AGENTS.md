@@ -96,6 +96,13 @@ mod.use_collapse_triangulate = False
 
 ## 7. Конвейер сборки анимаций (Animation pipeline)
 
+### Локальная оффлайн-библиотека Mixamo — ССОТ `docs/mixamo_library.md`
+Все 2 317 анимаций Mixamo + 114 скинов лежат на диске (`D:\Projectsd_game\Graphics\mixamo-lib\`),
+сайт Mixamo/Adobe не нужен. Поиск по смыслу (VLM-описания):
+`python -I D:/Projects/3d_game/Graphics/mixamo-lib/_tools/mixamo_search.py "jump forward slash" --max-sec 3.5`,
+проверка кандидата глазами — `agent-tools vision --video <previews/.../v000.mp4>`,
+затем `cp` FBX в `Graphics/Animations/raw/` и пересборка `shared_animations.res`.
+
 ### Нейро-анимации кастов (SOMA30 / kimodo.cpp) — ССОТ `docs/animation_generation.md`
 Канон, правила промптов и реестр ошибок — там же. Генерация одной командой —
 тул `D:\Projects\cross-app-plugins\bin\agent-tools.exe anim --name <clip>

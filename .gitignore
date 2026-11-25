@@ -8,6 +8,7 @@ export_presets.cfg
 /Graphics/PlayerModel/
 /Graphics/EnemyModel/raw/
 /Graphics/Animations
+/Graphics/mixamo-lib/
 /Audio
 /Graphics/Environment
 /Graphics/decimated_baked
