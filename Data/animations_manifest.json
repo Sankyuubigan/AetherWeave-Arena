@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "note": "ССОТ пайплайна анимаций (вердикт спеца 23.11.26). source: mixamo://<file> | ual://<pack>/<clip> | kimodo://soma. layer: loco|cast. hip_to_spine_transfer: перенос таза в Spine1 при UB-бейке. hand_pose: пресет пальцев для клипов без пальцевых треков. phase_align: выравнивание фазы лупа по min Y LeftFoot. status: present|missing (missing = юзер качает FBX в raw/mixamo/).",
+  "entries": [
+    {
+      "name": "Run",
+      "source": "kimodo://soma",
+      "layer": "loco",
+      "loop": true,
+      "phase_align": true
+    },
+    {
+      "name": "Idle",
+      "source": "kimodo://soma",
+      "layer": "loco",
+      "loop": true
+    },
+    {
+      "name": "Cast_Shoot_UB",
+      "source": "ual://UAL2/Cast_Shoot",
+      "layer": "cast",
+      "hip_to_spine_transfer": true,
+      "hand_pose": "OPEN_CAST",
+      "ik_mode": "aim_hand"
+    },
+    {
+      "name": "Cast_Enter_UB",
+      "source": "ual://UAL1/Spell_Simple_Enter",
+      "layer": "cast",
+      "hip_to_spine_transfer": true,
+      "hand_pose": "OPEN_CAST"
+    },
+    {
+      "name": "Heart_Cast_UB",
+      "source": "ual://UAL2/Heart_Cast",
+      "layer": "cast",
+      "hip_to_spine_transfer": true,
+      "hand_pose": "OPEN_CAST",
+      "ik_mode": "look_only"
+    },
+    {
+      "name": "Blade_Swing_A_UB",
+      "source": "kimodo://blade_swing_a",
+      "layer": "cast",
+      "hip_to_spine_transfer": true,
+      "hand_pose": "GRIP",
+      "ik_mode": "aim_hand"
+    },
+    {
+      "name": "Throw_UB",
+      "source": "ual://UAL1/OverhandThrow",
+      "layer": "cast",
+      "hip_to_spine_transfer": true,
+      "hand_pose": "OPEN_CAST"
+    },
+    {
+      "name": "Wings_Fly",
+      "source": "mixamo://Flying.fbx",
+      "layer": "cast",
+      "loop": true,
+      "hand_pose": "OPEN_CAST",
+      "status": "present"
+    },
+    {
+      "name": "Bard_Guitar",
+      "source": "mixamo://Guitar_Playing1.fbx",
+      "layer": "cast",
+      "loop": true,
+      "hand_pose": "GRIP",
+      "status": "present"
+    },
+    {
+      "name": "Melee_Sword_Combo",
+      "source": "ual://UAL2/Sword_Regular_Combo",
+      "layer": "enemy",
+      "hip_to_spine_transfer": true,
+      "hand_pose": "GRIP",
+      "status": "present"
+    },
+    {
+      "name": "Tether_Hang",
+      "source": "mixamo://Hanging_Idle_2.fbx",
+      "layer": "cast",
+      "loop": true,
+      "hand_pose": "GRIP",
+      "ik_mode": "aim_hand",
+      "status": "present",
+      "note": "вис-луп (vision 25.11.26: статичный вис, руки вверх)"
+    },
+    {
+      "name": "Tether_Swing",
+      "source": "mixamo://Rope_Swinging.fbx",
+      "layer": "cast",
+      "loop": false,
+      "hand_pose": "GRIP",
+      "status": "present",
+      "note": "маятник 4.5с, не луп (vision 25.11.26)"
+    },
+    {
+      "name": "Tether_Zip",
+      "source": "mixamo://Climbing_A_Rope.fbx",
+      "layer": "cast",
+      "loop": false,
+      "hand_pose": "GRIP",
+      "status": "present",
+      "note": "рывок-зип по канату (vision 25.11.26), не луп"
+    },
+    {
+      "name": "Cast_2H_Free",
+      "source": "mixamo://Two_Hand_Spell_Casting.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present",
+      "note": "кандидат метеор/гром: обе руки вверх, пик ~0.5-1с (vision)"
+    },
+    {
+      "name": "Cast_1H_Magic_01",
+      "source": "mixamo://Standing_1H_Magic_Attack_01.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present",
+      "note": "замена акробатического UAL Throw (луч/фаербол/beam)"
+    },
+    {
+      "name": "Cast_1H_Magic_02",
+      "source": "mixamo://Standing_1H_Magic_Attack_02.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present"
+    },
+    {
+      "name": "Cast_1H_Spell",
+      "source": "mixamo://Standing_1H_Cast_Spell_01.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present",
+      "note": "канал/каст-заклинание"
+    },
+    {
+      "name": "Cast_2H_Area_01",
+      "source": "mixamo://Standing_2H_Magic_Area_Attack_01.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present",
+      "note": "AoE (метеор/гром/шаровая)"
+    },
+    {
+      "name": "Cast_2H_Magic_01",
+      "source": "mixamo://Standing_2H_Magic_Attack_01.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present"
+    },
+    {
+      "name": "Cast_2H_Spell",
+      "source": "mixamo://Standing_2H_Cast_Spell_01.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present"
+    },
+    {
+      "name": "Cast_Idle",
+      "source": "mixamo://Standing_Idle.fbx",
+      "layer": "cast",
+      "loop": true,
+      "status": "present"
+    }
+  ]
+}

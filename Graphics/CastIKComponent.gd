@@ -16,6 +16,9 @@ const BEND_L := -1.0
 const MIN_REACH := 0.1
 
 var skeleton: Skeleton3D = null  # задаёт SpellCasterComponent до add_child
+## ik_mode (спец): aim_hand = довод кисти на цель; none = IK выкл;
+## look_only = руки у груди, IK не включать (смотрит LookAtModifier3D).
+var ik_mode: String = "aim_hand"
 var _bones := {}       # side -> {arm, fore, hand} — индексы костей
 var _targets := {}     # side -> Node3D-цель прицела
 var _active_side := ""
@@ -93,6 +96,8 @@ func _kill_fade() -> void:
 ## от текущего направления «кость→ребёнок» к желаемому (позиции суставов — на
 ## месте, ведём только повороты; кисть остаётся под контролем клипа).
 func _solve(side: String, w: float) -> void:
+	if ik_mode != "aim_hand":  # none / look_only — IK не включаем (спец)
+		return
 	var bi: Dictionary = _bones.get(side, {})
 	if bi.is_empty():
 		return
@@ -113,10 +118,12 @@ func _solve(side: String, w: float) -> void:
 	var reach := clampf(d, MIN_REACH, (upper + fore) * 0.999)
 	var a := (upper * upper + reach * reach - fore * fore) / (2.0 * reach)
 	var h := sqrt(maxf(0.0, upper * upper - a * a))
-	# Полюс изгиба: локоть ниже линии «плечо→цель» («пистолетная» рука).
-	var pole := Vector3.DOWN
-	if absf(dir.dot(Vector3.DOWN)) > 0.95:
-		pole = Vector3.FORWARD
+	# Полюс изгиба ЛОКАЛЬНЫЙ (спец 23.11.26): R(0.6,−0.6,−0.4) /
+	# L(−0.6,−0.6,−0.4) — в локальных осях скелета (sh/el/tgt уже локальные).
+	var pole := Vector3(0.6, -0.6, -0.4)
+	if side == "Left":
+		pole = Vector3(-0.6, -0.6, -0.4)
+	pole = pole.normalized()
 	var n := dir.cross(pole).normalized().cross(dir).normalized()
 	var bend := BEND_R if side == "Right" else BEND_L
 	var elbow := sh + dir * a + n * (h * bend)

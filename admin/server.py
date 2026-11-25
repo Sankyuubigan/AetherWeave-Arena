@@ -23,6 +23,41 @@ DUMP_PATH = os.path.join(ROOT, "temp", "skills_dump.json")
 NAME_MAX = 32
 ICON_MAX = 8
 
+# Белый список корней анимаций для /anim/api/list (единый каталог «Анимации»).
+# Путь запроса mat'ится ТОЛЬКО по этому списку — защита от traversal.
+ANIM_ROOTS = [
+    {"id": "ual", "name": "UAL (касты, пистолет, меч…)", "dir": "tools/animation_catalog",
+     "exts": (".glb",)},
+    {"id": "mixamo", "name": "Mixamo (2317)", "dir": "Graphics/mixamo-lib/fbx", "exts": (".fbx",)},
+    {"id": "raw_mixamo", "name": "Raw / mixamo (20)", "dir": "Graphics/Animations/raw/mixamo",
+     "exts": (".fbx",)},
+    {"id": "raw", "name": "Raw / базовые (Idle, Run, Jump…)", "dir": "Graphics/Animations/raw",
+     "exts": (".fbx",)},
+    {"id": "cand", "name": "Кандидаты (GLB)", "dir": "tools/candidates_models", "exts": (".glb",)},
+    {"id": "neuro", "name": "Нейро-касты (SOMA, .f32 — нет превью)", "dir": "Graphics/Animations/neuro_soma",
+     "exts": (".f32",)},
+]
+
+
+def anim_list():
+    """Сканирует белый список корней → {groups:[{id,name,items:[{name,url,preview}]}]}."""
+    groups = []
+    for r in ANIM_ROOTS:
+        base = os.path.join(ROOT, r["dir"].replace("/", os.sep))
+        items = []
+        if os.path.isdir(base):
+            for fn in sorted(os.listdir(base)):
+                if not fn.lower().endswith(r["exts"]):
+                    continue
+                if fn.endswith(".import"):
+                    continue
+                url = "/" + r["dir"] + "/" + fn
+                # .f32 (neuro) — без браузер-превью; glb/fbx — грузим в центре.
+                preview = not fn.lower().endswith(".f32")
+                items.append({"name": fn, "url": url, "preview": preview})
+        groups.append({"id": r["id"], "name": r["name"], "items": items})
+    return {"groups": groups}
+
 
 def load_current() -> dict:
     if os.path.exists(DATA_PATH):
@@ -101,6 +136,9 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self.path = "/admin/viewer_hub.html"  # корень = хаб админки (Q51)
+        if self.path.rstrip("/") == "/anim/api/list":
+            self._send_json(anim_list())
+            return
         if self.path.rstrip("/") == "/skills/api/data":
             cur = load_current()
             payload = {
@@ -156,7 +194,7 @@ class Handler(SimpleHTTPRequestHandler):
         # Статику не спамим в консоль; API-запросы показываем. Ошибки (404 и
         # пр.) идут через log_error -> log_message без правок — не трогаем.
         try:
-            if "/skills/api/" in str(self.path or ""):
+            if "/skills/api/" in str(self.path or "") or "/anim/api/" in str(self.path or ""):
                 super().log_request(code, size)
         except Exception:
             pass

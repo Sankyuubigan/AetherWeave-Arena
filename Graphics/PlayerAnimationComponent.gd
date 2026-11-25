@@ -8,6 +8,11 @@ extends Node
 ##   AUTO+AT_END: Landing→Idle и FrontFlip→Falling доигрывают сами, без кода.
 ##   _state = НАМЕРЕНИЕ кода; дерево может уйти дальше само (AUTO AT_END) —
 ##   каждый кадр ресинк по факту, когда фейд завершён (fading_from пуст).
+##   23.11.26 вердикт спеца (гибрид): Run_Start/Run_Stop ДРОПНУТЫ — Idle↔Run
+##   крестфейд 0.14 с, темп Run тянется за фактической скоростью тела
+##   (TimeScale clamp 0.7..1.8), «разгон/торможение» докручивает процедурный
+##   lean/dip/bank (SkeletonLeanModifier поверх позы). Физика НЕ тронута.
+##   F4 A/B нейро-бег удалён (директива юзера 23.11.26) — остался Mixamo Run.
 ##   Производные клипы (тоже код, генераторы не тронуты):
 ##     Jump_Launch    — Jump с обрезкой приседа 0..0.33 (бывший seek-хак);
 ##     FrontFlip_Fast — FrontFlip, растянутый под время полёта (константа
@@ -42,7 +47,7 @@ const JUMP_APEX_TIME := 0.75     # пик дуги (y=1.567)
 const LANDING_CUT_TIME := 0.47   # низ приседа-удара в Landing
 
 var anim_player: AnimationPlayer
-var cast_player: AnimationPlayer
+var _cast_layer: Node = null   # CastAnimationLayer (фасад кастов, Ф2.1/2.2)
 var tree: AnimationTree
 var playback  # AnimationNodeStateMachinePlayback
 var _state: String = ""  # намерение кода; дерево может уйти само (AUTO AT_END)
@@ -51,13 +56,35 @@ var was_in_air: bool = false
 var air_frames: int = 0  # гистерезис против «мигания» is_on_floor на склонах
 var _channel: bool = false  # длительный каст (метеор/гром): движение гасится
 
-## TEMP A/B (18.11.26, раунд 23): F4 — сравнить ходьбу MotionBricks (Walk_Test)
-## со старым Run. Клип растягивается под скорость игрока (BVH-шаг ~1.09 м/с
-## против speed 5.0). После вердикта юзера блок удалить вместе с Run_MB.
-var _run_node: AnimationNodeAnimation = null  # узел "Run" в стейт-машине
-var _mb_walk_on: bool = false
-const MB_RUN_SRC := "Run_Test"  # источник Run_MB (mb_run_d: A326 94..176, луп 4.49 м/с)
-const MB_RUN_SPEED := 4.49  # м/с — средняя скорость корня BVH-лупа A326 (20f@30, +Z)
+## Процедурный lean/dip/bank (вердикт спеца 23.11.26): физика стартует
+## мгновенно, корпус «догоняет» — старт бега: наклон вперёд до 14° (пружина
+## ~0.25 с), стоп: откид назад ~6.5° + микро-присед таза 4.5 см (возврат
+## ~0.2 с), поворот: крен по скорости рыскания ±6°.
+## Значения читает SkeletonLeanModifier (ребёнок скелета, применяется ПОСЛЕ
+## всей анимации — порядок пайплайна модификаторов).
+var lean_amount: float = 0.0   # радианы, + = наклон вперёд
+var dip_amount: float = 0.0    # метры, + = присед таза вниз
+var bank_amount: float = 0.0   # радианы, + = крен влево (в сторону поворота)
+var _lean_target: float = 0.0
+var _dip_target: float = 0.0
+var _lean_vel: float = 0.0
+var _dip_vel: float = 0.0
+var _bank_target: float = 0.0
+var _prev_yaw: float = 0.0
+var _hand_mod: SkeletonModifier3D = null       # позы пальцев (вес 0 = no-op)
+var _aim_mod: SkeletonModifier3D = null        # прицел позвоночником (спец)
+var aim_point: Vector3 = Vector3.ZERO          # глобальная точка прицела
+var aim_weight: float = 0.0                    # 0..1 (вход 0.08 / выход 0.20)
+var recoil_amount: float = 0.0                 # отдача Spine2 (пружина 0.15с)
+var _aim_timer: float = 0.0
+var _recoil_vel: float = 0.0
+const LEAN_START_RAD := 0.244  # 14° — старт бега (спец 10–15°)
+const LEAN_STOP_RAD := 0.113   # 6.5° — откид при стопе (спец 5–8°)
+const DIP_STOP_M := 0.045      # микро-присед таза (спец 4–5 см)
+const BANK_MAX_RAD := 0.105    # ±6°
+const BANK_RATE := 0.025       # рад крена на рад/с рыскания
+const RUN_TS_MIN := 0.7        # клампы темпа Run (спец)
+const RUN_TS_MAX := 1.8
 
 func is_channeling() -> bool:
     return _channel
@@ -97,19 +124,6 @@ func _ready():
             var air_time: float = 2.0 * parent.jump_velocity / parent.GRAVITY
             var spd: float = clampf(flip.length / maxf(air_time, 0.1), 1.0, 3.0)
             lib.add_animation("FrontFlip_Fast", _stretched(flip, flip.length / spd))
-        # TEMP A/B: MotionBricks-БЕГ (run_loop 4.05 м/с) под скорость игрока.
-        # Луп — ЯВНО на производном клипе: вердикт 23а «затем останавливается» —
-        # loop не должен зависеть от наследования duplicate().
-        if lib.has_animation(MB_RUN_SRC):
-            var rt: Animation = lib.get_animation(MB_RUN_SRC)
-            rt.loop_mode = Animation.LOOP_LINEAR
-            var p = get_parent()
-            var spd: float = clampf(p.speed / MB_RUN_SPEED, 1.0, 6.0)
-            var mb := _stretched(rt, rt.length / spd)
-            mb.loop_mode = Animation.LOOP_LINEAR
-            lib.add_animation("Run_MB", mb)
-            print("PlayerAnimationComponent: Run_MB готов (бег x%.2f, длит. %.2f с, loop=%d)" % [spd, mb.length, mb.loop_mode])
-
     # AnimationTree: стейт-машина локомоции. Сиблинг ПОСЛЕ AnimationPlayer,
     # ДО CastPlayer (порядок записи поз за кадр: loco → cast).
     tree = AnimationTree.new()
@@ -120,32 +134,31 @@ func _ready():
     tree.tree_root = _build_loco_machine()
     tree.active = true
 
-    # CastPlayer (без изменений, раунды 13–14): тот же скелет (root_node),
-    # добавлен ПОСЛЕ дерева — пишет поверх. Незатронутые кости (ноги) ведёт FSM.
-    cast_player = AnimationPlayer.new()
-    anim_player.get_parent().add_child(cast_player)
-    cast_player.root_node = anim_player.root_node
-    # Канал Enter→Loop — по СИГНАЛУ: current_animation очищается сразу по
-    # окончании клипа, опросное окно «клип кончился, но имя ещё то» нулевое.
-    cast_player.animation_finished.connect(_on_cast_anim_finished)
-    if USE_UAL_CASTS and ResourceLoader.exists(UAL_CASTS_LIB):
-        var ual = load(UAL_CASTS_LIB)
-        if ual is AnimationLibrary:
-            var clib := AnimationLibrary.new()
-            for anim_name in ual.get_animation_list():
-                if String(anim_name).ends_with("_UB"):
-                    clib.add_animation(anim_name, ual.get_animation(anim_name))
-            for alias in UAL_CAST_ALIASES:
-                var target: String = UAL_CAST_ALIASES[alias] + "_UB"
-                var alias_ub: String = alias + "_UB"
-                if clib.has_animation(target) and not clib.has_animation(alias_ub):
-                    clib.add_animation(alias_ub, clib.get_animation(target))
-            cast_player.add_animation_library("", clib)
-            print("PlayerAnimationComponent: UB-касты на CastPlayer (", clib.get_animation_list().size(), "): ", ", ".join(clib.get_animation_list()))
-        else:
-            print("PlayerAnimationComponent: ", UAL_CASTS_LIB, " не AnimationLibrary")
+    # Процедурный lean/dip/bank (спец 23.11.26): модификатор поверх позы.
+    # preload, НЕ class_name: глобальный кэш классов в headless-запусках без
+    # --import не содержит новый класс.
+    var skel := _find_skeleton(anim_player.get_parent())
+    if skel:
+        var lean_mod: SkeletonModifier3D = preload("res://Graphics/SkeletonLeanModifier.gd").new()
+        skel.add_child(lean_mod)
+        lean_mod.anim_comp = self
+        # Позы пальцев (вердикт спеца): вес 0 = no-op (Mixamo-клипы с родными
+        # пальцами); нейро/UAL-касты ставят вес через set_hand_pose.
+        _hand_mod = preload("res://Graphics/HandPoseModifier3D.gd").new()
+        skel.add_child(_hand_mod)
+        _hand_mod.anim_comp = self
+        # Прицел позвоночником (спец): мягкий pitch/yaw к цели вместо IK.
+        _aim_mod = preload("res://Graphics/AimSpineModifier.gd").new()
+        skel.add_child(_aim_mod)
+        _aim_mod.anim_comp = self
     else:
-        print("PlayerAnimationComponent: UB-библиотека не найдена: ", UAL_CASTS_LIB)
+        print("PlayerAnimationComponent: скелет не найден — lean-модификатор не поставлен")
+
+    # Каст-слой (Ф2.1/2.2): фасад CastAnimationLayer над CastPlayer (тот же
+    # скелет, пишет поверх дерева; ноги ведёт FSM). Enter→Loop внутри слоя.
+    _cast_layer = preload("res://Graphics/CastAnimationLayer.gd").new()
+    add_child(_cast_layer)
+    _cast_layer.setup(anim_player, Callable())
 
     # Старт локомоции через дерево (parameters/playback живёт после
     # первого прохода дерева)
@@ -162,37 +175,28 @@ func _ready():
 func _build_loco_machine() -> AnimationNodeStateMachine:
     var sm := AnimationNodeStateMachine.new()
     _add_anim_node(sm, "Idle", "Idle")
-    _add_anim_node(sm, "Run", "Run")
-    # Стоп после бега (директива юзера 18.11.26): пока бежим — луп без
-    # остановок; остановился — нейро-декель Run_Stop доигрывает в Idle.
-    _add_anim_node(sm, "Stop", "Run_Stop")
-    # Разгон Idle→Run (Q23, автопоток 20.11.26): нейро-клип run_start (60f@30,
-    # темп шагов 0.19→4.70 м/с — зеркален декелю Run_Stop; хвост 4.70 ≈ луп
-    # Run_MB 4.49 → xfade в Run без «пульсации»). AT_END сам уводит в Run.
-    # ИМЯ УЗЛА «Accel», НЕ «Start»: «Start» — встроенный узел входа стейт-машины,
-    # add_node падает («states.has(p_name)»), ребро Idle→Start отвергается
-    # («p_to == Start forbidden») → travel("Start") входил во встроенный узел
-    # нулевой длины и AT_END мгновенно выкидывал в Run = «сразу резко бежит»
-    # (баг-репорт юзера 20.11.26, доказано probe_q23_start.gd).
-    _add_anim_node(sm, "Accel", "Run_Start")
+    # Run = вложенный BlendTree с обычным AnimationNodeAnimation (лупится).
+    # ВАЖНО (23.11.26): AnimationNodeTimeScale в 4.8-beta3 — ПУСТОЙ класс;
+    # замена через use_custom_timeline+stretch_time_scale ЛОМАЕТ ЛУП (клип
+    # играет 1 раз и замирает на последнем кадре — баг «замирает через 1с»).
+    # Поэтому Run играет с постоянной скоростью; темп-скейл отложен.
+    var run_bt := AnimationNodeBlendTree.new()
+    var run_anim := AnimationNodeAnimation.new()
+    run_anim.animation = "Run"
+    run_bt.add_node("run", run_anim, Vector2(0, 100))
+    run_bt.connect_node("output", 0, "run")
+    sm.add_node("Run", run_bt)
     _add_anim_node(sm, "Jump", "Jump_Launch")
     _add_anim_node(sm, "Falling", "Falling")
     _add_anim_node(sm, "Landing", "Landing_Cut")
     _add_anim_node(sm, "FrontFlip", "FrontFlip_Fast")
     # [из, в, xfade, auto_at_end]: ENABLED = переключаем travel()'ом,
     # AUTO+AT_END = дерево доигрывает клип и уходит само.
+    # Гибрид спеца: Run_Start/Run_Stop дропнуты — Idle↔Run крестфейд 0.14 с,
+    # «разгон/торможение» докручивает lean-модификатор, а не клипы.
     var tr := [
-        ["Idle", "Accel", 0.1, false],
-        ["Accel", "Run", 0.1, true],
-        ["Accel", "Stop", 0.15, false],
-        ["Accel", "Jump", 0.1, false],
-        ["Accel", "Falling", 0.25, false],
-        ["Run", "Idle", 0.2, false],
-        ["Run", "Stop", 0.15, false],
-        ["Stop", "Idle", 0.2, true],
-        ["Stop", "Run", 0.1, false],
-        ["Stop", "Jump", 0.1, false],
-        ["Stop", "Falling", 0.25, false],
+        ["Idle", "Run", 0.14, false],
+        ["Run", "Idle", 0.14, false],
         ["Idle", "Jump", 0.1, false],
         ["Run", "Jump", 0.1, false],
         ["Landing", "Jump", 0.1, false],
@@ -223,8 +227,21 @@ func _add_anim_node(sm: AnimationNodeStateMachine, node_name: String, anim: Stri
     var an := AnimationNodeAnimation.new()
     an.animation = anim
     sm.add_node(node_name, an)
-    if node_name == "Run":
-        _run_node = an  # TEMP A/B: F4 переключает Walk_Test/Run
+
+## Позы пальцев для нейро/UAL-каста (SkillDB.hand_pose): preset + вес.
+## weight 0 → возврат к родным пальцам клипа (Mixamo).
+func set_hand_pose(preset: String, w: float) -> void:
+    if _hand_mod:
+        _hand_mod.preset = preset
+        _hand_mod.weight = w
+
+## Прицел позвоночником (спец): точка + окно. Вес вход 0.08/выход 0.20,
+## отдача Spine2 (пружина 0.15с).
+func set_aim(p: Vector3, duration: float) -> void:
+    aim_point = p
+    _aim_timer = maxf(_aim_timer, duration)
+    recoil_amount = 1.0
+    _recoil_vel = 0.0
 
 func _travel(to: String) -> void:
     if _state == to:
@@ -234,6 +251,15 @@ func _travel(to: String) -> void:
     # Ресинк в _process не должен затереть намерение этим же кадром.
     _last_travel_frame = Engine.get_process_frames()
     playback.travel(to)
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+    if node is Skeleton3D:
+        return node
+    for c in node.get_children():
+        var r = _find_skeleton(c)
+        if r:
+            return r
+    return null
 
 ## ── Прыжок (вызов из PlayerController) ──────────────────────────────────
 
@@ -246,90 +272,50 @@ func play_jump(double: bool = false) -> void:
     # без приседа в воздухе).
     _travel("FrontFlip" if double else "Jump")
 
-## ── TEMP A/B (раунд 23): F4 — MotionBricks-ходьба vs старый Run ──────────
-
-func _unhandled_input(event: InputEvent) -> void:
-    if event is InputEventKey and event.pressed and not event.echo \
-            and event.keycode == KEY_F4:
-        _toggle_mb_walk()
-
-func _toggle_mb_walk() -> void:
-    if _run_node == null or anim_player == null \
-            or not anim_player.has_animation("Run_MB"):
-        print("MB-WALK: Run_MB недоступен")
-        return
-    _mb_walk_on = not _mb_walk_on
-    _run_node.animation = "Run_MB" if _mb_walk_on else "Run"
-    print("MB-WALK A/B: ", "MotionBricks-бег (Run_Test)" if _mb_walk_on else "старый Run")
-
-## ── Каст-анимации: верх тела на CastPlayer (всегда UB) ──────────────────
+## ── Каст-анимации: делегация фасаду CastAnimationLayer (Ф2.1/2.2) ────────
 
 func has_cast_anim(anim_name: String) -> bool:
-    return cast_player != null and anim_name != "" \
-            and cast_player.has_animation(anim_name + "_UB")
+    return _cast_layer != null and _cast_layer.has_cast_anim(anim_name)
 
-## Инста-каст: UB-вариант поверх текущего состояния локомоции. capture()
-## блендит из ТЕКУЩЕЙ позы (бег/падение) — без него рывок через rest.
-## Спам/перебивание: play() на уже играющем (даже том же) клипе НЕ рестартует
-## его, а прежний capture-оверлей продолжает писать позу — «прошлая анимация
-## не отменяется» (зонд probe_cast_cancel.gd S1: pos 0.302→0.323). Фикс:
-## чистый stop() → рестарт с нуля, вход из ТЕКУЩЕЙ позы (S3: гладко).
 func play_cast_anim(anim_name: String) -> void:
-    var ub := anim_name + "_UB"
-    if cast_player == null or not cast_player.has_animation(ub):
+    if _cast_layer == null:
         return
-    cast_player.stop()
-    cast_player.play(ub, 0.1)
-    cast_player.capture(ub, 0.1)
+    # СТОЯ (speed<0.2, на полу) → Full-Body (Hips+ноги: шаг/присед, ступни
+    # на полу — ноги не «забетонированы»). БЕГ → UB (только верх тела).
+    var parent = get_parent()
+    var hs := 0.0
+    if parent is CharacterBody3D:
+        hs = Vector2(parent.velocity.x, parent.velocity.z).length()
+        if hs < 0.2 and parent.is_on_floor():
+            _cast_layer.play_full_body(anim_name)
+            return
+    _cast_layer.play_cast_anim(anim_name)
 
-## Длина UB-варианта каст-клипа (окно IK-доводки в SpellCasterComponent).
 func cast_clip_length(anim_name: String) -> float:
-    if cast_player == null or not cast_player.has_animation(anim_name + "_UB"):
+    if _cast_layer == null:
         return 0.0
-    return cast_player.get_animation(anim_name + "_UB").length
+    return _cast_layer.cast_clip_length(anim_name)
 
-## Старт канала: Enter (0.53с) → сигнал сам подхватит Loop. stop() — та же
-## отмена предыдущего каста, что и в play_cast_anim.
 func play_channel() -> void:
-    if not cast_player:
-        return
-    _channel = true
-    for ub in ["Cast_Enter_UB", "Cast_Loop_UB"]:
-        if cast_player.has_animation(ub):
-            cast_player.stop()
-            cast_player.play(ub, 0.1)
-            cast_player.capture(ub, 0.1)
-            break
+    if _cast_layer:
+        _channel = true
+        _cast_layer.play_channel()
 
-## Конец канала: выброс (Cast_Shoot_UB). Локомоция не трогается — ноги жили
-## всё время канала.
 func end_channel() -> void:
-    if not _channel:
-        return
-    _channel = false
-    if cast_player and cast_player.has_animation("Cast_Shoot_UB"):
-        cast_player.stop()
-        cast_player.play("Cast_Shoot_UB", 0.1)
-        cast_player.capture("Cast_Shoot_UB", 0.1)
-
-## Естественное окончание клипа на CastPlayer (loop-клипы сигнал не дают).
-func _on_cast_anim_finished(anim_name: StringName) -> void:
-    # Канал: Enter доиграл → Loop (capture — вход из позы конца Enter,
-    # иначе 0.1с бленд проваливается через rest). Локомоция НЕ замирает.
-    if _channel and String(anim_name) == "Cast_Enter_UB" \
-            and cast_player and cast_player.has_animation("Cast_Loop_UB"):
-        cast_player.play("Cast_Loop_UB", 0.1)
-        cast_player.capture("Cast_Loop_UB", 0.1)
+    if _cast_layer:
+        _channel = false
+        _cast_layer.end_channel()
 
 ## ── FSM локомоции: только решение «какое состояние», перетекания — в дереве
 
-func _process(_delta):
+func _process(delta):
     if playback == null:
         return
 
     var parent = get_parent()
     var speed = Vector2(parent.velocity.x, parent.velocity.z).length()
     var in_air = not parent.is_on_floor()
+    var was_state := _state
 
     # Ресинк намерения: AUTO+AT_END уводит узел дерева без кода. Пока фейд
     # идёт, get_current_node отдаёт ИСТОЧНИК (проверено зондом) — не трогаем;
@@ -373,20 +359,56 @@ func _process(_delta):
     if _state == "Jump" and Engine.get_process_frames() - _last_travel_frame <= 6:
         return
 
+    # Гибрид (спец 23.11.26): порогов и клипов разгона нет — Idle↔Run
+    # крестфейд 0.14 с; «разгон/торможение» докручивает lean-модификатор.
     if speed < 0.001:
-        if _state == "Run" or _state == "Accel":
-            _travel("Stop")  # декель после бега/разгона (директива юзера), AT_END → Idle
-        elif _state != "Stop" and _state != "Idle":
+        if _state != "Idle":
             _travel("Idle")
     else:
-        # В Stop разгонся снова (микродвижение <0.5 м/с остаётся в декеле):
-        # mid-Stop поза уже беговая — прямой Run, без разгона с нуля.
-        if _state == "Stop" and speed > 0.5:
+        if _state != "Run":
             _travel("Run")
-        elif _state == "Idle":
-            _travel("Accel")  # Q23: разгон вместо мгновенного «включения» бега
-        elif _state != "Run" and _state != "Stop" and _state != "Accel":
-            _travel("Run")
+
+    _update_proc_deltas(delta, parent, speed, was_state)
+
+## ── Процедурные дельты: пружины lean/dip, крен, темп Run (спец 23.11.26) ──
+
+func _update_proc_deltas(delta: float, parent: Node, speed: float, was_state: String) -> void:
+    # События старта/стопа: фактическая смена состояния Run↔Idle на земле
+    # (в т.ч. Landing→Run — приземлился в бег).
+    if was_state != _state:
+        if _state == "Run" and (was_state == "Idle" or was_state == "Landing"):
+            _lean_target = LEAN_START_RAD
+            _dip_target = 0.0
+        elif _state == "Idle" and was_state == "Run":
+            _lean_target = -LEAN_STOP_RAD
+            _dip_target = DIP_STOP_M
+    # Цели затухают к нулю, пружины ведут позу (критическое демпфирование).
+    _lean_target = lerpf(_lean_target, 0.0, 1.0 - exp(-delta / 0.3))
+    _dip_target = lerpf(_dip_target, 0.0, 1.0 - exp(-delta / 0.25))
+    var k_l := pow(TAU / 0.25, 2.0)   # lean: период 0.25 с
+    _lean_vel += (k_l * (_lean_target - lean_amount) - 2.0 * sqrt(k_l) * _lean_vel) * delta
+    lean_amount += _lean_vel * delta
+    var k_d := pow(TAU / 0.2, 2.0)    # dip: период 0.2 с
+    _dip_vel += (k_d * (_dip_target - dip_amount) - 2.0 * sqrt(k_d) * _dip_vel) * delta
+    dip_amount += _dip_vel * delta
+    # Крен по скорости рыскания (сглаженная); + = в сторону поворота.
+    var yaw: float = parent.graphics_wrapper.rotation.y
+    var yaw_rate := wrapf(yaw - _prev_yaw, -PI, PI) / maxf(delta, 0.0001)
+    _prev_yaw = yaw
+    _bank_target = clampf(yaw_rate * BANK_RATE, -BANK_MAX_RAD, BANK_MAX_RAD)
+    bank_amount = lerpf(bank_amount, _bank_target, 1.0 - exp(-delta / 0.1))
+    # Прицел позвоночником (спец): вес вход 0.08 / выход 0.20; отдача Spine2
+    # — пружина 0.15с к 0.
+    if _aim_timer > 0.0:
+        _aim_timer -= delta
+        aim_weight = minf(1.0, aim_weight + delta / 0.08)
+    else:
+        aim_weight = maxf(0.0, aim_weight - delta / 0.20)
+    var k_r := pow(TAU / 0.15, 2.0)
+    _recoil_vel += (k_r * (0.0 - recoil_amount) - 2.0 * sqrt(k_r) * _recoil_vel) * delta
+    recoil_amount = maxf(0.0, recoil_amount + _recoil_vel * delta)
+    # Темп Run: постоянная скорость (stretch_time_scale ломал луп — заморозка
+    # на 1с; AnimationNodeTimeScale пуст в 4.8-beta3). Скейл отложен.
 
 ## ── Производные клипы ────────────────────────────────────────────────────
 

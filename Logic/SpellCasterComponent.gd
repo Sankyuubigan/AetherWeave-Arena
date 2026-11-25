@@ -251,9 +251,21 @@ func _aim_context(player: Node, skill_id: String, skill, hand: String) -> Dictio
 func _ik_begin(player: Node, hand: String, skill, duration: float) -> void:
 	if duration <= 0.0:
 		return
+	# Авторазворот к прицелу (спец 23.11.26): корпус доворачивается к цели.
+	var aim := _aim_point(player, skill.max_range)
+	if player.has_method("face_aim_target"):
+		player.face_aim_target(aim, duration)
+	var comp = player.get_node_or_null("PlayerAnimationComponent")
+	if comp != null and comp.has_method("set_aim"):
+		comp.set_aim(aim, duration)  # мягкий прицел позвоночником (AimSpine)
 	var ik := get_node_or_null("CastIK")
 	if ik == null:
 		return
+	# 2-bone IK ТОЛЬКО для физ-контакта в пределах руки (захват троса
+	# ether_tether). Дальние касты/лучи — IK ВЫКЛ: иначе 2-bone выпрямляет
+	# локоть в палку и выворачивает плечо — «кукольные руки» (баг спеца).
+	var sid: String = str(skill.get("id"))
+	ik.ik_mode = "aim_hand" if sid == "ether_tether" else "none"
 	ik.begin(hand, func() -> Vector3: return _aim_point(player, skill.max_range), duration)
 
 ## Лёгкий прицел для IK (без валидации цели и принтов): точка под камерой-рейкастом.

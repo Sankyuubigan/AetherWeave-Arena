@@ -1,4 +1,5 @@
 extends SceneTree
+const HEMI = preload("res://Generators/anim_quat_hemisphere.gd")
 ## Ретаргет каст-анимаций UAL (Unity/UE Mannequin) → mixamorig_ (скин Ch24).
 ## v4 (17.11.26): мировая дельта от T-позы, ПЕРЕЗАРЯЖЕННАЯ через S.
 ## Диагноз v3 (зонд probe_bone_trace/probe_apply_pred): выход v3 был точен
@@ -238,6 +239,13 @@ func _retarget_one(src_path: String, src_anim_name: String, out_name: String, mi
 				if mirror:
 					o = Vector3(-o.x, o.y, o.z)
 				out.track_insert_key(ntr2, t2, o)
+	# Hemisphere continuity (спец 23.11.26): q0→полусфера rest, цепочка
+	# dot<0→negate. Чинит флип 310° (долгая дуга интерполяции кистей).
+	var rest_dict := {}
+	for m in W_data:
+		var xn: String = _mirror_name(BONE_MAP[m]) if mirror else BONE_MAP[m]
+		rest_dict[xn] = W_data[m]["mix"]
+	HEMI.apply(out, rest_dict)
 	root.queue_free()
 	if out.get_track_count() == 0:
 		print("RETARGET FAIL: пустой выход для ", out_name)

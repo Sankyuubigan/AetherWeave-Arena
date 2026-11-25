@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Кандидаты Mixamo — 3D-просмотр (25.11.26)</title>
+<style>
+  body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:#141418;color:#ddd;display:flex;height:100vh;overflow:hidden}
+  #side{width:250px;background:#1e1e24;padding:12px;box-sizing:border-box;overflow-y:auto;border-right:1px solid #333;flex-shrink:0}
+  #side h1{font-size:15px;color:#fff;margin:4px 0 10px}
+  #right{width:320px;background:#1a1a20;padding:12px;box-sizing:border-box;overflow-y:auto;border-left:1px solid #333;flex-shrink:0}
+  #right h2{font-size:14px;color:#fff;margin:4px 0 10px}
+  .grp{color:#8ecdfc;font-size:12px;margin:12px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+  button.sk{display:block;width:100%;text-align:left;background:#2a2a32;color:#cde3ff;border:1px solid #3a3a42;border-radius:4px;padding:6px 9px;margin:3px 0;cursor:pointer;font-size:14px}
+  button.sk:hover{background:#3a3a45}
+  button.sk.act{background:#2e5d8f;color:#fff;border-color:#4a7fbf}
+  button.sk .cur{display:block;color:#9aa;font-size:11px;margin-top:2px}
+  .cand{background:#22242c;border:1px solid #343842;border-radius:6px;padding:8px 10px;margin:4px 0;cursor:pointer;font-size:13px}
+  .cand:hover{border-color:#7fb069}
+  .cand.sel{border-color:#7fb069;background:#2a3324}
+  .cand .cn{font-weight:600;color:#e8e8ea}
+  .cand .nt{color:#9aa;font-size:12px;margin-top:2px;line-height:1.35}
+  .cand .pa{color:#6c8cff;font-size:11px;margin-top:4px;word-break:break-all}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+  .v-ok{background:#7ddc7d}.v-alt{background:#8ecdfc}.v-warn{background:#e0b45c}.v-no{background:#e06c6c}
+  #view{flex:1;position:relative;min-width:0}
+  #canvas{width:100%;height:100%;display:block}
+  #hud{position:absolute;top:10px;left:10px;background:#0009;padding:8px 12px;border-radius:6px;font-size:14px;max-width:80%}
+  #hud code{user-select:all;color:#cde3ff;cursor:pointer;background:#ffffff14;padding:2px 8px;border-radius:4px}
+  #hud code:active{background:#2e7d32}
+  #hud .path2{display:block;margin-top:4px;font-size:12px}
+  #hud .path2 code{color:#ffd9d9}
+  #ctrl{position:absolute;bottom:10px;left:10px;background:#0009;padding:8px 12px;border-radius:6px;font-size:13px}
+  #ctrl button{background:#2a2a32;color:#ddd;border:1px solid #444;border-radius:4px;padding:3px 10px;cursor:pointer}
+  input[type=range]{vertical-align:middle;width:110px}
+  #tip{position:absolute;bottom:10px;right:10px;background:#0009;padding:8px 12px;border-radius:6px;font-size:12px;color:#aaa;text-align:right;line-height:1.5}
+  #loadinfo{color:#999;font-size:12px;margin-top:6px;min-height:15px}
+</style>
+<script type="importmap">
+{"imports":{"three":"../tools/animation_catalog/lib/three.module.min.js"}}
+</script>
+</head>
+<body>
+<div id="side">
+  <h1>Анимации по скиллам</h1>
+  <div id="loadinfo">Загрузка списка…</div>
+  <div id="skills"></div>
+</div>
+<div id="view">
+  <canvas id="canvas"></canvas>
+  <div id="hud">Клип: <code id="cname" title="клик — скопировать">—</code>
+    <span class="path2">Путь: <code id="cpath" title="клик — скопировать">—</code></span></div>
+  <div id="ctrl">
+    <button id="pp">⏸ пауза</button>
+    Скорость <input id="spd" type="range" min="0.25" max="2" step="0.25" value="1"> <span id="spdv">1×</span>
+    <button id="rs" style="margin-left:8px">↺ камера</button>
+  </div>
+  <div id="tip">ЛКМ — вращать · колесо — зум · ПКМ — сдвиг<br>Клик по пути кандидата справа — открыть в центре</div>
+</div>
+<div id="right">
+  <h2>Кандидаты (Mixamo)</h2>
+  <div id="cands"><div style="color:#999;font-size:13px">Выбери скилл слева</div></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from '../tools/animation_catalog/lib/controls/OrbitControls.js';
+import { GLTFLoader } from '../tools/animation_catalog/lib/loaders/GLTFLoader.js';
+import { FBXLoader } from '../tools/animation_catalog/lib/loaders/FBXLoader.js';
+
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x202028);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.15));
+const dl = new THREE.DirectionalLight(0xffffff, 2.0); dl.position.set(3,6,4); scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0x8899ff, 0.7); dl2.position.set(-4,3,-4); scene.add(dl2);
+scene.add(new THREE.GridHelper(20, 20, 0x555566, 0x3a3a45));
+
+const cam = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+const HOME = {pos: new THREE.Vector3(0, 1.4, 4.6), tgt: new THREE.Vector3(0, 0.95, 0)};
+cam.position.copy(HOME.pos);
+const ctl = new OrbitControls(cam, canvas);
+ctl.target.copy(HOME.tgt);
+ctl.enableDamping = true;
+
+function resize(){
+  const w = canvas.clientWidth || canvas.parentElement.clientWidth;
+  const h = canvas.clientHeight || canvas.parentElement.clientHeight;
+  if (w && h){ renderer.setSize(w, h, false); cam.aspect = w/h; cam.updateProjectionMatrix(); }
+}
+window.addEventListener('resize', resize);
+
+let model = null, mixer = null, action = null, playing = true, speed = 1.0;
+let skills = [], curSkill = -1, loadTok = 0;
+const gltfLoader = new GLTFLoader();
+const fbxLoader = new FBXLoader();
+const loadinfo = document.getElementById('loadinfo');
+const cname = document.getElementById('cname');
+const cpath = document.getElementById('cpath');
+
+function candUrl(c){
+  if (c.src === 'glb') return '/tools/candidates_models/' + c.clip + '.glb';
+  if (c.src === 'raw') return '/Graphics/Animations/raw/mixamo/' + c.clip + '.fbx';
+  return '/Graphics/mixamo-lib/fbx/' + c.clip + '.fbx';
+}
+
+// нормализация модели: масштаб к 1.8 м, подошвы на пол, центр в XZ-нуле
+function normalizeModel(m){
+  m.rotation.y = Math.PI;  // GLB-бейк смотрит в −Z — разворачиваем лицом к камере
+  let box = new THREE.Box3().setFromObject(m);
+  let size = new THREE.Vector3(); box.getSize(size);
+  const cs = size.y > 0.001 ? size.y / 1.8 : 1;
+  window.__charScale = cs;
+  m.scale.setScalar(1 / cs);
+  box = new THREE.Box3().setFromObject(m);
+  box.getSize(size);
+  m.position.y -= box.min.y;
+  m.position.x -= (box.min.x + box.max.x) / 2;
+  m.position.z -= (box.min.z + box.max.z) / 2;
+  window.__dbg = { sizeY: +size.y.toFixed(3), minY: +box.min.y.toFixed(3) };
+  ctl.target.y = Math.max(size.y * 0.55, 0.8);
+}
+
+function loadCharacter(names){
+  if (!names.length){ loadinfo.textContent = 'нет скина'; return; }
+  loadinfo.textContent = 'загрузка скина ' + names[0] + '…';
+  gltfLoader.load('/Graphics/mixamo-lib/character_refined_glb/' + names[0] + '.glb', (gltf) => {
+    model = gltf.scene;
+    scene.add(model);
+    normalizeModel(model);
+    mixer = new THREE.AnimationMixer(model);
+    loadinfo.textContent = 'скин ' + names[0] + ' · выбери кандидата справа';
+    if (curSkill >= 0) renderCands(curSkill);
+  }, undefined, () => loadCharacter(names.slice(1)));
+}
+
+function playClip(clip, label){
+  if (action) action.stop();
+  action = mixer.clipAction(clip);
+  action.reset().fadeIn(0.15).play();
+  action.setEffectiveTimeScale(playing ? speed : 0);
+  window.__dbgStop = () => { if (action) action.stop(); mixer.update(0); };
+  cname.textContent = label || clip.name;
+}
+
+function loadCand(skillIdx, candIdx){
+  const c = skills[skillIdx].cands[candIdx];
+  if (!c) return;
+  const tok = ++loadTok;
+  const url = candUrl(c);
+  cname.textContent = 'загрузка…';
+  cpath.textContent = url;
+  const fail = () => { if (tok === loadTok) cname.textContent = 'ошибка загрузки'; };
+  const markSel = () => document.querySelectorAll('.cand').forEach((el, i) => el.classList.toggle('sel', i === candIdx));
+  if (c.src === 'glb'){
+    // как в других каталогах: GLB = меш + анимация в одном файле
+    gltfLoader.load(url, (gltf) => {
+      if (tok !== loadTok) return;
+      if (model) scene.remove(model);
+      model = gltf.scene;
+      scene.add(model);
+      normalizeModel(model);
+      mixer = new THREE.AnimationMixer(model);
+      const clip = gltf.animations && gltf.animations[0];
+      if (!clip){ cname.textContent = 'В GLB НЕТ АНИМАЦИИ'; return; }
+      // Hips.position в GLB — в метрах; модель масштабирована в 1/cs, поэтому
+      // трек домножаем на cs, иначе персонаж «висит над полом вверху».
+      const cs = window.__charScale || 1;
+      if (Math.abs(cs - 1) > 0.001){
+        for (const t of clip.tracks){
+          if (String(t.name).endsWith('Hips.position') && t.values){
+            for (let i = 0; i < t.values.length; i++) t.values[i] *= cs;
+          }
+        }
+      }
+      playClip(clip, c.clip);
+      markSel();
+    }, undefined, fail);
+    return;
+  }
+  if (!mixer) return;
+  fbxLoader.load(url, (fbx) => {
+    if (tok !== loadTok) return;
+    const clip = fbx.animations && fbx.animations[0];
+    if (!clip){ cname.textContent = 'В FBX НЕТ АНИМАЦИИ'; return; }
+    playClip(clip, c.clip);
+    markSel();
+  }, undefined, fail);
+}
+
+function renderCands(skillIdx){
+  curSkill = skillIdx;
+  document.querySelectorAll('button.sk').forEach((b, i) => b.classList.toggle('act', i === skillIdx));
+  const box = document.getElementById('cands');
+  box.innerHTML = '';
+  const sk = skills[skillIdx];
+  if (!sk.cands.length){
+    box.innerHTML = '<div style="color:#999;font-size:13px">Кандидатов нет — текущий клип: ' + sk.current + '</div>';
+    return;
+  }
+  sk.cands.forEach((c, i) => {
+    const d = document.createElement('div');
+    d.className = 'cand';
+    d.innerHTML = '<span class="dot v-' + c.v + '"></span><span class="cn">' + c.clip + '</span>' +
+      '<div class="nt">' + c.note + '</div><div class="pa">' + candUrl(c) + '</div>';
+    d.onclick = () => loadCand(skillIdx, i);
+    box.appendChild(d);
+  });
+  loadCand(skillIdx, 0);
+}
+
+function buildLeft(data){
+  skills = data.skills;
+  const box = document.getElementById('skills');
+  box.innerHTML = '';
+  let phase = '';
+  skills.forEach((sk, i) => {
+    if (sk.phase !== phase){
+      phase = sk.phase;
+      const g = document.createElement('div');
+      g.className = 'grp'; g.textContent = phase;
+      box.appendChild(g);
+    }
+    const b = document.createElement('button');
+    b.className = 'sk';
+    b.innerHTML = sk.name + '<span class="cur">' + sk.current + '</span>';
+    b.onclick = () => renderCands(i);
+    box.appendChild(b);
+  });
+  loadinfo.textContent = skills.length + ' разделов · клибы: ' + skills.reduce((a, s) => a + s.cands.length, 0);
+}
+
+fetch('./candidates.json').then(r => r.json()).then(data => {
+  buildLeft(data);
+  loadCharacter(data.character || []);
+  renderCands(0);
+}).catch(e => { loadinfo.textContent = 'ошибка candidates.json: ' + e; });
+
+document.getElementById('pp').onclick = (e) => {
+  playing = !playing;
+  e.target.textContent = playing ? '⏸ пауза' : '▶ играть';
+  if (action) action.setEffectiveTimeScale(playing ? speed : 0);
+};
+const spd = document.getElementById('spd');
+spd.oninput = () => {
+  speed = parseFloat(spd.value);
+  document.getElementById('spdv').textContent = speed + '×';
+  if (action) action.setEffectiveTimeScale(playing ? speed : 0);
+};
+document.getElementById('rs').onclick = () => {
+  cam.position.copy(HOME.pos); ctl.target.copy(HOME.tgt);
+};
+cname.onclick = () => navigator.clipboard && navigator.clipboard.writeText(cname.textContent);
+cpath.onclick = () => navigator.clipboard && navigator.clipboard.writeText(cpath.textContent);
+
+let last = performance.now();
+function tick(now){
+  requestAnimationFrame(tick);
+  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (mixer) mixer.update(dt);
+  ctl.update();
+  renderer.render(scene, cam);
+  resize();
+}
+requestAnimationFrame(tick);
+resize();
+</script>
+</body>
+</html>

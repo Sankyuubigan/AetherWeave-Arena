@@ -1,4 +1,5 @@
 extends SceneTree
+const HEMI = preload("res://Generators/anim_quat_hemisphere.gd")
 ## Ретаргет НЕЙРО-анимаций kimodo.cpp (SOMA 30 суставов) → mixamorig_ (скин Ch24).
 ## Источник: Graphics/Animations/neuro_soma/<clip>/{root_positions,local_rotations_xyzw}.f32
 ## (frames×3 + frames×30×4, XYZW, локальные, fps=30).
@@ -346,6 +347,14 @@ func _retarget_one(clip_dir: String, out_name: String) -> Animation:
 	else:
 		print("  HIPS OK: y %.2f..%.2f (rest %.2f)" % [hips_lo, hips_hi, hips_rest_y])
 	print("  HANDS: y %.2f..%.2f z %.2f..%.2f" % [hand_lo.y, hand_hi.y, hand_lo.z, hand_hi.z])
+	# Hemisphere continuity (спец 23.11.26): q0→полусфера rest, цепочка
+	# dot<0→negate. Чинит флип 310° кистей.
+	var rest_dict := {}
+	for key in rot_track:
+		var tgt: String = emap.get(key, "")
+		if tgt != "" and rest_local.has(tgt):
+			rest_dict[tgt] = (rest_local[tgt] as Transform3D).basis.get_rotation_quaternion()
+	HEMI.apply(out, rest_dict)
 	return out
 
 ## Глобальный FK SOMA в кадре: G = G_parent · T(offset) · R(q);

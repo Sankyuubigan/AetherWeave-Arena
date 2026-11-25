@@ -1,0 +1,49 @@
+{
+  "character": ["Knight_D_Pelegrini", "Aj", "Claire"],
+  "skills": [
+    {"id":"fireball","phase":"Касты","name":"🔥 Огненный Шар","current":"Throw + Throw_UB (UAL, перелом 54°)","cands":[
+      {"clip":"Standing_1H_Magic_Attack_01","src":"glb","v":"ok","note":"замена Throw: скрутка ±65°, выброс правой руки, без прыжков (пик 0.5–1.5с)"},
+      {"clip":"Standing_1H_Magic_Attack_02","src":"glb","v":"alt","note":"альтернатива 1H"},
+      {"clip":"Standing_1H_Magic_Attack_03","src":"glb","v":"alt","note":"альтернатива 1H"}]},
+    {"id":"beam","phase":"Касты","name":"🔦 Луч","current":"Cast_Shoot (UAL)","cands":[
+      {"clip":"Standing_1H_Magic_Attack_01","src":"glb","v":"ok","note":"та же замена, что фаербол"},
+      {"clip":"Standing_1H_Cast_Spell_01","src":"glb","v":"alt","note":"подъём руки + удержание"}]},
+    {"id":"ball_lightning","phase":"Касты","name":"🔮 Шаровая Молния","current":"Cast_Shoot (UAL)","cands":[
+      {"clip":"Standing_1H_Magic_Attack_02","src":"glb","v":"alt","note":"альтернатива"},
+      {"clip":"Standing_1H_Magic_Attack_03","src":"glb","v":"alt","note":"альтернатива"}]},
+    {"id":"thunderclap","phase":"Касты","name":"⚡ Громовой раскат","current":"канал Cast_Enter→Loop→Shoot (UAL)","cands":[
+      {"clip":"Two_Hand_Spell_Casting","src":"glb","v":"ok","note":"обе руки вверх, выброс (пик ~0.5–1с), есть прыжок"},
+      {"clip":"Standing_2H_Cast_Spell_01","src":"glb","v":"alt","note":"канал: подъём рук → присед → руки над головой (уже в Magic Pack)"},
+      {"clip":"Standing_2H_Magic_Area_Attack_01","src":"glb","v":"alt","note":"AoE-замах (уже в Magic Pack)"}]},
+    {"id":"meteor","phase":"Касты","name":"☄️ Огненный Метеорит","current":"канал 2с (UAL)","cands":[
+      {"clip":"Standing_2H_Magic_Area_Attack_01","src":"glb","v":"ok","note":"двуручный AoE-замах (уже в Magic Pack)"},
+      {"clip":"Standing_2H_Magic_Area_Attack_02","src":"glb","v":"alt","note":"альтернатива AoE"},
+      {"clip":"Two_Hand_Spell_Casting","src":"glb","v":"alt","note":"обе руки вверх (есть прыжок)"}]},
+    {"id":"heart_heal","phase":"Касты","name":"💖 Сердечко","current":"Heart_Cast (UAL склейка)","cands":[
+      {"clip":"Magic_Heal","src":"glb","v":"warn","note":"не проверен vision — глянь сам"}]},
+    {"id":"energy_blade","phase":"Касты","name":"🗡 Энергетический клинок","current":"Blade_Swing_A (НАША нейро) + Throw (UAL)","cands":[]},
+    {"id":"wings","phase":"Касты","name":"🕊 Крылья ускорения","current":"жест Cast_Enter; Flying не подключён","cands":[
+      {"clip":"Flying","src":"glb","v":"warn","note":"чистый луп, но «парашют» — падение на спине; fallback с VFX крыльев"}]},
+    {"id":"ether_tether","phase":"Касты","name":"🕸 Эфирный захват","current":"Cast_Shoot + физика (трос)","cands":[
+      {"clip":"Hanging_Idle_2","src":"glb","v":"ok","note":"вис-луп (руки вверх, статичный)"},
+      {"clip":"Rope_Swinging","src":"glb","v":"ok","note":"маятник-свинг 4.5с (не луп)"},
+      {"clip":"Climbing_A_Rope","src":"glb","v":"ok","note":"рывок-зип (не луп)"},
+      {"clip":"Hanging_Idle","src":"glb","v":"alt","note":"вис, длиннее (4.7с)"},
+      {"clip":"Climbing_Ladder","src":"glb","v":"alt","note":"лазание по лестнице"}]},
+    {"id":"mana_concentration","phase":"Стойки","name":"✨ Концентрация маны","current":"— (станс)","cands":[
+      {"clip":"Standing_Idle","src":"glb","v":"alt","note":"idle-луп для стойки (уже в Magic Pack)"}]},
+    {"id":"bard_flow","phase":"Стойки","name":"🎵 Поток Гармонии","current":"— (гитары нет)","cands":[
+      {"clip":"Guitar_Playing_2","src":"glb","v":"ok","note":"== твой Guitar Playing2.fbx: руки перед корпусом, луп"},
+      {"clip":"Guitar_Playing","src":"glb","v":"no","note":"танец, инструмента нет (твой Guitar Playing1 — такой же)"},
+      {"clip":"Playing_Drums","src":"glb","v":"alt","note":"барабаны, сидя"}]},
+    {"id":"bard_groove","phase":"Стойки","name":"🎶 Пульс Битвы","current":"— (гитары нет)","cands":[
+      {"clip":"Guitar_Playing_2","src":"glb","v":"ok","note":"тот же гитарный луп"},
+      {"clip":"Playing_Drums","src":"glb","v":"alt","note":"барабаны, сидя"}]},
+    {"id":"portals","phase":"Касты","name":"🌀 Порталы / v2","current":"— (ВФХ, анимация не нужна)","cands":[]},
+    {"id":"teleport","phase":"Касты","name":"🌌 Телепорт / 🏃 Двойной прыжок","current":"блинк / движок","cands":[]},
+    {"id":"enemies_melee","phase":"Враги","name":"👹 Враги ада — мили","current":"Sword_* (UAL, уже в проекте)","cands":[
+      {"clip":"Sword_And_Shield_Attack","src":"glb","v":"alt","note":"меч+щит, разворот (не проверен)"},
+      {"clip":"Sword_And_Shield_Attack_2","src":"glb","v":"alt","note":"прыжок с мечами"},
+      {"clip":"Great_Sword_Slide_Attack","src":"glb","v":"alt","note":"двуручник, подкат"}]}
+  ]
+}

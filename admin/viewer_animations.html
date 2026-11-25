@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Анимации — единый 3D-каталог (25.11.26)</title>
+<style>
+  body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:#141418;color:#ddd;display:flex;height:100vh;overflow:hidden}
+  #side{width:300px;background:#1e1e24;padding:10px;box-sizing:border-box;overflow-y:auto;border-right:1px solid #333;flex-shrink:0;display:flex;flex-direction:column}
+  #side h1{font-size:15px;color:#fff;margin:2px 0 8px}
+  #filter{width:100%;background:#2a2a32;color:#eee;border:1px solid #444;border-radius:4px;padding:6px 8px;font-size:13px;margin-bottom:8px;box-sizing:border-box}
+  .grp{color:#8ecdfc;font-size:12px;margin:10px 0 3px;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;user-select:none}
+  .grp .cnt{color:#6c8cff;font-weight:400;text-transform:none;letter-spacing:0}
+  button.clip{display:block;width:100%;text-align:left;background:#2a2a32;color:#cde3ff;border:1px solid #3a3a42;border-radius:4px;padding:4px 8px;margin:2px 0;cursor:pointer;font-size:12px;word-break:break-all}
+  button.clip:hover{background:#3a3a45}
+  button.clip.act{background:#2e5d8f;color:#fff;border-color:#4a7fbf}
+  button.clip.no{color:#777;cursor:not-allowed}
+  button.clip.hidden{display:none}
+  #view{flex:1;position:relative;min-width:0}
+  #canvas{width:100%;height:100%;display:block}
+  #hud{position:absolute;top:10px;left:10px;background:#0009;padding:8px 12px;border-radius:6px;font-size:14px;max-width:80%}
+  #hud code{user-select:all;color:#cde3ff;cursor:pointer;background:#ffffff14;padding:2px 8px;border-radius:4px}
+  #hud code:active{background:#2e7d32}
+  #hud .path2{display:block;margin-top:4px;font-size:12px}
+  #hud .path2 code{color:#ffd9d9}
+  #ctrl{position:absolute;bottom:10px;left:10px;background:#0009;padding:8px 12px;border-radius:6px;font-size:13px}
+  #ctrl button{background:#2a2a32;color:#ddd;border:1px solid #444;border-radius:4px;padding:3px 10px;cursor:pointer}
+  input[type=range]{vertical-align:middle;width:110px}
+  #tip{position:absolute;bottom:10px;right:10px;background:#0009;padding:8px 12px;border-radius:6px;font-size:12px;color:#aaa;text-align:right;line-height:1.5}
+  #right{width:320px;background:#1a1a20;padding:10px;box-sizing:border-box;overflow-y:auto;border-left:1px solid #333;flex-shrink:0}
+  #right h2{font-size:14px;color:#fff;margin:2px 0 8px}
+  .grp2{color:#8ecdfc;font-size:12px;margin:10px 0 3px;text-transform:uppercase;letter-spacing:.5px}
+  button.sk{display:block;width:100%;text-align:left;background:#2a2a32;color:#cde3ff;border:1px solid #3a3a42;border-radius:4px;padding:5px 9px;margin:3px 0;cursor:pointer;font-size:13px}
+  button.sk:hover{background:#3a3a45}
+  button.sk.act{background:#2e5d8f;color:#fff;border-color:#4a7fbf}
+  button.sk .cur{display:block;color:#9aa;font-size:11px;margin-top:2px}
+  .cand{background:#22242c;border:1px solid #343842;border-radius:6px;padding:7px 9px;margin:4px 0;cursor:pointer;font-size:13px}
+  .cand:hover{border-color:#7fb069}
+  .cand.sel{border-color:#7fb069;background:#2a3324}
+  .cand .cn{font-weight:600;color:#e8e8ea}
+  .cand .nt{color:#9aa;font-size:12px;margin-top:2px;line-height:1.35}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+  .v-ok{background:#7ddc7d}.v-alt{background:#8ecdfc}.v-warn{background:#e0b45c}.v-no{background:#e06c6c}
+  #loadinfo{color:#999;font-size:12px;margin-bottom:6px;min-height:15px}
+</style>
+<script type="importmap">
+{"imports":{"three":"../tools/animation_catalog/lib/three.module.min.js"}}
+</script>
+</head>
+<body>
+<div id="side">
+  <h1>Анимации — каталог</h1>
+  <input id="filter" placeholder="фильтр по имени клипа…">
+  <div id="loadinfo">Загрузка каталога…</div>
+  <div id="catalog"></div>
+</div>
+<div id="view">
+  <canvas id="canvas"></canvas>
+  <div id="hud">Клип: <code id="cname" title="клик — скопировать">—</code>
+    <span class="path2">Путь: <code id="cpath" title="клик — скопировать">—</code></span></div>
+  <div id="ctrl">
+    <button id="pp">⏸ пауза</button>
+    Скорость <input id="spd" type="range" min="0.25" max="2" step="0.25" value="1"> <span id="spdv">1×</span>
+    <button id="rs" style="margin-left:8px">↺ камера</button>
+  </div>
+  <div id="tip">ЛКМ — вращать · колесо — зум · ПКМ — сдвиг<br>Клик по кандидату справа — выбрать пункт слева и открыть в центре</div>
+</div>
+<div id="right">
+  <h2>Скиллы → кандидаты</h2>
+  <div id="skills"><div style="color:#999;font-size:13px">Загрузка…</div></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from '../tools/animation_catalog/lib/controls/OrbitControls.js';
+import { GLTFLoader } from '../tools/animation_catalog/lib/loaders/GLTFLoader.js';
+import { FBXLoader } from '../tools/animation_catalog/lib/loaders/FBXLoader.js';
+import { buildAvatarClip, captureRest } from './anim_retarget.js';
+
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x202028);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.15));
+const dl = new THREE.DirectionalLight(0xffffff, 2.0); dl.position.set(3,6,4); scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0x8899ff, 0.7); dl2.position.set(-4,3,-4); scene.add(dl2);
+scene.add(new THREE.GridHelper(20, 20, 0x555566, 0x3a3a45));
+
+const cam = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+const HOME = {pos: new THREE.Vector3(0, 1.4, 4.6), tgt: new THREE.Vector3(0, 0.95, 0)};
+cam.position.copy(HOME.pos);
+const ctl = new OrbitControls(cam, canvas);
+ctl.target.copy(HOME.tgt);
+ctl.enableDamping = true;
+
+function resize(){
+  const w = canvas.clientWidth || canvas.parentElement.clientWidth;
+  const h = canvas.clientHeight || canvas.parentElement.clientHeight;
+  if (w && h){ renderer.setSize(w, h, false); cam.aspect = w/h; cam.updateProjectionMatrix(); }
+}
+window.addEventListener('resize', resize);
+
+let model = null, mixer = null, action = null, playing = true, speed = 1.0, loadTok = 0, curClip = null;
+const gltfLoader = new GLTFLoader();
+const fbxLoader = new FBXLoader();
+const loadinfo = document.getElementById('loadinfo');
+const cname = document.getElementById('cname');
+const cpath = document.getElementById('cpath');
+// registry: url -> {el, group} для связи «кандидат справа → пункт слева»
+const byUrl = new Map();
+
+// --- Приведение модели к сцене -------------------------------------------------
+// ВАЖНО: renderer.render() каждый кадр обновляет и matrixWorld, и skeleton.boneMatrices.
+// Если замерить Box3 сразу после load(), кости ещё «пустые»: SkinnedMesh.computeBoundingBox
+// считает по boneInverses → бокс 0.43 м вместо 2.07 м, масштаб уезжает в 4.2× (гигант).
+// Второй капкан: Box3.setFromObject(obj) по умолчанию берёт КЭШ SkinnedMesh.boundingBox,
+// поэтому повторный замер видел тот же мусор. Ниже — syncSkeletons() + precise-бокс.
+function syncSkeletons(root){
+  root.updateMatrixWorld(true);
+  root.traverse(o => { if (o.isSkinnedMesh && o.skeleton) o.skeleton.update(); });
+}
+function skinnedBox(root){
+  root.traverse(o => { if (o.isSkinnedMesh){ o.boundingBox = null; o.boundingSphere = null; } });
+  return new THREE.Box3().setFromObject(root, true);
+}
+// Масштаб модели к 1.8 м + подошвы на пол + центр в XZ-нуле (Hips-трек не трогаем).
+function normalizeModel(m){
+  m.rotation.y = Math.PI;
+  syncSkeletons(m);
+  let box = skinnedBox(m);
+  let size = new THREE.Vector3(); box.getSize(size);
+  const cs = size.y > 0.001 ? size.y / 1.8 : 1;
+  window.__charScale = cs;
+  m.scale.setScalar(1 / cs);
+  syncSkeletons(m);
+  box = skinnedBox(m);
+  box.getSize(size);
+  m.position.y -= box.min.y;
+  m.position.x -= (box.min.x + box.max.x) / 2;
+  m.position.z -= (box.min.z + box.max.z) / 2;
+  ctl.target.y = Math.max(size.y * 0.55, 0.8);
+  window.__dbg = { sizeY:+size.y.toFixed(3), minY:+box.min.y.toFixed(3), cs:+cs.toFixed(4),
+                   posY:+m.position.y.toFixed(3), tgtY:+ctl.target.y.toFixed(3) };
+}
+
+function clearModel(){
+  if (model){ scene.remove(model); model = null; }
+  // аватар тоже убираем из сцены при переходе на self-contained модель
+  if (avatar){ scene.remove(avatar); avatar = null; avatarMixer = null; avatarRest = null; avatarClip = null; }
+  mixer = null; action = null; curClip = null;
+}
+
+// Аватар для animation-only FBX (mixamo-lib/fbx — без меша, только клип).
+// Грузим один раз, вешаем FBX-клип на его скелет (как старый candidates-вьюер).
+const AVATAR_URL = '/Graphics/mixamo-lib/character_refined_glb/Knight_D_Pelegrini.glb';
+let avatar = null, avatarMixer = null, avatarLoading = null, avatarRest = null, avatarClip = null;
+function ensureAvatar(cb){
+  if (avatar){ cb(); return; }
+  if (avatarLoading){ avatarLoading.push(cb); return; }
+  avatarLoading = [cb];
+  gltfLoader.load(AVATAR_URL, (gltf) => {
+    avatar = gltf.scene; scene.add(avatar); normalizeModel(avatar);
+    // normalizeModel развернул аватар на PI (для GLB-кандидатов это верно),
+    // но FBX-клип несёт свой поворот корня → двойной разворот = спина к камере.
+    // Аватар используется ТОЛЬКО под FBX, поэтому снимаем PI.
+    avatar.rotation.y = 0;
+    avatarRest = captureRest(avatar);   // rest-позы костей аватара нужны ретаргету
+    avatarMixer = new THREE.AnimationMixer(avatar);
+    const cbs = avatarLoading; avatarLoading = null; cbs.forEach(f => f());
+  }, undefined, () => { cname.textContent = 'ошибка загрузки аватара'; avatarLoading = null; });
+}
+// FBX — animation-only (меша нет): играем клип на аватаре. Сырые кватернионы FBX
+// писать нельзя — rest-позы ригов разные (см. admin/anim_retarget.js).
+function playOnAvatar(clip, label, srcRoot){
+  if (action) action.stop();
+  const rtClip = buildAvatarClip(clip, srcRoot, avatar, avatarRest);
+  if (!rtClip){ cname.textContent = 'ретаргет не удался (кости не совпали)'; return; }
+  if (avatarClip) avatarMixer.uncacheClip(avatarClip);
+  avatarClip = rtClip;
+  action = avatarMixer.clipAction(rtClip);
+  action.reset().fadeIn(0.15).play();
+  action.setEffectiveTimeScale(playing ? speed : 0);
+  cname.textContent = label;
+  curClip = rtClip;
+  groundAnimatedPose(avatar, avatarMixer, action, rtClip);
+}
+
+function playClip(clip, label){
+  if (!mixer || !clip) return;
+  if (action) action.stop();
+  action = mixer.clipAction(clip);
+  action.reset().fadeIn(0.15).play();
+  action.setEffectiveTimeScale(playing ? speed : 0);
+  curClip = clip;
+  cname.textContent = label || clip.name;
+}
+
+// Пол по РЕАЛЬНОЙ анимированной позе. bind-поза врёт (клип уводит корень ниже нуля),
+// а fadeIn(0.15) при t=0 даёт вес 0 — поэтому прежний замер «видел» bind-позу и ничего
+// не исправлял. Теперь: полный вес, прогон N кадров клипа, берём самую низкую точку.
+function groundAnimatedPose(root, mx, act, clip){
+  if (!root || !mx || !act || !clip) return;
+  act.setEffectiveWeight(1);
+  let minY = Infinity;
+  const N = 8;
+  for (let i = 0; i < N; i++){
+    act.time = clip.duration * i / N;
+    mx.update(0);
+    syncSkeletons(root);
+    const b = skinnedBox(root);
+    if (!b.isEmpty() && isFinite(b.min.y)) minY = Math.min(minY, b.min.y);
+  }
+  if (isFinite(minY)) root.position.y -= minY;
+  act.reset().fadeIn(0.15).play();
+  act.setEffectiveTimeScale(playing ? speed : 0);
+  if (window.__dbg) window.__dbg.groundY = +root.position.y.toFixed(3);
+}
+
+// загрузка пункта каталога по url. kind: glb | fbx | glblib | none
+function loadUrl(url, name, kind, tok){
+  cpath.textContent = url;
+  if (kind === 'none'){ cname.textContent = 'нет браузер-превью (.f32)'; clearModel(); return; }
+  cname.textContent = 'загрузка…';
+  const fail = () => { if (tok === loadTok) cname.textContent = 'ошибка загрузки'; };
+  if (kind === 'fbx'){
+    fbxLoader.load(url, (fbx) => {
+      if (tok !== loadTok) return;
+      const clip = fbx.animations && fbx.animations[0];
+      if (!clip){ cname.textContent = 'В FBX НЕТ АНИМАЦИИ'; return; }
+      // есть ли меш? Box3 по сцене. Пусто → animation-only FBX → аватар.
+      let box = new THREE.Box3().setFromObject(fbx);
+      const hasMesh = !box.isEmpty();
+      if (hasMesh){
+        clearModel();
+        model = fbx; scene.add(model); normalizeModel(model);
+        mixer = new THREE.AnimationMixer(model);
+        playClip(clip, name);
+        groundAnimatedPose(model, mixer, action, curClip);
+      } else {
+        // прячем прежнюю модель, грузим аватар и вешаем клип (с ретаргетом)
+        if (model){ scene.remove(model); model = null; }
+        mixer = null; action = null;
+        ensureAvatar(() => { if (tok === loadTok) playOnAvatar(clip, name + '  (на аватаре)', fbx); });
+      }
+    }, undefined, fail);
+    return;
+  }
+  // glb / glblib: GLB = меш + анимация(и) в одном файле
+  gltfLoader.load(url, (gltf) => {
+    if (tok !== loadTok) return;
+    clearModel();
+    model = gltf.scene; scene.add(model); normalizeModel(model);
+    mixer = new THREE.AnimationMixer(model);
+    const clips = gltf.animations || [];
+    if (!clips.length){ cname.textContent = 'В GLB НЕТ АНИМАЦИИ'; return; }
+    playClip(clips[0], name + (clips.length > 1 ? '  (' + clips.length + ' клипов, играет 1-й)' : ''));
+    groundAnimatedPose(model, mixer, action, curClip);
+  }, undefined, fail);
+}
+
+// выбрать пункт слева по url (связь кандидат→каталог)
+function selectLeftByUrl(url){
+  const rec = byUrl.get(url);
+  if (!rec) return false;
+  document.querySelectorAll('button.clip').forEach(b => b.classList.remove('act'));
+  rec.el.classList.add('act');
+  rec.el.scrollIntoView({block:'nearest'});
+  return true;
+}
+
+function buildCatalog(data){
+  const box = document.getElementById('catalog');
+  box.innerHTML = '';
+  let total = 0;
+  data.groups.forEach(g => {
+    const grp = document.createElement('div');
+    grp.className = 'grp';
+    grp.innerHTML = g.name + ' <span class="cnt">(' + g.items.length + ')</span>';
+    box.appendChild(grp);
+    g.items.forEach(it => {
+      const kind = it.url.endsWith('.glb') ? (g.id === 'ual' ? 'glblib' : 'glb')
+                 : it.url.endsWith('.fbx') ? 'fbx' : 'none';
+      const b = document.createElement('button');
+      b.className = 'clip' + (it.preview ? '' : ' no');
+      b.textContent = it.name;
+      b.dataset.q = it.name.toLowerCase();
+      if (it.preview){
+        b.onclick = () => { const tok = ++loadTok; selectLeftByUrl(it.url); loadUrl(it.url, it.name, kind, tok); };
+      } else {
+        b.title = 'нет браузер-превью';
+      }
+      box.appendChild(b);
+      byUrl.set(it.url, {el:b, group:g.id});
+      total++;
+    });
+  });
+  loadinfo.textContent = 'клипов: ' + total + ' · клик слева или кандидат справа';
+}
+
+function buildRight(data){
+  const skills = data.skills || [];
+  const box = document.getElementById('skills');
+  box.innerHTML = '';
+  let phase = '';
+  skills.forEach(sk => {
+    if (sk.phase !== phase){
+      phase = sk.phase;
+      const g = document.createElement('div');
+      g.className = 'grp2'; g.textContent = phase;
+      box.appendChild(g);
+    }
+    const b = document.createElement('button');
+    b.className = 'sk';
+    b.innerHTML = sk.name + '<span class="cur">' + sk.current + '</span>';
+    box.appendChild(b);
+    (sk.cands || []).forEach(c => {
+      const url = candUrl(c);
+      const d = document.createElement('div');
+      d.className = 'cand';
+      d.dataset.url = url;
+      d.innerHTML = '<span class="dot v-' + (c.v||'alt') + '"></span><span class="cn">' + c.clip + '</span>' +
+        '<div class="nt">' + (c.note||'') + '</div>';
+      d.onclick = () => {
+        document.querySelectorAll('.cand').forEach(x => x.classList.remove('sel'));
+        d.classList.add('sel');
+        const tok = ++loadTok;
+        const kind = url.endsWith('.glb') ? 'glb' : 'fbx';
+        // 1) выбрать пункт слева; 2) загрузить в центр
+        const ok = selectLeftByUrl(url);
+        loadUrl(url, c.clip, kind, tok);
+        if (!ok) cpath.textContent = url + '  (нет в каталоге слева)';
+      };
+      box.appendChild(d);
+    });
+  });
+}
+
+function candUrl(c){
+  if (c.src === 'glb') return '/tools/candidates_models/' + c.clip + '.glb';
+  if (c.src === 'raw') return '/Graphics/Animations/raw/mixamo/' + c.clip + '.fbx';
+  return '/Graphics/mixamo-lib/fbx/' + c.clip + '.fbx';
+}
+
+// фильтр слева
+document.getElementById('filter').oninput = (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('button.clip').forEach(b => {
+    b.classList.toggle('hidden', q && !b.dataset.q.includes(q));
+  });
+};
+
+Promise.all([
+  fetch('/anim/api/list').then(r => r.json()),
+  fetch('./candidates.json').then(r => r.json()),
+]).then(([cat, cand]) => {
+  buildCatalog(cat);
+  buildRight(cand);
+  // авто-выбор первого кандидата первого скилла
+  const first = document.querySelector('.cand');
+  if (first) first.click();
+}).catch(e => { loadinfo.textContent = 'ошибка загрузки: ' + e; });
+
+document.getElementById('pp').onclick = (e) => {
+  playing = !playing;
+  e.target.textContent = playing ? '⏸ пауза' : '▶ играть';
+  if (action) action.setEffectiveTimeScale(playing ? speed : 0);
+};
+const spd = document.getElementById('spd');
+spd.oninput = () => {
+  speed = parseFloat(spd.value);
+  document.getElementById('spdv').textContent = speed + '×';
+  if (action) action.setEffectiveTimeScale(playing ? speed : 0);
+};
+document.getElementById('rs').onclick = () => { cam.position.copy(HOME.pos); ctl.target.copy(HOME.tgt); };
+cname.onclick = () => navigator.clipboard && navigator.clipboard.writeText(cname.textContent);
+cpath.onclick = () => navigator.clipboard && navigator.clipboard.writeText(cpath.textContent);
+
+let last = performance.now();
+function tick(now){
+  requestAnimationFrame(tick);
+  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (mixer) mixer.update(dt);
+  if (avatarMixer && !mixer) avatarMixer.update(dt);
+  ctl.update();
+  renderer.render(scene, cam);
+  resize();
+}
+requestAnimationFrame(tick);
+resize();
+</script>
+</body>
+</html>

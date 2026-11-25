@@ -1,8 +1,11 @@
 extends SceneTree
-## Бейк UB-вариантов каст-клипов (режим «всегда UB», вердикт юзера 17.11.26):
-## для КАЖДОГО клипа ual_casts_test.res строит <Имя>_UB, в котором сняты
-## ротации ног и позиция Hips — каст играет только верх тела, ноги всегда
-## ведёт локомоция (лейеринг вторым AnimationPlayer, как Unreal Slots).
+const HEMI = preload("res://Generators/anim_quat_hemisphere.gd")
+## Бейк UB-вариантов каст-клипов (вердикт спеца 23.11.26):
+## для КАЖДОГО клипа ual_casts_test.res строит <Имя>_UB: сняты ротации 8 ног,
+## ПОЗИЦИЯ и РОТАЦИЯ Hips — железное правило спеца «Hips НИКОГДА в upper-body»
+## (до этого Hips-ротация крутила таз до 56° и уносила ноги, отчёт спецу §7).
+## Тазовая дельта переносится в Spine (Hip-to-Spine Transfer) — замах корпуса
+## сохраняется, ноги всегда ведёт локомоция.
 ##
 ## Хвост 0.2 с «возврат к позе Idle» — только завершающим клипам: при
 ## остановке CastPlayer верх мгновенно = поза локомоции (кросс-миксерного
@@ -28,6 +31,15 @@ const LEG_BONES := [
 	"mixamorig_LeftFoot", "mixamorig_RightFoot",
 	"mixamorig_LeftToeBase", "mixamorig_RightToeBase",
 ]
+const HIPS := "mixamorig_Hips"
+## В UAL-клипах нет mixamorig_Spine — риг Hips → Spine1 → Spine2 → Neck,
+## перенос идёт в ближайшую к тазу кость Spine1 (по вердикту спеца «Spine»).
+const SPINE := "mixamorig_Spine1"
+## Доля тазовой дельты, переносимой в Spine (спец: 70% yaw, 35% pitch/roll,
+## итоговый угол жёстко клампится ≤35°).
+const YAW_KEEP := 0.7
+const PITCH_ROLL_KEEP := 0.35
+const MAX_TRANSFER_DEG := 35.0
 
 func _init() -> void:
 	call_deferred("_run")
@@ -38,9 +50,9 @@ func _run() -> void:
 		print("UB FAIL: нет библиотеки ", LIB_PATH)
 		quit(1)
 		return
-	var idle: Animation = await _load_idle()
-	if idle == null:
-		print("UB FAIL: нет клипа Idle в ", PLAYER_SCENE)
+	var skin = await _load_skin()
+	if skin.is_empty() or skin.idle == null:
+		print("UB FAIL: не загрузился player.tscn (Idle/скелет)")
 		quit(1)
 		return
 
@@ -51,9 +63,9 @@ func _run() -> void:
 		if base.ends_with("_UB"):
 			continue
 		var src: Animation = lib.get_animation(anim_name)
-		var ub := _make_ub(src, idle, base in TAIL_CLIPS)
+		var ub := _make_ub(src, skin, base in TAIL_CLIPS)
 		ub.resource_name = base + "_UB"
-		if not _selfcheck(src, ub):
+		if not _selfcheck(src, ub, skin):
 			print("UB FAIL: самопроверка не сошлась на ", ub.resource_name)
 			quit(1)
 			return
@@ -66,19 +78,22 @@ func _run() -> void:
 	print("UB SAVE err=%d построено=%d всего клипов=%d" % [err, built, lib.get_animation_list().size()])
 	quit(0 if err == OK else 1)
 
-## UB-вариант: копируем все треки кроме ротаций ног и позиции Hips;
-## завершающим клипам добавляем хвост «верх → поза Idle».
-func _make_ub(src: Animation, idle: Animation, with_tail: bool) -> Animation:
+## UB-вариант: копируем треки кроме ног/Hips; Spine несёт перенесённую тазовую
+## дельту; завершающим клипам добавляем хвост «верх → поза Idle».
+func _make_ub(src: Animation, skin: Dictionary, with_tail: bool) -> Animation:
 	var out := Animation.new()
 	out.length = src.length + (TAIL if with_tail else 0.0)
 	out.loop_mode = src.loop_mode
+	# Hip-to-Spine Transfer УДАЛЁН (23.11.26): перенос таза в Spine1 ломал
+	# спину под 90° (Spine1 yaw 100° pitch 65° вместо 12/12 в Full-Body).
+	# UB = только верх тела: Hips/ноги стрипаются, Spine остаётся как в клипе.
 	for i in src.get_track_count():
 		var t := src.track_get_type(i)
 		var path := String(src.track_get_path(i))
 		var bone := path.substr(path.rfind(":") + 1)
 		if bone in LEG_BONES and t == Animation.TYPE_ROTATION_3D:
 			continue
-		if bone == "mixamorig_Hips" and t == Animation.TYPE_POSITION_3D:
+		if bone == HIPS:
 			continue
 		var ni := out.add_track(t)
 		out.track_set_path(ni, src.track_get_path(i))
@@ -86,10 +101,23 @@ func _make_ub(src: Animation, idle: Animation, with_tail: bool) -> Animation:
 		for k in src.track_get_key_count(i):
 			out.track_insert_key(ni, src.track_get_key_time(i, k), src.track_get_key_value(i, k))
 		if with_tail and t == Animation.TYPE_ROTATION_3D:
-			var idle_q = _idle_rot(idle, src.track_get_path(i))
+			var idle_q = _idle_rot(skin.idle, src.track_get_path(i))
 			if idle_q != null:
 				out.track_insert_key(ni, out.length, idle_q)
+	HEMI.apply(out)
 	return out
+
+## Кламп переноса: 70% yaw / 35% pitch/roll (Euler YXZ), затем общий угол ≤35°.
+func _clamp_transfer(delta_q: Quaternion) -> Quaternion:
+	var e := Basis(delta_q).get_euler()  # YXZ по умолчанию: y=yaw, x=pitch, z=roll
+	e.y *= YAW_KEEP
+	e.x *= PITCH_ROLL_KEEP
+	e.z *= PITCH_ROLL_KEEP
+	var q := Quaternion.from_euler(e)
+	var ang := absf(q.get_angle())
+	if ang > deg_to_rad(MAX_TRANSFER_DEG):
+		q = Quaternion(q.get_axis(), deg_to_rad(MAX_TRANSFER_DEG) * signf(q.get_angle()))
+	return q
 
 ## Ротация кости в позе Idle (t=0) для хвоста возврата; null — если трека нет.
 func _idle_rot(idle: Animation, path: String):
@@ -100,15 +128,28 @@ func _idle_rot(idle: Animation, path: String):
 			return idle.rotation_track_interpolate(i, 0.0)
 	return null
 
-## Самопроверка: в пределах исходной длины UB обязан совпадать с исходником
-## на сохранённых треках (дельта ключей + интерполяция в середине клипа).
-func _selfcheck(src: Animation, ub: Animation) -> bool:
+## Самопроверка: UB не содержит ни одного трека Hips/ног (железное правило);
+## Spine = формула переноса с клампом; прочие треки совпадают с исходником
+## ключ-в-ключ.
+func _selfcheck(src: Animation, ub: Animation, skin: Dictionary) -> bool:
+	# 1) В UB нет Hips (pos/rot) и ног (rot) — вообще ни одного трека.
+	for i in ub.get_track_count():
+		var t0 := ub.track_get_type(i)
+		var bone0 := _bone_of(ub.track_get_path(i))
+		if bone0 == HIPS:
+			print("UB SELFCHECK: Hips-трек просочился в UB: ", bone0)
+			return false
+		if bone0 in LEG_BONES and t0 == Animation.TYPE_ROTATION_3D:
+			print("UB SELFCHECK: нога просочилась в UB: ", bone0)
+			return false
+	# 2) Spine — копия исходника (Hip-to-Spine transfer удалён 23.11.26).
+	# 3) Прочие сохранённые треки — совпадение с исходником ключ-в-ключ.
 	for i in src.get_track_count():
 		var t := src.track_get_type(i)
 		var path := String(src.track_get_path(i))
-		var bone := path.substr(path.rfind(":") + 1)
+		var bone := _bone_of(path)
 		var dropped := (bone in LEG_BONES and t == Animation.TYPE_ROTATION_3D) \
-				or (bone == "mixamorig_Hips" and t == Animation.TYPE_POSITION_3D)
+				or (bone == HIPS)
 		if dropped:
 			continue
 		var j := -1
@@ -146,17 +187,46 @@ func _selfcheck(src: Animation, ub: Animation) -> bool:
 				return false
 	return true
 
-## Idle из библиотеки плеера сцены player.tscn.
-func _load_idle() -> Animation:
+func _key_at(src: Animation, tr: int, t: float) -> Quaternion:
+	var k := src.track_find_key(tr, t, Animation.FIND_MODE_NEAREST)
+	return src.track_get_key_value(tr, k)
+
+func _bone_of(path) -> String:
+	return String(path).substr(String(path).rfind(":") + 1)
+
+func _find_track(a: Animation, bone: String, type: int) -> int:
+	for i in a.get_track_count():
+		if a.track_get_type(i) == type and String(a.track_get_path(i)).ends_with(":" + bone):
+			return i
+	return -1
+
+## Idle и rest-ротация Hips из player.tscn (скрипты сцены срезаны).
+func _load_skin() -> Dictionary:
 	var packed: PackedScene = load(PLAYER_SCENE)
 	var player: Node = packed.instantiate()
 	_strip_scripts(player)
 	root.add_child(player)
 	await process_frame
+	var out := {"idle": null, "hips_rest": Quaternion.IDENTITY}
 	var ap: AnimationPlayer = player.get_node_or_null("GraphicsWrapper/AnimationPlayer")
-	if ap == null or not ap.has_animation("Idle"):
-		return null
-	return ap.get_animation("Idle")
+	if ap != null and ap.has_animation("Idle"):
+		out.idle = ap.get_animation("Idle")
+	var skel := _find_skel(player)
+	if skel:
+		var hb := skel.find_bone(HIPS)
+		if hb >= 0:
+			out.hips_rest = skel.get_bone_rest(hb).basis.get_rotation_quaternion()
+	player.free()
+	return out
+
+func _find_skel(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for c in node.get_children():
+		var r = _find_skel(c)
+		if r:
+			return r
+	return null
 
 func _strip_scripts(n: Node) -> void:
 	if n.get_script() != null:

@@ -346,6 +346,20 @@ func _gui_blocks_capture() -> bool:
 ## В.7: поза-боб стойки — визуал, каждый кадр (не физика). Пока стойка
 ## активна, модель = база + плавная левитация (T3 Потока) + покачивание
 ## в такт биту sin(beat_phase·TAU)·0.04; при выходе — возврат на базу.
+## Авторазворот к прицелу при касте (вердикт спеца 23.11.26): пока таймер>0,
+## корпус (graphics_wrapper) доворачивается к cast_aim_yaw со скоростью 18 рад/с
+## (90° за ~0.09с), перебивая facing по движению.
+var _cast_facing_timer: float = 0.0
+var _cast_aim_yaw: float = 0.0
+
+func face_aim_target(aim_point: Vector3, duration: float) -> void:
+    var d := aim_point - global_position
+    d.y = 0.0
+    if d.length() < 0.01:
+        return
+    _cast_aim_yaw = atan2(d.x, d.z)
+    _cast_facing_timer = maxf(_cast_facing_timer, duration)
+
 func _process(delta: float) -> void:
     if graphics_wrapper == null:
         return
@@ -438,7 +452,13 @@ func _physics_process(delta):
             _update_camera_pivot()
             return
 
-    if local_dir.length() > 0.1:
+    # Авторазворот к прицелу при касте (спец): 18 рад/с, перебивает facing.
+    if _cast_facing_timer > 0.0:
+        _cast_facing_timer -= delta
+        graphics_wrapper.rotation.y = rotate_toward(
+                graphics_wrapper.rotation.y, _cast_aim_yaw, 18.0 * delta)
+
+    if local_dir.length() > 0.1 and _cast_facing_timer <= 0.0:
         local_dir = local_dir.normalized()
         var target_angle = atan2(local_dir.x, local_dir.z)
         graphics_wrapper.rotation.y = lerp_angle(graphics_wrapper.rotation.y, target_angle, delta * 10.0)
@@ -470,8 +490,9 @@ func _physics_process(delta):
             hvel = hvel.normalized().slerp(wish2.normalized(), minf(delta * 3.0, 1.0)).normalized() * new_sp
         else:
             hvel = hvel.normalized() * new_sp
-            # без ввода модель смотрит по полёту
-            graphics_wrapper.rotation.y = lerp_angle(graphics_wrapper.rotation.y, atan2(hvel.x, hvel.y), delta * 8.0)
+            # без ввода модель смотрит по полёту (не во время каста)
+            if _cast_facing_timer <= 0.0:
+                graphics_wrapper.rotation.y = lerp_angle(graphics_wrapper.rotation.y, atan2(hvel.x, hvel.y), delta * 8.0)
     else:
         hvel = Vector2(global_dir.x, global_dir.z) * run_speed
     velocity.x = hvel.x
