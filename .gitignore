@@ -24,3 +24,12 @@ export_presets.cfg
 /game_live*.log
 /game_live*.err.log
 __pycache__/
+
+# Одноразовые скрипты-замеры (27.11.26): _tmp_*.gd живут минуты — в истории им
+# не место. Постоянные проверки — с префиксом check_/test_/probe_/smoke_ (их и
+# коммитим). Скрипт, оказавшийся нужным навсегда, ПЕРЕИМЕНОВЫВАЮТ, а не
+# расгитигноривают.
+/Generators/_tmp_*.gd
+/Generators/_tmp_*.gd.uid
+/_tmp_*.py
+/_tmp_*.ps1

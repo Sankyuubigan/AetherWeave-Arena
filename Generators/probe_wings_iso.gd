@@ -74,7 +74,9 @@ func _build_wing(geo: int, col: int, mode: int = 0) -> MeshInstance3D:
 				for k in quad.size():
 					var q: Vector3 = quad[k]
 					var cd7 := Vector3(0.0, -0.78, -0.63).normalized()
-					var tp := clampf(1.0 - pow(maxf(0.0, ((float(k) > 1.0 and u1 > 0.5) or u0 > 0.5) if false else (k % 2) * 0.0, 0.0), 1.0), 1.0, 1.0)
+					# Мёртвая `tp` удалена (не читалась нигде) — в ней был
+					# maxf() с 3 аргументами, скрипт не компилировался.
+					# Найдено гейтом check_parse.gd 27.11.26.
 					quad[k] = q
 			elif geo == 5:
 				quad = [_wing_v5(t0, u0), _wing_v5(t1, u0), _wing_v5(t1, u1), _wing_v5(t0, u1)]
