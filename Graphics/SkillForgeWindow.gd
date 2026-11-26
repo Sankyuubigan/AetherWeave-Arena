@@ -22,7 +22,10 @@ const TYPES := [
     ["aoe", "Взрыв"],
     ["teleport", "Телепорт"],
 ]
-const ANIMS := ["", "Throw", "Cast_Shoot", "Heart_Cast"]
+## Список анимаций БОЛЬШЕ НЕ ДУБЛИРУЕТСЯ руками: берём из SkillSerializer, а тот
+## выводит его из каст-библиотеки. Раньше здесь жил свой массив из 4 имён —
+## новые клипы в Кузнице были недоступны, хотя в библиотеке уже лежали.
+var ANIMS: Array = []
 
 var is_open := false
 
@@ -52,6 +55,7 @@ var _snd: OptionButton
 func _ready() -> void:
     visible = false
     layer = 30
+    ANIMS = SER.cast_anims()
     _build_ui()
 
 

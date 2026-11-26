@@ -9,7 +9,11 @@
   #side h1{font-size:15px;color:#fff;margin:2px 0 8px}
   #filter{width:100%;background:#2a2a32;color:#eee;border:1px solid #444;border-radius:4px;padding:6px 8px;font-size:13px;margin-bottom:8px;box-sizing:border-box}
   .grp{color:#8ecdfc;font-size:12px;margin:10px 0 3px;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;user-select:none}
+  .grp:hover{color:#b8e0ff}
   .grp .cnt{color:#6c8cff;font-weight:400;text-transform:none;letter-spacing:0}
+  .grp .tw{display:inline-block;width:12px;color:#6c8cff}
+  .grp.closed{color:#7c9dc4}
+  .grpitems{border-left:2px solid #2d3340;margin-left:3px;padding-left:5px;margin-bottom:6px}
   button.clip{display:block;width:100%;text-align:left;background:#2a2a32;color:#cde3ff;border:1px solid #3a3a42;border-radius:4px;padding:4px 8px;margin:2px 0;cursor:pointer;font-size:12px;word-break:break-all}
   button.clip:hover{background:#3a3a45}
   button.clip.act{background:#2e5d8f;color:#fff;border-color:#4a7fbf}
@@ -26,18 +30,39 @@
   #ctrl button{background:#2a2a32;color:#ddd;border:1px solid #444;border-radius:4px;padding:3px 10px;cursor:pointer}
   input[type=range]{vertical-align:middle;width:110px}
   #tip{position:absolute;bottom:10px;right:10px;background:#0009;padding:8px 12px;border-radius:6px;font-size:12px;color:#aaa;text-align:right;line-height:1.5}
-  #right{width:320px;background:#1a1a20;padding:10px;box-sizing:border-box;overflow-y:auto;border-left:1px solid #333;flex-shrink:0}
+  #right{width:360px;background:#1a1a20;padding:10px;box-sizing:border-box;overflow-y:auto;border-left:1px solid #333;flex-shrink:0}
   #right h2{font-size:14px;color:#fff;margin:2px 0 8px}
-  .grp2{color:#8ecdfc;font-size:12px;margin:10px 0 3px;text-transform:uppercase;letter-spacing:.5px}
-  button.sk{display:block;width:100%;text-align:left;background:#2a2a32;color:#cde3ff;border:1px solid #3a3a42;border-radius:4px;padding:5px 9px;margin:3px 0;cursor:pointer;font-size:13px}
-  button.sk:hover{background:#3a3a45}
-  button.sk.act{background:#2e5d8f;color:#fff;border-color:#4a7fbf}
-  button.sk .cur{display:block;color:#9aa;font-size:11px;margin-top:2px}
+  .grp2{color:#8ecdfc;font-size:12px;margin:14px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+  /* ── Карточка скилла: шапка + мета + вложенные кандидаты (26.11.26) ── */
+  .skcard{background:#212430;border:1px solid #333846;border-radius:8px;margin:6px 0 10px;overflow:hidden}
+  .skcard.act{border-color:#4a7fbf;box-shadow:0 0 0 1px #4a7fbf55}
+  .skhd{display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;user-select:none;background:#262a37}
+  .skhd:hover{background:#2c3141}
+  .skhd .tw{color:#8ecdfc;width:12px}
+  .skhd .nm{font-weight:600;font-size:13.5px;color:#eef1f6;flex:1}
+  .skhd .ph{font-size:11px;color:#8ecdfc;text-transform:uppercase;letter-spacing:.4px}
+  .skmeta{padding:6px 10px 2px;font-size:12px;color:#a9b0bd;line-height:1.5}
+  .skmeta code{color:#cde3ff;background:#ffffff12;padding:1px 5px;border-radius:3px;user-select:all}
+  .skbody{padding:2px 10px 9px}
+  .candhead{font-size:11px;color:#8ecdfc;text-transform:uppercase;letter-spacing:.4px;margin:6px 0 2px}
   .cand{background:#22242c;border:1px solid #343842;border-radius:6px;padding:7px 9px;margin:4px 0;cursor:pointer;font-size:13px}
   .cand:hover{border-color:#7fb069}
   .cand.sel{border-color:#7fb069;background:#2a3324}
   .cand .cn{font-weight:600;color:#e8e8ea}
-  .cand .nt{color:#9aa;font-size:12px;margin-top:2px;line-height:1.35}
+  .cand .nt{color:#9aa;font-size:12px;margin-top:3px;line-height:1.35}
+  .cand .src{font-size:11px;color:#8891a3;margin-top:3px;word-break:break-all}
+  .cand.miss{border-left:3px solid #8a4a4a}
+  .badge{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:9px;margin-left:5px;border:1px solid transparent;vertical-align:middle}
+  .b-game{background:#1d3b22;color:#9ff0a8;border-color:#3f7a49}
+  .b-appr{background:#243b1d;color:#c6f08a;border-color:#5c8a3f}
+  .b-lib{background:#1d2f45;color:#a8cdf0;border-color:#3f6b9a}
+  .b-man{background:#2b2536;color:#cbb8f0;border-color:#64538f}
+  .b-miss{background:#3a1f1f;color:#f0a8a8;border-color:#8a4a4a}
+  .b-chan{background:#3a2f1d;color:#f0d9a8;border-color:#8a6f3f}
+  .skwarn{background:#3a2a1d;color:#f0c9a8;border:1px solid #8a5f3f;border-radius:5px;padding:5px 8px;font-size:11.5px;margin:4px 0 2px;line-height:1.4}
+  .empty{color:#77808f;font-size:12px;font-style:italic;padding:3px 0}
+  .legend{background:#191c24;border:1px solid #2c313d;border-radius:6px;padding:7px 9px;font-size:11.5px;color:#98a1b0;line-height:1.6;margin-bottom:8px}
+  .legend b{color:#cde3ff;font-weight:600}
   .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
   .v-ok{background:#7ddc7d}.v-alt{background:#8ecdfc}.v-warn{background:#e0b45c}.v-no{background:#e06c6c}
   #loadinfo{color:#999;font-size:12px;margin-bottom:6px;min-height:15px}
@@ -267,97 +292,312 @@ function selectLeftByUrl(url){
   return true;
 }
 
+// ── Левая панель: сворачиваемые группы + фильтр «N из M» (26.11.26) ────────
+// Юзер не мог найти паки UAL в длинном списке Mixamo (2317 клипов) — группы
+// сворачиваются, состояние запоминается в localStorage, фильтр сам раскрывает
+// группы с совпадениями и показывает «сколько нашлось из сколько есть».
+const LS = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v === null ? d : v === '1'; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem(k, v ? '1' : '0'); } catch(e){} },
+};
+let leftGroups = [];
+
 function buildCatalog(data){
   const box = document.getElementById('catalog');
   box.innerHTML = '';
+  leftGroups = [];
   let total = 0;
   data.groups.forEach(g => {
-    const grp = document.createElement('div');
-    grp.className = 'grp';
-    grp.innerHTML = g.name + ' <span class="cnt">(' + g.items.length + ')</span>';
-    box.appendChild(grp);
+    const collapsed = LS.get('anim.grp.' + g.id, false);
+    const head = document.createElement('div');
+    head.className = 'grp' + (collapsed ? ' closed' : '');
+    head.innerHTML = '<span class="tw">' + (collapsed ? '▸' : '▾') + '</span>' + g.name +
+      ' <span class="cnt">(<span class="shown">' + g.items.length + '</span><span class="ofl">/' + g.items.length + '</span>)</span>';
+    box.appendChild(head);
+    const wrap = document.createElement('div');
+    wrap.className = 'grpitems';
+    wrap.style.display = collapsed ? 'none' : '';
+    box.appendChild(wrap);
+    const items = [];
     g.items.forEach(it => {
       const kind = it.url.endsWith('.glb') ? (g.id === 'ual' ? 'glblib' : 'glb')
                  : it.url.endsWith('.fbx') ? 'fbx' : 'none';
       const b = document.createElement('button');
       b.className = 'clip' + (it.preview ? '' : ' no');
-      b.textContent = it.name;
-      b.dataset.q = it.name.toLowerCase();
+      const aka = it.aka || [];
+      b.textContent = it.name + (aka.length ? '  ⇄ ' + aka.join(', ') : '');
+      // Поиск и по имени файла, и по ИМЕНИ КЛИПА В ИГРЕ: «wings» → Flying.fbx.
+      b.dataset.q = (it.name + ' ' + aka.join(' ')).toLowerCase();
+      if (aka.length) b.title = 'в игре: ' + aka.join(', ') + '\nфайл: ' + it.name;
       if (it.preview){
         b.onclick = () => { const tok = ++loadTok; selectLeftByUrl(it.url); loadUrl(it.url, it.name, kind, tok); };
       } else {
-        b.title = 'нет браузер-превью';
+        b.title = (b.title ? b.title + '\n' : '') + 'нет браузер-превью';
       }
-      box.appendChild(b);
-      byUrl.set(it.url, {el:b, group:g.id});
+      wrap.appendChild(b);
+      items.push({el: b, name: it.name.toLowerCase()});
+      byUrl.set(it.url, {el: b, group: g.id});
       total++;
     });
+    const rec = {id: g.id, head, wrap, items, total: g.items.length};
+    head.querySelector('.ofl').style.display = 'none';  // «/M» — только при поиске
+    head.onclick = () => toggleGroup(rec);
+    leftGroups.push(rec);
   });
   loadinfo.textContent = 'клипов: ' + total + ' · клик слева или кандидат справа';
 }
 
+function toggleGroup(rec){
+  const closed = rec.wrap.style.display !== 'none';
+  rec.wrap.style.display = closed ? 'none' : '';
+  rec.head.classList.toggle('closed', closed);
+  rec.head.querySelector('.tw').textContent = closed ? '▸' : '▾';
+  LS.set('anim.grp.' + rec.id, closed);
+}
+
+function applyFilter(q){
+  let hits = 0;
+  leftGroups.forEach(rec => {
+    let shown = 0;
+    rec.items.forEach(it => {
+      // Ищем по dataset.q (имя файла + ИМЯ КЛИПА В ИГРЕ), а не по имени файла:
+      // «tether_hang» должен находить Hanging_Idle_2.fbx (жалоба юзера 26.11.26).
+      const ok = !q || it.el.dataset.q.includes(q);
+      it.el.classList.toggle('hidden', !ok);
+      if (ok) shown++;
+    });
+    rec.head.querySelector('.shown').textContent = shown;
+    // «N/M» показываем ТОЛЬКО при активном поиске (иначе «2317/2317» = шум).
+    rec.head.querySelector('.ofl').style.display = q ? '' : 'none';
+    if (q){
+      // при поиске группы с совпадениями раскрываем принудительно (не пишем в LS)
+      const has = shown > 0;
+      rec.head.style.display = has ? '' : 'none';
+      rec.wrap.style.display = has ? '' : 'none';
+      rec.head.querySelector('.tw').textContent = '▾';
+      hits += shown;
+    } else {
+      rec.head.style.display = '';
+      const closed = LS.get('anim.grp.' + rec.id, false);
+      rec.wrap.style.display = closed ? 'none' : '';
+      rec.head.querySelector('.tw').textContent = closed ? '▸' : '▾';
+    }
+  });
+  loadinfo.textContent = q ? ('найдено ' + hits + ' из ' + leftGroups.reduce((s, r) => s + r.total, 0) + ' клипов')
+                           : ('клипов: ' + leftGroups.reduce((s, r) => s + r.total, 0) + ' · клик слева или кандидат справа');
+}
+
+// ── Правая панель: карточки «скилл → кандидаты» (26.11.26, переделка UX) ────
+// Было «каша»: плоский список кнопок скиллов + div-кандидатов вперемешку.
+// Стало: карточка на скилл (сворачиваемая), в шапке — фаза и метка, в мете —
+// ЧТО СТОИТ В ИГРЕ (клип из дампа + файл источника + есть ли в библиотеке),
+// ниже — вложенный список кандидатов с бейджами «одобрен/есть в библиотеке/
+// нет в библиотеке» и путём к файлу. Данные — /anim/api/skills (сервер джойнит
+// temp/skills_dump.json ⨝ candidates.json ⨝ temp/anim_library.json ⨝ манифест).
 function buildRight(data){
   const skills = data.skills || [];
   const box = document.getElementById('skills');
   box.innerHTML = '';
+  box.appendChild(legendEl(data.legend, data.library));
+
   let phase = '';
   skills.forEach(sk => {
-    if (sk.phase !== phase){
-      phase = sk.phase;
-      const g = document.createElement('div');
-      g.className = 'grp2'; g.textContent = phase;
-      box.appendChild(g);
+    if ((sk.phase || '') !== phase){
+      phase = sk.phase || '';
+      if (phase){
+        const g = document.createElement('div');
+        g.className = 'grp2'; g.textContent = phase;
+        box.appendChild(g);
+      }
     }
-    const b = document.createElement('button');
-    b.className = 'sk';
-    b.innerHTML = sk.name + '<span class="cur">' + sk.current + '</span>';
-    box.appendChild(b);
-    (sk.cands || []).forEach(c => {
-      const url = candUrl(c);
-      const d = document.createElement('div');
-      d.className = 'cand';
-      d.dataset.url = url;
-      d.innerHTML = '<span class="dot v-' + (c.v||'alt') + '"></span><span class="cn">' + c.clip + '</span>' +
-        '<div class="nt">' + (c.note||'') + '</div>';
-      d.onclick = () => {
-        document.querySelectorAll('.cand').forEach(x => x.classList.remove('sel'));
-        d.classList.add('sel');
-        const tok = ++loadTok;
-        const kind = url.endsWith('.glb') ? 'glb' : 'fbx';
-        // 1) выбрать пункт слева; 2) загрузить в центр
-        const ok = selectLeftByUrl(url);
-        loadUrl(url, c.clip, kind, tok);
-        if (!ok) cpath.textContent = url + '  (нет в каталоге слева)';
-      };
-      box.appendChild(d);
-    });
+    box.appendChild(skillCard(sk));
   });
+  const miss = skills.filter(s => s.current && s.warn).length;
+  if (miss){
+    const w = document.createElement('div');
+    w.className = 'skwarn';
+    w.textContent = '⚠ Скиллов с проблемой анимации: ' + miss +
+      ' — смотри оранжевые полосы ниже (клип не в библиотеке / не задан).';
+    box.appendChild(w);
+  }
 }
 
-function candUrl(c){
-  if (c.src === 'glb') return '/tools/candidates_models/' + c.clip + '.glb';
-  if (c.src === 'raw') return '/Graphics/Animations/raw/mixamo/' + c.clip + '.fbx';
-  return '/Graphics/mixamo-lib/fbx/' + c.clip + '.fbx';
+function legendEl(legend, library){
+  const d = document.createElement('div');
+  d.className = 'legend';
+  const lib = library || {};
+  d.innerHTML =
+    '<b>Статусы кандидатов:</b><br>' +
+    '<span class="dot v-ok"></span>одобрен · <span class="dot v-alt"></span>альтернатива · ' +
+    '<span class="dot v-warn"></span>проверить зрением · <span class="dot v-no"></span>не годится<br>' +
+    '<b>Бейджи клипа:</b> ' +
+    '<span class="badge b-game">в игре</span>стоит сейчас · ' +
+    '<span class="badge b-lib">в библиотеке</span>играет · ' +
+    '<span class="badge b-man">в манифесте</span>есть имя+файл · ' +
+    '<span class="badge b-miss">нет в библиотеке</span>не заиграет<br>' +
+    '<b>Имя в игре ≠ имя файла:</b> серым в кандидате показан путь к файлу источника ' +
+    '(Mixamo-файл против имени клипа манифеста).<br>' +
+    '<b>Библиотека:</b> ' + (lib.casts_count || 0) + ' каст-клипов, ' + (lib.loco_count || 0) + ' локо' +
+    (lib.generated ? ' · дамп ' + lib.generated.replace('T', ' ') : '') +
+    (lib.dump_missing ? '<br>⚠ temp/anim_library.json нет — перезапусти admin\\start_admin.bat' : '');
+  return d;
 }
 
-// фильтр слева
+function skillCard(sk){
+  const card = document.createElement('div');
+  card.className = 'skcard';
+  const c = sk.current || {};
+  const collapsed = LS.get('anim.sk.' + sk.id, false);
+
+  const hd = document.createElement('div');
+  hd.className = 'skhd';
+  hd.innerHTML = '<span class="tw">' + (collapsed ? '▸' : '▾') + '</span>' +
+    '<span class="nm">' + (sk.name || sk.id) + '</span>' +
+    '<span class="ph">' + (sk.phase || '') + '</span>';
+  card.appendChild(hd);
+
+  const meta = document.createElement('div');
+  meta.className = 'skmeta';
+  meta.innerHTML = currentLine(c) + '<br>' + paramsLine(c, sk);
+  card.appendChild(meta);
+
+  const body = document.createElement('div');
+  body.className = 'skbody';
+  body.style.display = collapsed ? 'none' : '';
+  if (sk.warn) {
+    const w = document.createElement('div');
+    w.className = 'skwarn';
+    w.textContent = '⚠ ' + sk.warn;
+    body.appendChild(w);
+  }
+  const list = sk.cands || [];
+  if (!list.length){
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = 'кандидатов нет — нужен подбор (спроси агента: mixamo_search.py + зрение)';
+    body.appendChild(e);
+  } else {
+    const h = document.createElement('div');
+    h.className = 'candhead';
+    h.textContent = 'кандидаты (' + list.length + ')';
+    body.appendChild(h);
+    list.forEach(cd => body.appendChild(candEl(cd)));
+  }
+  card.appendChild(body);
+
+  const toggle = () => {
+    const closed = body.style.display !== 'none';
+    body.style.display = closed ? 'none' : '';
+    hd.querySelector('.tw').textContent = closed ? '▸' : '▾';
+    LS.set('anim.sk.' + sk.id, closed);
+  };
+  hd.onclick = toggle;
+  return card;
+}
+
+function currentLine(c){
+  if (c.unknown){
+    return '<b>в игре:</b> <i>неизвестно — нет дампа игры (перезапусти admin\\start_admin.bat)</i>';
+  }
+  if (!c.clip){
+    return c.channel
+      ? '<b>в игре:</b> канал (Cast_Enter→Loop→Shoot) — своего клипа нет'
+      : '<b>в игре:</b> <i>анимация не задана</i>';
+  }
+  const badges = [];
+  if (c.in_lib) badges.push('<span class="badge b-lib">в библиотеке</span>');
+  else badges.push('<span class="badge b-miss">нет в библиотеке</span>');
+  if (c.in_manifest) badges.push('<span class="badge b-man">в манифесте</span>');
+  if (c.loop) badges.push('<span class="badge b-man">клип-состояние (по кругу)</span>');
+  return '<b>в игре:</b> <span class="badge b-game">' + c.clip + '</span> ' + badges.join('') +
+    (c.next_cast_anim
+      ? '<br><span class="src">очередь ударов: ' + c.clip + ' → ' + c.next_cast_anim + ' → ' + c.clip + '</span>'
+      : '') +
+    (c.file ? '<br><span class="src">файл источника: ' + c.file + '</span>'
+            : '<br><span class="src">файла источника нет (клип нашей сборки/нейро)</span>');
+}
+
+function paramsLine(c, sk){
+  const p = [];
+  if (c.channel) p.push('канал ' + c.cast_time.toFixed(1) + 'с');
+  if (c.stance_loop_anim) p.push('поза стойки: ' + c.stance_loop_anim);
+  if (c.cast_hand) p.push('рука ' + (c.cast_hand === 'Left' ? 'левая' : 'правая'));
+  if (c.alternate_hands) p.push('чередование рук');
+  if (c.cancel_at) p.push('отмена с ' + Math.round(c.cancel_at * 100) + '%');
+  if (c.len) p.push('клип ' + c.len + 'с');
+  if (sk.branch) p.push('ветка ' + sk.branch);
+  return '<span class="src">' + p.join(' · ') + '</span>';
+}
+
+function candEl(cd){
+  const d = document.createElement('div');
+  d.className = 'cand' + (cd.in_lib ? '' : ' miss');
+  d.dataset.url = cd.url;
+  const badges = [];
+  if (cd.approved) badges.push('<span class="badge b-appr">одобрен — стоит в игре</span>');
+  if (cd.game_names && cd.game_names.length)
+    badges.push('<span class="badge b-man">имя в игре: ' + cd.game_names.join(', ') + '</span>');
+  if (cd.in_lib) badges.push('<span class="badge b-lib">в библиотеке</span>');
+  else badges.push('<span class="badge b-miss">нет в библиотеке</span>');
+  d.innerHTML = '<span class="dot v-' + (cd.v || 'alt') + '"></span>' +
+    '<span class="cn">' + cd.clip + '</span>' + badges.join('') +
+    '<div class="nt">' + (cd.note || '') + '</div>' +
+    '<div class="src">файл: ' + cd.url + '</div>';
+  d.onclick = (ev) => {
+    ev.stopPropagation();
+    document.querySelectorAll('.cand').forEach(x => x.classList.remove('sel'));
+    d.classList.add('sel');
+    const tok = ++loadTok;
+    const kind = cd.url.endsWith('.glb') ? 'glb' : 'fbx';
+    // 1) выбрать пункт слева; 2) загрузить в центр
+    const ok = selectLeftByUrl(cd.url);
+    loadUrl(cd.url, cd.clip, kind, tok);
+    if (!ok) cpath.textContent = cd.url + '  (нет в каталоге слева)';
+  };
+  return d;
+}
+
+// фильтр слева: считает «N из M», раскрывает группы с совпадениями
 document.getElementById('filter').oninput = (e) => {
-  const q = e.target.value.trim().toLowerCase();
-  document.querySelectorAll('button.clip').forEach(b => {
-    b.classList.toggle('hidden', q && !b.dataset.q.includes(q));
-  });
+  applyFilter(e.target.value.trim().toLowerCase());
 };
 
 Promise.all([
   fetch('/anim/api/list').then(r => r.json()),
-  fetch('./candidates.json').then(r => r.json()),
-]).then(([cat, cand]) => {
+  // Правая панель — ТОЛЬКО серверный джойн (дамп игры ⨝ кандидаты ⨝ библиотека
+  // ⨝ манифест). Фолбэк на candidates.json — если API недоступен.
+  fetch('/anim/api/skills').then(r => r.json()).catch(() => null),
+]).then(([cat, api]) => {
   buildCatalog(cat);
-  buildRight(cand);
-  // авто-выбор первого кандидата первого скилла
-  const first = document.querySelector('.cand');
-  if (first) first.click();
+  if (api && api.skills) {
+    buildRight(api);
+    const first = document.querySelector('.cand');
+    if (first) first.click();
+  } else {
+    loadinfo.textContent = 'API /anim/api/skills недоступен — перезапусти admin\\start_admin.bat';
+    fetch('./candidates.json').then(r => r.json()).then(cand => {
+      // Аварийный путь: ТОЛЬКО кандидаты, без библиотеки/манифеста.
+      // ВАЖНО: «в игре» здесь показать НЕЛЬЗЯ — правда о текущем клипе живёт
+      // в дампе игры (temp/skills_dump.json), которого сейчас нет. Раньше здесь
+      // подставлялось рукописное поле s.current из candidates.json, и оно врало
+      // (wings «Flying не подключён», portals «анимация не нужна» — при том что
+      // всё уже стояло). Лучше честно «неизвестно», чем ложный клип.
+      buildRight({skills: cand.skills.map(s => ({
+        id: s.id, name: s.name, phase: s.phase,
+        current: {clip: '', unknown: true, in_lib: false, in_manifest: false, file: ''},
+        cands: (s.cands || []).map(c => Object.assign({}, c, {url: candUrlFallback(c), in_lib: false})),
+      }))});
+    });
+  }
 }).catch(e => { loadinfo.textContent = 'ошибка загрузки: ' + e; });
+
+// Фолбэк-построение URL (когда серверный API недоступен).
+function candUrlFallback(c){
+  if (c.src === 'glb') return '/tools/candidates_models/' + c.clip + '.glb';
+  if (c.src === 'neuro') return '/Graphics/Animations/neuro_soma/' + c.clip + '/' + c.clip + '.f32';
+  if (c.src === 'raw') return '/Graphics/Animations/raw/mixamo/' + c.clip + '.fbx';
+  return '/Graphics/mixamo-lib/fbx/' + c.clip + '.fbx';
+}
 
 document.getElementById('pp').onclick = (e) => {
   playing = !playing;

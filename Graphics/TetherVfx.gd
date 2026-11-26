@@ -115,9 +115,13 @@ func detach() -> void:
 	if _sigil != null:
 		_sigil.queue_free()
 		_sigil = null
-	var cs = get_node_or_null("/root/CameraShake")
-	if cs:
-		cs.add_trauma(0.12)
+	# Абсолютный путь работает ТОЛЬКО из живого дерева: detach зовётся и из
+	# TetherSwingComponent._exit_tree (узел уже отцеплен) — там шейк не нужен,
+	# а get_node("/root/...") валит ERROR (поймано смоуком 26.11.26).
+	if is_inside_tree():
+		var cs = get_node_or_null("/root/CameraShake")
+		if cs:
+			cs.add_trauma(0.12)
 
 ## ── Нить ──
 

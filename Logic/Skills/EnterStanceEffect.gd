@@ -35,6 +35,9 @@ func apply(caster: Node, _context: Dictionary) -> void:
 		"stance_skill_id": stance_id,
 		"duration": duration,
 		"sub_skills": subs,
+		# Клип-состояние стойки (26.11.26, бард: гитара). StanceComponent
+		# включает его на входе и гасит на выходе — стойка владеет позой.
+		"loop_anim": str(sk.get("stance_loop_anim")) if sk != null else "",
 		# Вердикт юзера 22.11.26: мана-стойка — приём = разряд (закрывает стойку).
 		"exit_on_sub": bool(sk.get("stance_exit_on_sub")) if sk != null else false,
 		# Вердикт спеца 09-ответ В.1: bard_flow=true — каст только за попадание.

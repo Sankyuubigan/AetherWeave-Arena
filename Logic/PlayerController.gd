@@ -100,6 +100,14 @@ func _ready():
 
     if graphics_wrapper:
         graphics_wrapper.position.y = -1.0
+        # СТАРТОВАЯ ОРИЕНТАЦИЯ (баг 26.11.26 «разворот в камеру» — корень).
+        # Модель Mixamo при yaw=0 смотрит в +Z, а камера стоит СЗАДИ на +Z и
+        # смотрит в −Z → игра начиналась с персом ЛИЦОМ В КАМЕРУ (рендер
+        # render_facing_shots + vision: кадр yaw0 = лицо, yaw180 = спина).
+        # Соглашение движения (гейт probe_model_forward): yaw = atan2(dir.x, dir.z)
+        # ставит носки В направление dir, значит «от камеры» = π. Присваивание
+        # идемпотентно: если сцена уже собрана с π — останется π.
+        graphics_wrapper.rotation.y = PI
         
     var all_skills = SkillDB.get_skills()
     for s_id in all_skills:
@@ -351,13 +359,34 @@ func _gui_blocks_capture() -> bool:
 ## (90° за ~0.09с), перебивая facing по движению.
 var _cast_facing_timer: float = 0.0
 var _cast_aim_yaw: float = 0.0
+## Предел доворота корпуса к прицелу. 26.11.26 (баг «разворот в камеру»):
+## кламп БЫЛ костылём — маскировал кривую стартовую позу (модель смотрела в
+## камеру) и обрезал честный разворот на 180° до ~100°, из-за чего юзер видел
+## «поворот стал меньше, будто на 90°». Корень исправлен (стартовый yaw = π,
+## прицел = forward камеры), поэтому предел можно вернуть к физиологичному
+## 150°: доворот к цели за спиной почти полный, но без «закрутки на месте».
+const CAST_FACING_MAX_DEG := 150.0
 
 func face_aim_target(aim_point: Vector3, duration: float) -> void:
     var d := aim_point - global_position
     d.y = 0.0
     if d.length() < 0.01:
         return
-    _cast_aim_yaw = atan2(d.x, d.z)
+    # ОСИ (баг 26.11.26, «разворот в камеру»): graphics_wrapper — РЕБЁНОК тела,
+    # его rotation.y ЛОКАЛЬНЫЙ, а мышь крутит само тело (rotate_y). Раньше
+    # мировой yaw писался прямо в локальный → ошибка ровно на yaw тела: камера,
+    # повёрнутая на 90°, давала разворот на 90° в КАМЕРУ (замер
+    # probe_facing_facts: цель −X, носки +Z). Считаем в мире, пишем локально.
+    var yaw_world := atan2(d.x, d.z)
+    var body_yaw := rotation.y
+    var cur_world := body_yaw
+    if graphics_wrapper != null:
+        cur_world = body_yaw + graphics_wrapper.rotation.y
+    var delta := wrapf(yaw_world - cur_world, -PI, PI)
+    var lim := deg_to_rad(CAST_FACING_MAX_DEG)
+    if absf(delta) > lim:                       # цель за спиной → кламп
+        yaw_world = cur_world + signf(delta) * lim
+    _cast_aim_yaw = wrapf(yaw_world - body_yaw, -PI, PI)
     _cast_facing_timer = maxf(_cast_facing_timer, duration)
 
 func _process(delta: float) -> void:
@@ -460,6 +489,9 @@ func _physics_process(delta):
 
     if local_dir.length() > 0.1 and _cast_facing_timer <= 0.0:
         local_dir = local_dir.normalized()
+        # local_dir — ЛОКАЛЬНЫЙ (W = local −Z), поэтому atan2 даёт локальный yaw
+        # напрямую; вычитать yaw тела здесь НЕЛЬЗЯ (проверено гейтом: дало бы
+        # ошибку в другую сторону). Мировые величины — только hvel ниже.
         var target_angle = atan2(local_dir.x, local_dir.z)
         graphics_wrapper.rotation.y = lerp_angle(graphics_wrapper.rotation.y, target_angle, delta * 10.0)
 
@@ -492,7 +524,11 @@ func _physics_process(delta):
             hvel = hvel.normalized() * new_sp
             # без ввода модель смотрит по полёту (не во время каста)
             if _cast_facing_timer <= 0.0:
-                graphics_wrapper.rotation.y = lerp_angle(graphics_wrapper.rotation.y, atan2(hvel.x, hvel.y), delta * 8.0)
+                # hvel — МИРОВАЯ горизонталь (Vector2 = x,z). В локальный
+                # rotation.y пишем yaw за вычетом yaw тела (ошибка осей).
+                var fly_yaw := atan2(hvel.x, hvel.y)
+                graphics_wrapper.rotation.y = lerp_angle(graphics_wrapper.rotation.y,
+                        wrapf(fly_yaw - rotation.y, -PI, PI), delta * 8.0)
     else:
         hvel = Vector2(global_dir.x, global_dir.z) * run_speed
     velocity.x = hvel.x

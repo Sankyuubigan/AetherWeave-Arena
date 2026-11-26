@@ -39,6 +39,9 @@ const AIR_ANCHOR_DIST := 28.0     # воздушный якорь: дистан�
 const AIR_ANCHOR_LIFT := 10.5     # ...и подъём вверх (ТЗ +9–12)
 const AIR_ANCHOR_MIN_UP := 9.0    # якорь всегда заметно выше кастера → SWING
 const VFX_SCRIPT := "res://Graphics/TetherVfx.gd"
+## Клип-состояние полёта на тросе (26.11.26): Tether_Hang (Hanging_Idle_2, loop)
+## из каст-библиотеки. Включается в момент зацепа, гасится в release().
+const LOOP_ANIM := "Tether_Hang"
 
 @export var max_range: float = 45.0
 @export var allow_air_anchor: bool = true
@@ -92,6 +95,14 @@ func activate(context: Dictionary) -> void:
 	_zip_time = 0.0
 	_was_space = true  # не срывать от пробела, зажатого ещё до каста
 	_vfx_on_attach()
+	# Поза полёта на тросе (26.11.26, решение юзера): Tether_Hang — клип-
+	# СОСТОЯНИЕ на всё время зацепа. Включается ЗДЕСЬ, а не скиллом: до зацепа
+	# играет жест выброса, и только реальный зацеп (эта точка) включает позу.
+	var anim_comp := body.get_node_or_null("PlayerAnimationComponent")
+	if anim_comp and anim_comp.has_method("play_cast_loop") \
+			and anim_comp.has_method("has_cast_anim") \
+			and anim_comp.has_cast_anim(LOOP_ANIM):
+		anim_comp.play_cast_loop(LOOP_ANIM)
 	if mode == Mode.SWING:
 		_swing_kick(body, context)
 	print("[TETHER] зацеп %s якорь=%s канат=%.1f режим=%s" % [
@@ -133,6 +144,11 @@ func release(with_boost: bool) -> void:
 	var body := get_parent() as CharacterBody3D
 	if body == null:
 		return
+	# Поза троса снимается здесь же: иначе Tether_Hang «прилипал» бы к
+	# обычной локомотиве после срыва (26.11.26).
+	var anim_comp := body.get_node_or_null("PlayerAnimationComponent")
+	if anim_comp and anim_comp.has_method("stop_cast_loop"):
+		anim_comp.stop_cast_loop(LOOP_ANIM)
 	var vel := body.velocity
 	if with_boost:
 		vel.y += RELEASE_UP

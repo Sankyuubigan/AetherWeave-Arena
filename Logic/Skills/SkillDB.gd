@@ -79,14 +79,31 @@ static func get_skills() -> Dictionary:
     var proj = preload("res://Logic/Skills/SpawnProjectileEffect.gd").new()
     if ResourceLoader.exists("res://Scenes/fireball.tscn"):
         proj.projectile_scene = load("res://Scenes/fireball.tscn")
-    proj.spawn_from_hand = true  # инста-каст из правой кисти (план 17.11.26)
-    # Спавн в момент ТОЛЧКА единого каст-жеста (cast_push: пик z0.82@k12≈0.4 с;
-    # вердикт 17.11.26: снаряд не должен улетать раньше жеста).
-    proj.spawn_delay = 0.35
+    proj.spawn_from_hand = true  # инста-каст из кисти бросающей руки
+    # Спавн в момент ВЫБРОСА руки. Клип Cast_1H_Magic_01 (утверждён юзером
+    # 26.11.26 по кандидату /tools/candidates_models/Standing_1H_Magic_Attack_01.glb).
+    # ЗАМЕР ЗАНОВО 26.11.26 (Generators/probe_hand_axis.gd, ось +Z = вперёд —
+    # модель Mixamo смотрит в +Z, docs/cast_pipeline.md §7.1):
+    #   ПРАВАЯ кисть пик z=+0.77 на t=1.33; на t=1.40 правая z=+0.75,
+    #   ЛЕВАЯ z=−0.45 (УХОДИТ ЗА СПИНУ).
+    # Старый замер (probe_hand_extent) считал «вперёд» как −Z и дал ЗЕРКАЛЬНЫЙ
+    # вывод «бросает левая» → снаряд вылетал из руки за спиной (жалоба юзера
+    # «фаербол с неправильной руки, которая сзади»). Теперь правая.
+    # cast_speed 2.0 (просьба юзера «ускорить раза в 2»): клип идёт 1.15 с,
+    # поэтому спавн = 1.33 / 2 ≈ 0.67 с РЕАЛЬНОГО времени.
+    proj.spawn_delay = 0.67
     fb.effects.append(proj)
-    # Инста-каст-анимация: единый каст-жест (cast_push, толчок вперёд на
-    # высоте груди — вердикт 17.11.26: «волейбольный замах — это не каст»).
-    fb.cast_anim = "Throw"
+    # Инста-каст-анимация (26.11.26): импортёр import_manifest_casts.gd принёс
+    # клип из манифеста — вместо акробатического UAL Throw.
+    fb.cast_anim = "Cast_1H_Magic_01"
+    # Рука бросает ПРАВАЯ (замер выше) — снаряд из неё же (context["hand"]).
+    fb.cast_hand = "Right"
+    # Вдвое быстрее: 2.30 с → 1.15 с (проверено Generators/probe_cast_speed.gd).
+    fb.cast_speed = 2.0
+    # Окно отмены 70 %: выброс на 58 % длины клипа (1.33/2.30), отменять раньше
+    # нельзя — спам обрывал бы сам бросок (§14.3: окно после продуктивной части).
+    # cancel_at — ДОЛЯ длины, от темпа не зависит; оставляем 0.7.
+    fb.cancel_at = 0.7
     # Нейро-звук (Шаг 5.1 A/B): MOSS v2, 48 кГц — Audio/Gen/neural/fireball.wav.
     var fb_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
     fb_sound.audio_stream = load("res://Audio/SFX/neural_fireball.res")
@@ -101,6 +118,13 @@ static func get_skills() -> Dictionary:
     tp.icon = "🌌"
     tp.price = 2
     tp.max_range = 20.0
+    # Магическое исчезновение (26.11.26, решение юзера): Dismissing_Gesture
+    # вперёд + он же РЕВЕРСОМ на прибытии (TeleportEffect играет Appear сам —
+    # он один знает момент приземления). 2.23 с в свип 0.6 с → темп 3.0
+    # (0.74 с): жест заканчивается вместе с прибытием, а не висит поверх.
+    tp.cast_anim = "Teleport_Vanish"
+    tp.cast_speed = 3.0
+    tp.cancel_at = 0.75   # окно после исчезновения: обрывать свип нельзя
     var tel = preload("res://Logic/Skills/TeleportEffect.gd").new()
     if ResourceLoader.exists("res://Scenes/teleport_effect.tscn"):
         tel.vfx_scene = load("res://Scenes/teleport_effect.tscn")
@@ -141,6 +165,11 @@ static func get_skills() -> Dictionary:
     thunder.effects.append(th_sound)
     # Длительный каст двумя руками (вердикт 17.11.26): канал 1 с.
     thunder.cast_time = 1.0
+    # Каст-клип канала (26.11.26, решение юзера): двуручный магический удар
+    # (Standing_2H_Magic_Attack_01). Канал играет его ОДИН раз, растянутый в
+    # окно cast_time (2.70 с → 1.0 с, темп 2.7): удар клипа = момент execute().
+    thunder.cast_anim = "Cast_2H_Magic_01"
+    thunder.cast_hand = "Right"
     # Тряска камеры на взрыве (верб. юзера 19.11.26: «экран слегка трясло»).
     thunder.shake = 0.4
     _skills["thunderclap"] = thunder
@@ -183,6 +212,11 @@ static func get_skills() -> Dictionary:
     meteor.effects.append(m_sound)
     # Длительный каст двумя руками (вердикт 17.11.26): канал 2 с.
     meteor.cast_time = 2.0
+    # Каст-клип канала (26.11.26, решение юзера): двуручный AoE-замах
+    # (Standing_2H_Magic_Area_Attack_01). Один раз, растянут в окно канала
+    # (2.97 с → 2.0 с, темп 1.49): удар клипа = падение метеора (execute()).
+    meteor.cast_anim = "Cast_2H_Area_01"
+    meteor.cast_hand = "Right"
     _skills["meteor"] = meteor
 
     var ball_lightning = preload("res://Logic/Skills/Skill.gd").new()
@@ -225,9 +259,16 @@ static func get_skills() -> Dictionary:
     if ResourceLoader.exists("res://Scenes/heart_projectile.tscn"):
         h_proj.projectile_scene = load("res://Scenes/heart_projectile.tscn")
     h_proj.spawn_from_hand = true  # сердце вылетает из кисти
-    # Спавн в момент «отпуска» жеста: конец Enter-подъёма, старт Exit-спада
-    # склейки Heart_Cast (0.533 с) → 0.55 с.
-    h_proj.spawn_delay = 0.55
+    # Спавн в момент «выброса» жеста. Клип Spell_Cast: ЗАМЕР _tmp_hands_xyz
+    # (отклонение кисти от направления «вперёд», docs/cast_pipeline.md §7.1):
+    #   t=0.30 → левая кисть В СТОРОНЕ (x=+0.71, z=+0.04, откл 87°) — сердце
+    #            рождалось из бокового положения, юзер видел «руки в стороны»;
+    #   t=0.85 → обе кисти ВПЕРЁД (правая z=0.52 откл 15°, левая z=0.48 откл 27°).
+    # Прежнее 0.30 пришло из ЗЕРКАЛЬНОГО замера probe_hand_extent (считал −z;
+    # баг знака исправлен 26.11.26, но решение по задержке осталось от него).
+    # 0.85 годится и для зеркала Spell_Cast_L (пик левой t=0.90, правой 0.83).
+    # Гейт, который такое ловит: Generators/probe_spawn_sync.gd.
+    h_proj.spawn_delay = 0.85
     heart.effects.append(h_proj)
 
     var h_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
@@ -242,10 +283,15 @@ static func get_skills() -> Dictionary:
     ]
     h_sound.volume_db = 0.0  # громкость выровнена K-нормализацией (LUFS)
     heart.effects.append(h_sound)
-    # Вердикт 17.11.26: каст = Spell_Simple_Enter + Spell_Simple_Exit (UAL),
-    # склеенные в Heart_Cast (левая рука); Heart_Cast_L — иерархическое зеркало
-    # (Generators/build_heart_cast.gd). Спам = поочерёдно лево/право.
-    heart.cast_anim = "Heart_Cast"
+    # Вердикт 26.11.26 (жалобы юзера: рука поднималась снизу от ног, медленно):
+    # старый Heart_Cast (UAL Enter+Exit, 0.533 с) заменён на Mixamo Spell_Cast
+    # (1.13 с, импортёр import_manifest_casts.gd → ual_casts_test.res; рука от
+    # талии, плоский выброс ладонью вперёд от груди — «игра в ладошки»).
+    # Heart_Cast/Heart_Cast_L остались в библиотеке как альтернатива (сравнить
+    # в админке). Чередование рук: alternate_hands → Spell_Cast_L (зеркало данными,
+    # Generators/mirror_lib_anim.gd). Окно отмены 60 % (стандарт §14.3): спам
+    # даёт плавную смену рук, а не рваные рестарты (Skill.cancel_at).
+    heart.cast_anim = "Spell_Cast"
     heart.alternate_hands = true
     _skills["heart_heal"] = heart
 
@@ -284,14 +330,19 @@ static func get_skills() -> Dictionary:
     bl.icon = "🗡"
     bl.price = 2
     bl.max_range = 200.0
-    # Анимации играет SpawnBladeEffect (режимы требуют разных жестов).
-    bl.cast_anim = ""
+    # Анимации (26.11.26, вердикт юзера «не отменять удары, а ставить в
+    # очередь»): режим ВЗМАХА ведёт каст-слой — A → B → A по окну отмены.
+    # Материализацию (Throw) выбирает эффект хуком pick_cast_anim: клинка нет
+    # → Throw, есть → A/B. Окно отмены 0.6 (клип 0.43 с): спам встаёт в
+    # очередь, а не рестартит удар.
+    bl.cast_anim = "Blade_Swing_A"
+    bl.next_cast_anim = "Blade_Swing_B"
+    bl.cancel_at = 0.6
     bl.effects.append(preload("res://Logic/Skills/SpawnBladeEffect.gd").new())
     _skills["energy_blade"] = bl
 
     # Крылья ускорения (Q20, спец-батч 19.11.26): светящиеся крылья на 10 с,
     # пока активны — скорость x1.35 (fov + линии скорости как спринт Minecraft).
-    # Жест Cast_Enter играет SpawnWingsEffect: IK-доводка руки крыльям не нужна.
     var wg = preload("res://Logic/Skills/Skill.gd").new()
     wg.id = "wings"
     wg.skill_name = "Крылья ускорения"
@@ -300,7 +351,12 @@ static func get_skills() -> Dictionary:
     wg.icon = "🕊"  # U+1FABD 🪽 не рендерился в Win10 (белый квадрат) — фикс Q16 Шаг 9
     wg.price = 2
     wg.max_range = 200.0
-    wg.cast_anim = ""
+    # Анимация полёта (26.11.26, баг «на крыльях ничего не стоит»): клип
+    # Flying.fbx (mixamo://Flying.fbx, loop) — клип-СОСТОЯНИЕ, играет по кругу
+    # пока крылья активны. cast_anim_loop=true → каст-слой не даёт окна отмены
+    # и не перезапускает позу спамом; WingsComponent.deactivate гасит клип сам.
+    wg.cast_anim = "Wings_Fly"
+    wg.cast_anim_loop = true
     wg.effects.append(preload("res://Logic/Skills/SpawnWingsEffect.gd").new())
     _skills["wings"] = wg
 
@@ -314,7 +370,10 @@ static func get_skills() -> Dictionary:
     ptl.icon = "🌀"
     ptl.price = 2
     ptl.max_range = 40.0
-    ptl.cast_anim = ""
+    # Каст-клип (26.11.26, решение юзера): Standing_2H_Cast_Spell_01 —
+    # двуручное сотворение портала (2.17 с). Окно отмены 0.75 — после броска рук.
+    ptl.cast_anim = "Cast_2H_Spell"
+    ptl.cancel_at = 0.75
     ptl.effects.append(preload("res://Logic/Skills/SpawnPortalsEffect.gd").new())
     var pts = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
     pts.audio_stream = load("res://Audio/SFX/neural_teleport.res")
@@ -335,7 +394,9 @@ static func get_skills() -> Dictionary:
     ptl2.icon = "🌀"
     ptl2.price = 4
     ptl2.max_range = 40.0
-    ptl2.cast_anim = ""
+    # Каст-клип (26.11.26, решение юзера): тот же двуручный жест, что у v1.
+    ptl2.cast_anim = "Cast_2H_Spell"
+    ptl2.cancel_at = 0.75
     ptl2.effects.append(preload("res://Logic/Skills/SpawnPortals2Effect.gd").new())
     var pts2 = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
     pts2.audio_stream = load("res://Audio/SFX/neural_teleport.res")
@@ -357,6 +418,12 @@ static func get_skills() -> Dictionary:
     eth.icon = "🕸"  # 🪝 (U+1FA9D) не рендерился в Win10 — как 🪽 в Q16 Шаг 9
     eth.price = 3
     eth.max_range = 45.0
+    # Анимация полёта на тросе (26.11.26, решение юзера): Tether_Hang
+    # (Hanging_Idle_2, loop) — клип-СОСТОЯНИЕ, играет по кругу, пока трос
+    # активен. Жест ЗАЦЕПА (Cast_Shoot) остаётся у эффекта: он один знает,
+    # зацепился ли трос (промах рейкаста = зацепа нет, поза не нужна).
+    # cast_anim_loop НЕ ставим: скилл не должен крутить позу до зацепа —
+    # TetherSwingComponent включает loop сам в момент зацепа.
     eth.cast_anim = ""
     eth.cast_hand = "Left"  # Cast_Shoot — леворукий клип (как beam/ball_lightning)
     eth.effects.append(preload("res://Logic/Skills/TetherSwingEffect.gd").new())
@@ -443,6 +510,11 @@ Esc — отмена."
     bflow.icon = "🎵"  # U+1FABD 🪽 не рендерился в Win10 (белый квадрат) — фикс Q16 Шаг 9
     bflow.price = 5
     bflow.max_range = 200.0
+    # Клип-СОСТОЯНИЕ стойки (26.11.26, решение юзера): Guitar_Playing1 —
+    # бард играет на гитаре, пока Поток Гармонии активен. Отдельное поле
+    # stance_loop_anim: у стойки нет каста-удара, SpellCaster не при делах,
+    # StanceComponent включает на входе и гасит на выходе.
+    bflow.stance_loop_anim = "Bard_Guitar"
     var b_ent = preload("res://Logic/Skills/EnterStanceEffect.gd").new()
     b_ent.stance_id = "bard_flow"
     # Топливо живёт в BardFlowComponent (99 с — только страховка; выход по
@@ -516,6 +588,10 @@ Esc — отмена."
     bgroove.icon = "🎶"
     bgroove.price = 5
     bgroove.max_range = 200.0
+    # Клип-СОСТОЯНИЕ стойки (26.11.26, решение юзера): Guitar_Playing_2 —
+    # вторая гитарная тема под «Пульс Битвы» (другой клип, чтобы стойки
+    # различались на глаз).
+    bgroove.stance_loop_anim = "Bard_Guitar_2"
     var g_ent = preload("res://Logic/Skills/EnterStanceEffect.gd").new()
     g_ent.stance_id = "bard_groove"
     # Реальный выход: groove_empty / barrier_break / max_duration(16 c) /

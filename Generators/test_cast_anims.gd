@@ -4,7 +4,8 @@ extends SceneTree
 ## локомоция на основном плеере живёт под кастом, канал Enter→Loop→Shoot.
 
 const NAMES := ["Cast_Enter", "Cast_Loop", "Cast_Shoot", "Cast_Shoot_L",
-	"Cast_Exit", "Throw", "Heart_Cast", "Heart_Cast_L"]
+	"Cast_Exit", "Throw", "Heart_Cast", "Heart_Cast_L", "Spell_Cast", "Spell_Cast_L",
+	"Cast_1H_Magic_01"]
 
 func _init() -> void:
 	call_deferred("_run")
@@ -36,18 +37,28 @@ func _run() -> void:
 	else:
 		print("CAST-TEST: все ", NAMES.size(), " каст-имён доступны (UB)")
 
-	# 2) Инвариант UB: в библиотеке CastPlayer нет позиционных треков
-	var pos_tracks := 0
+	# 2) Инвариант (уточнён 26.11.26): в библиотеке CastPlayer теперь лежат И
+	#    UB-клипы, И full-body (их играет play_full_body стоя). Инвариант «только
+	#    ротации» верен для UB; у full-body законна ПОЗИЦИЯ Hips (присед/наклон),
+	#    но не позиция других костей и не Hips-трек в UB.
+	var ub_pos := 0      # не-ротационные треки в UB-клипах (должно быть 0)
+	var fb_bad := 0     # не-Hips не-ротационные треки в full-body (должно быть 0)
 	var clib = comp.cast_player.get_animation_library("")
 	for an in clib.get_animation_list():
 		var a: Animation = clib.get_animation(an)
+		var is_ub := String(an).ends_with("_UB")
 		for i in a.get_track_count():
-			if a.track_get_type(i) != Animation.TYPE_ROTATION_3D:
-				pos_tracks += 1
-	if pos_tracks > 0:
-		fails.append("в UB-клипах %d не-ротационных треков" % pos_tracks)
+			if a.track_get_type(i) == Animation.TYPE_ROTATION_3D:
+				continue
+			var bone := String(a.track_get_path(i)).substr(String(a.track_get_path(i)).rfind(":") + 1)
+			if is_ub:
+				ub_pos += 1
+			elif bone != "mixamorig_Hips":
+				fb_bad += 1
+	if ub_pos > 0 or fb_bad > 0:
+		fails.append("не-ротационные треки: в UB %d, в full-body чужих %d" % [ub_pos, fb_bad])
 	else:
-		print("CAST-TEST: UB-инвариант — только ротации верха тела")
+		print("CAST-TEST: инвариант — UB только ротации, full-body только позиция Hips")
 
 	# 3) Инста-каст: играет на CastPlayer, локомоция (дерево) живёт
 	comp.play_cast_anim("Throw")

@@ -13,6 +13,11 @@ const SWEEP_TIME := 0.45   # сам пролёт A→B
 const DROP_TIME := 0.15    # повторное снижение на целевую точку
 const ARRIVE_LIFT := 0.5   # подлёт над целевой точкой → падение на неё
 const HOP_HEIGHT := 0.4    # подпрыг в первые 30% пролёта
+## Клип ПРИБЫТИЯ (26.11.26, решение юзера «магическое исчезновение +
+## обратное появление»): тот же Dismissing_Gesture, но РЕВЕРСОМ (манифест
+## reverse:true) — руки раскрываются из позы исчезновения. Играет ЭФФЕКТ, а
+## не скилл: только он знает момент приземления (свип 0.45 + дроп 0.15 с).
+const ARRIVE_ANIM := "Teleport_Appear"
 
 @export var vfx_scene: PackedScene
 
@@ -106,6 +111,14 @@ func _sweep(player: Node3D, target: Vector3) -> void:
     if "velocity" in player:
         player.set("velocity", Vector3.ZERO)
     player.input_locked = false
+    # Клип ПРИБЫТИЯ (26.11.26): реверс-жест исчезновения — руки раскрываются
+    # в точке выхода. Играем ПОСЛЕ разблокировки ввода: каст-слой поверх
+    # локомотики, игрок уже управляет.
+    var anim_comp2 = player.get_node_or_null("PlayerAnimationComponent")
+    if anim_comp2 and anim_comp2.has_method("play_cast_anim") \
+            and anim_comp2.has_method("has_cast_anim") \
+            and anim_comp2.has_cast_anim(ARRIVE_ANIM):
+        anim_comp2.play_cast_anim(ARRIVE_ANIM)
 
 ## Траектория: горизонталь — smoothstep (разгон и торможение), вертикаль —
 ## базовая дуга к точке над целью + хоп-синус в первые 30% пролёта.

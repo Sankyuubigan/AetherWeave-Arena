@@ -28,6 +28,11 @@ func _process_modification_with_delta(_delta: float) -> void:
 	if skel == null:
 		return
 	var aim: Vector3 = anim_comp.aim_point
+	# ОСИ (баг 26.11.26): aim_point МИРОВОЙ, а позы скелета — локальные.
+	# atan2 по мировым осям давал ошибку ровно на yaw тела+обёртки: при повороте
+	# камеры на 90° позвоночник «прицеливался» на 90° мимо (и добавлял скрутку).
+	# Переводим точку в пространство скелета — дальше все оси уже локальные.
+	aim = skel.global_transform.affine_inverse() * aim
 	# Направление на цель в локальных осях скелета от Spine2.
 	var s2 := skel.find_bone("mixamorig_Spine2")
 	if s2 < 0:

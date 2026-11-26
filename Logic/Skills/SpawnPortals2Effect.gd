@@ -16,12 +16,14 @@ const COLOR_IN := Color(0.25, 0.85, 0.8)
 const COLOR_OUT := Color(0.85, 0.4, 1.0)
 
 func apply(caster: Node, context: Dictionary) -> void:
-	# Жест материализации (паттерн SpawnWingsEffect / v1).
+	# Жест материализации (паттерн SpawnWingsEffect / v1). 26.11.26: клип задан
+	# скиллом (portals2 → Cast_2H_Spell) → его играет каст-слой, свой не играем.
 	var anim_comp = caster.get_node_or_null("PlayerAnimationComponent")
-	if anim_comp and anim_comp.has_method("play_cast_anim") \
-			and anim_comp.has_method("has_cast_anim") \
-			and anim_comp.has_cast_anim(CAST_GESTURE):
-		anim_comp.play_cast_anim(CAST_GESTURE)
+	if str(context.get("cast_anim", "")) == "":
+		if anim_comp and anim_comp.has_method("play_cast_anim") \
+				and anim_comp.has_method("has_cast_anim") \
+				and anim_comp.has_cast_anim(CAST_GESTURE):
+			anim_comp.play_cast_anim(CAST_GESTURE)
 
 	var tree := caster.get_tree()
 	var world: Node = tree.current_scene if tree else null

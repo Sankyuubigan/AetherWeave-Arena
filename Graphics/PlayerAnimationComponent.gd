@@ -48,6 +48,11 @@ const LANDING_CUT_TIME := 0.47   # низ приседа-удара в Landing
 
 var anim_player: AnimationPlayer
 var _cast_layer: Node = null   # CastAnimationLayer (фасад кастов, Ф2.1/2.2)
+## Совместимость: гейты (test_cast_anims, render_tree_check) обращаются к плееру
+## кастов напрямую. Сам плеер теперь живёт в слое CastAnimationLayer.
+var cast_player: AnimationPlayer:
+    get:
+        return _cast_layer.cast_player if _cast_layer != null else null
 var tree: AnimationTree
 var playback  # AnimationNodeStateMachinePlayback
 var _state: String = ""  # намерение кода; дерево может уйти само (AUTO AT_END)
@@ -277,7 +282,7 @@ func play_jump(double: bool = false) -> void:
 func has_cast_anim(anim_name: String) -> bool:
     return _cast_layer != null and _cast_layer.has_cast_anim(anim_name)
 
-func play_cast_anim(anim_name: String) -> void:
+func play_cast_anim(anim_name: String, speed: float = 1.0) -> void:
     if _cast_layer == null:
         return
     # СТОЯ (speed<0.2, на полу) → Full-Body (Hips+ноги: шаг/присед, ступни
@@ -287,25 +292,54 @@ func play_cast_anim(anim_name: String) -> void:
     if parent is CharacterBody3D:
         hs = Vector2(parent.velocity.x, parent.velocity.z).length()
         if hs < 0.2 and parent.is_on_floor():
-            _cast_layer.play_full_body(anim_name)
+            _cast_layer.play_full_body(anim_name, speed)
             return
-    _cast_layer.play_cast_anim(anim_name)
+    _cast_layer.play_cast_anim(anim_name, speed)
 
 func cast_clip_length(anim_name: String) -> float:
     if _cast_layer == null:
         return 0.0
     return _cast_layer.cast_clip_length(anim_name)
 
-func play_channel() -> void:
+## Длина РЕАЛЬНО играющего каст-клипа (стоя — full-body, в бегу — UB: короче/
+## длиннее на хвост 0.2 с). Окно отмены инста-каста считает прогресс по этому
+## значению (SpellCasterComponent), а не по длине UB.
+func cast_last_len() -> float:
+    return _cast_layer.last_len if _cast_layer != null else 0.0
+
+func play_channel(clip: String = "", fit_speed: float = 1.0) -> void:
     if _cast_layer:
         _channel = true
-        _cast_layer.play_channel()
+        _cast_layer.play_channel(clip, fit_speed)
 
 func end_channel() -> void:
     if _cast_layer:
         _channel = false
         _cast_layer.end_channel()
 
+## Клип-состояние (крылья, гитара барда): loop-клип, владелец гасит сам.
+func play_cast_loop(anim_name: String) -> void:
+    if _cast_layer != null:
+        _cast_layer.play_cast_loop(anim_name)
+
+func stop_cast_loop(anim_name: String = "") -> void:
+    if _cast_layer != null:
+        _cast_layer.stop_cast_loop(anim_name)
+
+func has_loop_state() -> bool:
+    return _cast_layer != null and _cast_layer.has_loop_state()
+
+## Темп, с которым надо играть клип, чтобы он ровно уложился в окно window_s
+## (канал со своим клипом: метеор 2.97 с в окно 2.0 с → 1.49).
+## Берём ДЛИНУ КАК ЗАПИСАНА (cast_raw_length), иначе деление на темп прошлого
+## каста давало бы разный результат от каста к касту.
+func cast_fit_speed(anim_name: String, window_s: float) -> float:
+    if _cast_layer == null or window_s <= 0.0:
+        return 1.0
+    var raw: float = _cast_layer.cast_raw_length(anim_name)
+    if raw <= 0.0:
+        return 1.0
+    return clampf(raw / window_s, 0.25, 4.0)
 ## ── FSM локомоции: только решение «какое состояние», перетекания — в дереве
 
 func _process(delta):

@@ -16,13 +16,15 @@ const COLOR_IN := Color(0.4, 0.6, 1.0)
 const COLOR_OUT := Color(1.0, 0.55, 0.25)
 
 func apply(caster: Node, context: Dictionary) -> void:
-	# Жест материализации (паттерн SpawnWingsEffect: cast_anim пуст —
-	# жест играет эффект, IK-доводка руки не вешается).
+	# Жест материализации (паттерн SpawnWingsEffect). 26.11.26: если клип задан
+	# скиллом (portals → Cast_2H_Spell), его играет каст-слой — свой жест не
+	# играем (контракт одного владельца анимации).
 	var anim_comp = caster.get_node_or_null("PlayerAnimationComponent")
-	if anim_comp and anim_comp.has_method("play_cast_anim") \
-			and anim_comp.has_method("has_cast_anim") \
-			and anim_comp.has_cast_anim(CAST_GESTURE):
-		anim_comp.play_cast_anim(CAST_GESTURE)
+	if str(context.get("cast_anim", "")) == "":
+		if anim_comp and anim_comp.has_method("play_cast_anim") \
+				and anim_comp.has_method("has_cast_anim") \
+				and anim_comp.has_cast_anim(CAST_GESTURE):
+			anim_comp.play_cast_anim(CAST_GESTURE)
 
 	var tree := caster.get_tree()
 	var world: Node = tree.current_scene if tree else null
@@ -31,7 +33,9 @@ func apply(caster: Node, context: Dictionary) -> void:
 	# Ссылка через meta (не по имени): add_child с дублирующим именем молча
 	# даёт "...2", а queue_free старой пары срабатывает в конце кадра —
 	# поиск по имени ловил умирающий узел (тест 19.11).
-	var old = caster.get_meta("portal_pair", null)
+	# get_meta(key, null) НЕЛЬЗЯ: в Godot явный null = «дефолта нет» и валит
+	# ERROR на первом касте в чистой сессии (поймано смоуком 26.11.26).
+	var old = caster.get_meta("portal_pair") if caster.has_meta("portal_pair") else null
 	if old and is_instance_valid(old):
 		old.queue_free()
 	var pair := Node3D.new()

@@ -264,3 +264,15 @@ res://Graphics/Environment/Props/
   захвата при открытом UI — флаг в `_gui_blocks_capture()`, страховка-гард
   `_process` в самом окне. Чек-лист нового меню и история регрессий —
   в `docs/ui_input_rules.md`. Нарушать = снова ловить «мышь не фокусится».
+
+## 12. ОСИ ПЕРСОНАЖА — ССОТ: docs/cast_pipeline.md §7
+* **Mixamo-модель при `rotation.y = 0` смотрит в +Z.** Камера стоит СЗАДИ на +Z
+  и смотрит в −Z ⇒ yaw 0 = лицом в камеру, «от камеры» = π.
+  `yaw = atan2(dir.x, dir.z)` ставит носки в направление `dir`.
+* `GraphicsWrapper` — РЕБЁНОК тела, его `rotation.y` ЛОКАЛЬНЫЙ. Мировой yaw
+  писать только как `wrapf(yaw_world - body.rotation.y, -PI, PI)`. На смешении
+  мирового/локального сгорел баг «перс разворачивается в камеру» (26.11.26).
+* Гейт результата — `probe_cast_facing.gd` (носки против цели, стартовая поза,
+  наклон камеры); соглашение доказано `probe_model_forward.gd` /
+  `probe_facing_facts.gd`. Мерить yaw таза локальным `euler.y` БЕСПОЛЕЗНО
+  (rest Hips = identity) — только swing-twist вокруг мировой вертикали.

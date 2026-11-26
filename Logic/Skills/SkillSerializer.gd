@@ -35,6 +35,11 @@ const CLAMP_RADIUS := Vector2(2.0, 15.0)
 const CLAMP_RANGE := Vector2(2.0, 200.0)
 const CLAMP_PRICE := Vector2i(0, 10)
 const CLAMP_CAST_TIME := Vector2(0.0, 3.0)
+## Окно отмены инста-каста (доля клипа) — стандарт 55–60 %, см. Skill.cancel_at.
+const CLAMP_CANCEL_AT := Vector2(0.0, 1.0)
+## Темп каст-клипа (Skill.cast_speed): 1.0 = как записан, 2.0 = вдвое быстрее.
+## Потолок 4.0 — дальше клип превращается в дёрганье (замер probe_cast_speed).
+const CLAMP_CAST_SPEED := Vector2(0.25, 4.0)
 const CLAMP_SPAWN_DELAY := Vector2(0.0, 1.0)
 const CLAMP_SHAKE := Vector2(0.0, 1.0)
 const CLAMP_BEAM_WIDTH := Vector2(0.01, 0.3)
@@ -65,9 +70,48 @@ const SOUNDS := [
     "res://Audio/SFX/neural_beam.res",
     "res://Audio/SFX/neural_heart_heal.res",
 ]
-const CAST_ANIMS := ["", "Throw", "Cast_Shoot", "Heart_Cast", "Throw_L", "Cast_Shoot_L", "Heart_Cast_L"]
+## Белый список каст-анимаций БОЛЬШЕ НЕ ПРАВИТСЯ РУКАМИ (26.11.26): имена
+## выводятся из самой каст-библиотеки (`ual_casts_test.res`), поэтому новый клип,
+## добавленный импортёром/бейком, автоматически становится допустимым.
+## Это по-прежнему белый список (произвольная строка из JSON не пройдёт), но
+## источник — реальные клипы, а не список, который забывали обновлять.
+## FALLBACK — если библиотека не загрузилась (урезанная сборка/тест): старое
+## поведение, чтобы сохранение скиллов не потеряло ВСЕ анимации разом.
+const CAST_LIB_PATH := "res://Graphics/Animations/ual_casts_test.res"
+const CAST_ANIMS_FALLBACK := ["", "Throw", "Cast_Shoot", "Heart_Cast", "Throw_L",
+    "Cast_Shoot_L", "Heart_Cast_L", "Spell_Cast", "Spell_Cast_L", "Cast_1H_Magic_01"]
+static var _cast_names_cache: Array = []
+static var _cast_names_loaded := false
 const TARGET_TYPES := ["enemy", "ally"]
 const CAST_HANDS := ["Right", "Left"]
+
+## Допустимые имена каст-анимаций: базовые клипы библиотеки (без `_UB` —
+## суффикс добавляет код, в данных скилла имя всегда базовое).
+## Источник — реальная библиотека, см. CAST_LIB_PATH. Кэш: библиотека не
+## меняется в рантайме (пересобирается только генераторами при разработке).
+static func cast_anims() -> Array:
+    if not _cast_names_loaded:
+        _cast_names_loaded = true
+        var names: Array = [""]
+        var lib = load(CAST_LIB_PATH) if ResourceLoader.exists(CAST_LIB_PATH) else null
+        if lib is AnimationLibrary:
+            var all: Array = lib.get_animation_list()
+            all.sort()
+            for n in all:
+                var s := String(n)
+                if s.ends_with("_UB"):
+                    continue   # служебный суффикс бейка, в данных не используется
+                names.append(s)
+        else:
+            _warn("каст-библиотека не загрузилась (%s) — список анимаций из FALLBACK" % CAST_LIB_PATH)
+            names = CAST_ANIMS_FALLBACK.duplicate()
+        _cast_names_cache = names
+    return _cast_names_cache
+
+## Обратная совместимость: старый код/тесты обращались к CAST_ANIMS как к
+## константе-массиву. Теперь это функция-источник; хелпер проверки — has_cast_anim.
+static func has_cast_anim(name: String) -> bool:
+    return cast_anims().has(name)
 
 const NAME_MAX := 32
 const DESC_MAX := 200
@@ -86,10 +130,21 @@ static func skill_to_dict(s) -> Dictionary:
         "max_range": clampf(float(s.max_range), CLAMP_RANGE.x, CLAMP_RANGE.y),
         "requires_target": bool(s.requires_target),
         "target_type": s.target_type if TARGET_TYPES.has(s.target_type) else "enemy",
-        "cast_anim": s.cast_anim if CAST_ANIMS.has(s.cast_anim) else "",
+        "cast_anim": s.cast_anim if has_cast_anim(s.cast_anim) else "",
+        # Очередь клипов того же скилла (26.11.26, энергоклинок A→B): второй
+        # клип круга. Валидируется тем же белым списком, что и cast_anim.
+        "next_cast_anim": s.next_cast_anim if has_cast_anim(s.next_cast_anim) else "",
+        # Клип-состояние (крылья): loop-поза вместо разового удара.
+        "cast_anim_loop": bool(s.cast_anim_loop),
+        # Поза стойки (26.11.26, бард: гитара). Отдельное поле, а не cast_anim:
+        # у стойки нет каст-удара. Админка показывает её как «клип в игре» —
+        # без этого стойки выглядели как «анимация не задана» (ложная тревога).
+        "stance_loop_anim": s.stance_loop_anim if has_cast_anim(s.stance_loop_anim) else "",
         "cast_time": clampf(float(s.cast_time), CLAMP_CAST_TIME.x, CLAMP_CAST_TIME.y),
         "cast_hand": s.cast_hand if CAST_HANDS.has(s.cast_hand) else "Right",
+        "cast_speed": clampf(float(s.cast_speed), CLAMP_CAST_SPEED.x, CLAMP_CAST_SPEED.y),
         "alternate_hands": bool(s.alternate_hands),
+        "cancel_at": clampf(float(s.cancel_at), CLAMP_CANCEL_AT.x, CLAMP_CANCEL_AT.y),
         "shake": clampf(float(s.shake), CLAMP_SHAKE.x, CLAMP_SHAKE.y),
         "effects": [],
     }
@@ -116,11 +171,18 @@ static func skill_from_dict(d: Dictionary):
     var tt := str(d.get("target_type", "enemy"))
     s.target_type = tt if TARGET_TYPES.has(tt) else "enemy"
     var ca := str(d.get("cast_anim", ""))
-    s.cast_anim = ca if CAST_ANIMS.has(ca) else ""
+    s.cast_anim = ca if has_cast_anim(ca) else ""
+    var nca := str(d.get("next_cast_anim", ""))
+    s.next_cast_anim = nca if has_cast_anim(nca) else ""
+    s.cast_anim_loop = bool(d.get("cast_anim_loop", false))
+    var sla := str(d.get("stance_loop_anim", ""))
+    s.stance_loop_anim = sla if has_cast_anim(sla) else ""
     var ch := str(d.get("cast_hand", "Right"))
     s.cast_hand = ch if CAST_HANDS.has(ch) else "Right"
+    s.cast_speed = clampf(float(d.get("cast_speed", 1.0)), CLAMP_CAST_SPEED.x, CLAMP_CAST_SPEED.y)
     s.cast_time = clampf(float(d.get("cast_time", 0.0)), CLAMP_CAST_TIME.x, CLAMP_CAST_TIME.y)
     s.alternate_hands = bool(d.get("alternate_hands", false))
+    s.cancel_at = clampf(float(d.get("cancel_at", 0.6)), CLAMP_CANCEL_AT.x, CLAMP_CANCEL_AT.y)
     s.shake = clampf(float(d.get("shake", 0.0)), CLAMP_SHAKE.x, CLAMP_SHAKE.y)
     var arr = d.get("effects", null)
     if not (arr is Array):

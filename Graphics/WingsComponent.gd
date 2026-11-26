@@ -117,6 +117,11 @@ func deactivate() -> void:
 	var player := get_parent()
 	player.set("speed_mult", 1.0)
 	player.set("wings_fly", false)
+	# Клип-состояние полёта снимается вместе с крыльями (26.11.26): иначе
+	# Wings_Fly крутился бы поверх обычной локомотики после выключения.
+	var anim_comp := player.get_node_or_null("PlayerAnimationComponent")
+	if anim_comp and anim_comp.has_method("stop_cast_loop"):
+		anim_comp.stop_cast_loop("Wings_Fly")
 	_boosted = false
 	_run_time = 0.0
 	if _light: _light.visible = false

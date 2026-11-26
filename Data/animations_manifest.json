@@ -159,11 +159,61 @@
       "status": "present"
     },
     {
+      "name": "Spell_Cast",
+      "source": "mixamo://Spell_Cast.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "mirror": true,
+      "status": "present",
+      "note": "сердечко (26.11.26, решение юзера «быстрый малый жест»): рука от талии, плоский выброс ладонью вперёд от груди (vision по previews/Spell_Cast/v002), 1.17с — вместо UAL Enter+Exit; mirror → Spell_Cast_L для чередования рук"
+    },
+    {
       "name": "Cast_Idle",
       "source": "mixamo://Standing_Idle.fbx",
       "layer": "cast",
       "loop": true,
       "status": "present"
+    },
+    {
+      "name": "Teleport_Vanish",
+      "source": "mixamo://Dismissing_Gesture.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present",
+      "note": "телепорт (решение юзера 26.11.26): «магическое исчезновение» — взмах кистью наружу; появляние = реверс того же клипа (Dismissing_Gesture_Reversed, ключи перевёрнуты)"
+    },
+    {
+      "name": "Teleport_Vanish_2",      "source": "mixamo://Dismissing_Gesture_2.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present",
+      "note": "второй вариант жеста исчезновения (Dismissing_Gesture_2) — альтернатива"
+    },
+    {
+      "name": "Teleport_Appear",
+      "source": "mixamo://Dismissing_Gesture.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "reverse": true,
+      "status": "present",
+      "note": "телепорт: ПОЯВЛЕНИЕ — реверс жеста исчезновения (тот же FBX, ключи перевёрнуты импортёром по флагу reverse)"
+    },
+    {
+      "name": "Bard_Guitar_2",
+      "source": "mixamo://Guitar_Playing_2.fbx",
+      "layer": "cast",
+      "loop": true,
+      "hand_pose": "GRIP",
+      "status": "present",
+      "note": "вторая стойка барда (bard_groove, решение юзера 26.11.26): другая манера игры — Guitar_Playing_2; первая стойка bard_flow = Bard_Guitar (Guitar_Playing1)"
+    },
+    {
+      "name": "Heal_Cast",
+      "source": "mixamo://Magic_Heal.fbx",
+      "layer": "cast",
+      "hand_pose": "OPEN_CAST",
+      "status": "present",
+      "note": "лечебный жест (кандидат для heart_heal, vision не проверен — в игре стоит Spell_Cast)"
     }
   ]
 }

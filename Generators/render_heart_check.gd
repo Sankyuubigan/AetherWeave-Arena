@@ -51,8 +51,8 @@ func _run() -> void:
 
 	var skel: Skeleton3D = _find_skeleton(player)
 	var specs := [
-		["Heart_Cast", [0.05, 0.2, 0.35, 0.5, 0.58, 0.7, 0.8, 0.93]],
-		["Heart_Cast_L", [0.05, 0.2, 0.35, 0.5, 0.58, 0.7, 0.8, 0.93]],
+		["Spell_Cast", [0.80, 0.85, 0.88, 0.92]],
+		["Spell_Cast_L", [0.80, 0.85, 0.88, 0.92]],
 	]
 	for spec in specs:
 		var clip: String = spec[0]

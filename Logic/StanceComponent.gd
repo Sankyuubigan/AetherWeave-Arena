@@ -52,6 +52,9 @@ const SELF_GUARD_S := 0.45
 const HIT_MULT_PERFECT := 1.25
 const HIT_MULT_GOOD := 0.85
 var _enter_usec := 0
+## Клип-состояние стойки (26.11.26): имя клипа, играющего по кругу, пока
+## стойка активна. "" = стойка без позы. Гасится в exit_stance.
+var _loop_anim := ""
 
 func enter_stance(config: Dictionary) -> bool:
 	## Вход в стойку. Одна активная за раз — повторный запрос ОТКЛОНЯЕТСЯ
@@ -77,6 +80,13 @@ func enter_stance(config: Dictionary) -> bool:
 	_enter_usec = Time.get_ticks_usec()
 	_bind_overrides(subs)
 	is_active = true
+	# Клип-состояние стойки (26.11.26, бард: гитара). Стойка — владелец позы:
+	# включает на входе, гасит на выходе (exit_stance). Пусто — стойка без клипа.
+	_loop_anim = str(config.get("loop_anim", ""))
+	if _loop_anim != "":
+		var anim_comp = get_parent().get_node_or_null("PlayerAnimationComponent")
+		if anim_comp and anim_comp.has_method("play_cast_loop"):
+			anim_comp.play_cast_loop(_loop_anim)
 	_log_event("стойка «%s»: вход (%.1f с), подмены %s" % [stance_id, duration, overrides])
 	stance_entered.emit(overrides, stance_skill_id)
 	return true
@@ -94,6 +104,13 @@ func exit_stance(reason: String) -> void:
 	sub_kinds = {}
 	stance_id = ""
 	stance_skill_id = ""
+	# Клип-состояние снимаем ЗДЕСЬ (26.11.26): стойка — владелец позы, любой
+	# выход (Esc/таймер/саб/cancel) обязан вернуть обычную анимацию.
+	if _loop_anim != "":
+		var anim_comp = get_parent().get_node_or_null("PlayerAnimationComponent")
+		if anim_comp and anim_comp.has_method("stop_cast_loop"):
+			anim_comp.stop_cast_loop(_loop_anim)
+		_loop_anim = ""
 	_log_event("стойка «%s»: выход (%s)" % [was, reason])
 	stance_exited.emit(reason)
 
