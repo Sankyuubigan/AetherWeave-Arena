@@ -259,16 +259,15 @@ static func get_skills() -> Dictionary:
     if ResourceLoader.exists("res://Scenes/heart_projectile.tscn"):
         h_proj.projectile_scene = load("res://Scenes/heart_projectile.tscn")
     h_proj.spawn_from_hand = true  # сердце вылетает из кисти
-    # Спавн в момент «выброса» жеста. Клип Spell_Cast: ЗАМЕР _tmp_hands_xyz
-    # (отклонение кисти от направления «вперёд», docs/cast_pipeline.md §7.1):
-    #   t=0.30 → левая кисть В СТОРОНЕ (x=+0.71, z=+0.04, откл 87°) — сердце
-    #            рождалось из бокового положения, юзер видел «руки в стороны»;
-    #   t=0.85 → обе кисти ВПЕРЁД (правая z=0.52 откл 15°, левая z=0.48 откл 27°).
-    # Прежнее 0.30 пришло из ЗЕРКАЛЬНОГО замера probe_hand_extent (считал −z;
-    # баг знака исправлен 26.11.26, но решение по задержке осталось от него).
-    # 0.85 годится и для зеркала Spell_Cast_L (пик левой t=0.90, правой 0.83).
-    # Гейт, который такое ловит: Generators/probe_spawn_sync.gd.
-    h_proj.spawn_delay = 0.85
+    # Спавн в момент «выброса»: Cast_2H_Push держит кисти впереди с t≈0.07
+    # до конца клипа (0.63 с), поэтому задержка может быть небольшой — сердце
+    # рождается уже из выброшенных ладоней.
+    # ЗАМЕР через РЕАЛЬНЫЙ путь (Generators/probe_heart_profile.gd):
+    #   t=0.07 → R fwd=+0.45 откл 1°, L fwd=+0.41 откл 4°;
+    #   t=0.20 → R 0°, L 6°;  t=0.40 → R 1°, L 9°  — весь клип «вперёд».
+    # Прежние задержки (0.30, затем 0.85) относились к Spell_Cast, чей жест
+    # уводил кисти ВБОК к середине клипа — см. комментарий у cast_anim ниже.
+    h_proj.spawn_delay = 0.12
     heart.effects.append(h_proj)
 
     var h_sound = preload("res://Logic/Skills/PlaySoundEffect.gd").new()
@@ -283,16 +282,25 @@ static func get_skills() -> Dictionary:
     ]
     h_sound.volume_db = 0.0  # громкость выровнена K-нормализацией (LUFS)
     heart.effects.append(h_sound)
-    # Вердикт 26.11.26 (жалобы юзера: рука поднималась снизу от ног, медленно):
-    # старый Heart_Cast (UAL Enter+Exit, 0.533 с) заменён на Mixamo Spell_Cast
-    # (1.13 с, импортёр import_manifest_casts.gd → ual_casts_test.res; рука от
-    # талии, плоский выброс ладонью вперёд от груди — «игра в ладошки»).
-    # Heart_Cast/Heart_Cast_L остались в библиотеке как альтернатива (сравнить
-    # в админке). Чередование рук: alternate_hands → Spell_Cast_L (зеркало данными,
-    # Generators/mirror_lib_anim.gd). Окно отмены 60 % (стандарт §14.3): спам
-    # даёт плавную смену рук, а не рваные рестарты (Skill.cancel_at).
-    heart.cast_anim = "Spell_Cast"
-    heart.alternate_hands = true
+    # КЛИП (27.11.26, по замеру через РЕАЛЬНЫЙ путь воспроизведения —
+    # Generators/render_heart_real.gd и probe_heart_profile.gd):
+    #   Cast_2H_Push — обе кисти ВПЕРЁД и ПО ЦЕНТРУ весь клип
+    #   (R x=+0.01 fwd=+0.40 откл 1°, L x=+0.05 fwd=+0.36 откл 9°), 0.63 с.
+    #   Прежний Spell_Cast уводил кисти ВБОК к середине клипа
+    #   (t=0.85: R 47°, L 65°) — юзер видел «рука в бок, не прямо».
+    # Данные клипа — UAL Pistol_Shoot; в каст-библиотеку он кладётся под
+    # СМЫСЛОВЫМ именем Cast_2H_Push, потому что имя «пистолет» юзер отверг
+    # (docs/animation_generation.md §16.17). Генератор: import_cast_clips.gd.
+    # ГЕЙТ: Generators/probe_spawn_sync.gd мерит РЕАЛЬНЫЙ путь (CastAnimationLayer
+    # + aim-модификатор), а не сырую библиотеку — иначе замеры расходятся с игрой.
+    heart.cast_anim = "Cast_2H_Push"
+    # ЧЕРЕДОВАНИЕ РУК ОТКЛЮЧЕНО (27.11.26) — это была вторая половина бага.
+    # alternate_hands рождал сердце то из правой кисти (x≈+0.3), то из левой
+    # (x≈−0.3): снаряд вылетал по диагонали в РАЗНЫЕ стороны — ровно то, что
+    # юзер описал как «сердечко в бок то вправо то влево». У двуручного толчка
+    # обе ладони впереди и по центру, чередовать нечего: сердце всегда ПРЯМО.
+    heart.alternate_hands = false
+    heart.cast_hand = "Right"
     _skills["heart_heal"] = heart
 
     var beam = preload("res://Logic/Skills/Skill.gd").new()

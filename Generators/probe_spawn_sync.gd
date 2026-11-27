@@ -1,25 +1,37 @@
 extends SceneTree
-## ГЕЙТ 26.11.26: «снаряд рождается из ВЫБРОШЕННОЙ руки, а не из позы в стороне».
+## ГЕЙТ: «жест каста выносит руки ВПЕРЁД, и снаряд рождается из выброшенной руки».
 ##
-## Ловит класс бага, на котором сгорели сердечки: spawn_delay скилла указывал на
-## t, где кисть В СТОРОНЕ (откл 87° от «вперёд»), потому что прежний замер
-## считал forward как −z (зеркально). Визуально юзер видел «руки влево/вправо
-## вместо вперёд», и никакой существующий гейт этого не ловил.
+## ПЕРЕПИСАН 27.11.26 — ПОЧЕМУ (главный урок, не повторять):
+##   Прежняя версия крутила СЫРУЮ библиотеку своим AnimationPlayer и мерила
+##   мировые координаты кисти. Игра же играет каст другим путём:
+##   PlayerAnimationComponent.play_cast_anim → CastAnimationLayer (CastPlayer,
+##   full-body при стоянии / UB при беге, capture-блендинг) + AimSpineModifier
+##   (прицел позвоночником меняет позу). Сырой замер давал 87° там, где реальный
+##   путь давал 28° — гейт «проходил», а юзер видел руку в боку. Гейт, который
+##   мерит не то, что видит игрок, ХУЖЕ отсутствия гейта: он даёт ложную уверенность.
 ##
-## Для каждого скилла с эффектом spawn_delay > 0:
-##   1. клип cast_anim есть в библиотеке;
-##   2. в момент spawn_delay кисть cast_hand ВПЕРЕДИ корпуса и НЕ в стороне;
-##   3. окно отмены не открывается раньше заряда (_cancel_at_of >= delay/len).
+##   Поэтому теперь поза берётся ТОЛЬКО через компонент игрока (play_cast_anim),
+##   как в игре, а не через собственный AnimationPlayer.
+##
+## ЧТО ПРОВЕРЯЕТ для каждого скилла с spawn_delay > 0:
+##   1. клип cast_anim есть в каст-слое (has_cast_anim);
+##   2. в момент spawn_delay КАЖДАЯ кисть впереди корпуса и не в стороне —
+##      меряем ОБЕ кисти отдельно (прежняя версия брала максимум по двум, из-за
+##      чего «одна вперёд + вторая вбок» читалось как норма);
+##   3. окно отмены не открывается раньше заряда (формула — из кастера, не копия).
+##
+## Классификация: FAIL — клип вынос даёт, но задержка мимо; WARN — клип вообще
+## не выносит руки вперёд (выбор клипа, решает юзер).
 ##
 ## Запуск: --headless -s res://Generators/probe_spawn_sync.gd
 
-const LIB := "res://Graphics/Animations/ual_casts_test.res"
 const PLAYER_SCENE := "res://Scenes/player.tscn"
 const SKILLDB := preload("res://Logic/Skills/SkillDB.gd")
 ## Формулу окна отмены НЕ дублируем — вызываем ту же функцию, что и игра.
 const CASTER := preload("res://Logic/SpellCasterComponent.gd")
 const MAX_SIDE_DEG := 45.0   # отклонение кисти от «вперёд» в горизонтали
-const MIN_FWD := 0.25        # минимум z (м) — кисть реально впереди корпуса
+const MIN_FWD := 0.25        # минимум выноса вперёд (м) — кисть реально впереди
+const FPS := 30.0
 
 var fails: Array[String] = []
 var warns: Array[String] = []
@@ -28,20 +40,31 @@ func _init() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	var player: Node = load(PLAYER_SCENE).instantiate()
-	_strip(player)
+	var player: Node3D = load(PLAYER_SCENE).instantiate()
 	root.add_child(player)
-	await process_frame
+	player.global_position = Vector3(0, 1.0, 0)
+	_make_floor()
+	# Дать физике осесть: play_cast_anim выбирает full-body только при
+	# hs<0.2 && is_on_floor — иначе меряем UB-клип, а не тот, что видит игрок.
+	for i in 30:
+		await physics_frame
+	player.rotation.y = 0.0
+	# Модель Mixamo смотрит в +Z при yaw 0; камера в игре СЗАДИ (смотрит в −Z),
+	# поэтому wrapper.yaw = π — так же, как в probe_heart_pick/profile.
+	var wrapper: Node3D = player.get_node_or_null("GraphicsWrapper")
+	if wrapper:
+		wrapper.rotation.y = PI
+	var comp = player.get_node_or_null("PlayerAnimationComponent")
 	var skel := _skel(player)
-	var lib = load(LIB)
-	var ap := AnimationPlayer.new()
-	skel.get_parent().add_child(ap)
-	ap.root_node = ap.get_path_to(skel.get_parent())
-	ap.add_animation_library("", lib)
+	if comp == null or skel == null:
+		fails.append("нет PlayerAnimationComponent/скелета в " + PLAYER_SCENE)
+		_finish()
+		return
 	var ri := skel.find_bone("mixamorig_RightHand")
 	var li := skel.find_bone("mixamorig_LeftHand")
-	if ri < 0 or li < 0:
-		fails.append("скелет: не найдены кости кистей")
+	var ci := skel.find_bone("mixamorig_Spine2")
+	if ri < 0 or li < 0 or ci < 0:
+		fails.append("скелет: не найдены кости кистей/Spine2")
 		_finish()
 		return
 
@@ -51,65 +74,83 @@ func _run() -> void:
 		var sk = all[sid]
 		if sk.cast_time > 0.0 or sk.cast_anim == "":
 			continue
-		var delay := 0.0
-		for eff in sk.effects:
-			if "spawn_delay" in eff:
-				delay = maxf(delay, float(eff.get("spawn_delay")))
+		var delay := CASTER.max_spawn_delay(sk)
 		if delay <= 0.0:
 			continue
 		checked += 1
 		var clip: String = sk.cast_anim
-		if not lib.has_animation(clip):
-			fails.append("%s: клипа «%s» нет в библиотеке" % [sid, clip])
+		if not comp.has_cast_anim(clip):
+			fails.append("%s: клипа «%s» нет в каст-слое (has_cast_anim)" % [sid, clip])
 			continue
-		var a: Animation = lib.get_animation(clip)
-		ap.stop()
-		ap.play(clip)
-		# spawn_delay задан в РЕАЛЬНОМ времени, а seek — в времени КЛИПА:
-		# при cast_speed 2.0 клип за 0.67 с реальных успевает уйти на 1.34 с
-		# (иначе гейт ложно валит фаербол — проверено 26.11.26).
+		# Реальный путь: играем клип как игра и прокручиваем до spawn_delay.
+		comp.play_cast_anim(clip)
+		var len: float = comp.cast_last_len()
 		var spd := maxf(0.01, float(sk.cast_speed))
-		ap.seek(clampf(delay * spd, 0.0, a.length), true)
+		var target := clampf(delay, 0.0, len)
+		var elapsed := 0.0
+		while elapsed < target:
+			await process_frame
+			elapsed += 1.0 / FPS
 		skel.force_update_all_bone_transforms()
-		var pr: Vector3 = (skel.global_transform * skel.get_bone_global_pose(ri)).origin
-		var pl: Vector3 = (skel.global_transform * skel.get_bone_global_pose(li)).origin
+		var c: Vector3 = skel.global_transform * skel.get_bone_global_pose(ci).origin
+		var pr: Vector3 = skel.global_transform * skel.get_bone_global_pose(ri).origin
+		var pl: Vector3 = skel.global_transform * skel.get_bone_global_pose(li).origin
+		# forward в мире = −Z (камера игрока смотрит в −Z), кисть впереди,
+		# если её проекция по −Z положительна ⇒ fwd = −d.z.
+		var fr: float = -(pr - c).z
+		var fl: float = -(pl - c).z
+		var ar := rad_to_deg(atan2(absf((pr - c).x), maxf(fr, 0.001)))
+		var al := rad_to_deg(atan2(absf((pl - c).x), maxf(fl, 0.001)))
 		var use_r: bool = str(sk.cast_hand) != "Left"
-		var p: Vector3 = pr if use_r else pl
-		var ang := rad_to_deg(atan2(absf(p.x), p.z))
-		var ok_pose := p.z >= MIN_FWD and ang <= MAX_SIDE_DEG
-		print("  %-18s %-16s t=%.2f/%.2f  %s x=%+.2f z=%+.2f откл=%.0f° %s" % [
-			sid, clip, delay, a.length, "R" if use_r else "L",
-			p.x, p.z, ang, "OK" if ok_pose else "FAIL"])
+		var fwd: float = fr if use_r else fl
+		var ang: float = ar if use_r else al
+		var ok_pose: bool = fwd >= MIN_FWD and ang <= MAX_SIDE_DEG
+		print("  %-18s %-16s t=%.2f/%.2f  R fwd=%+.2f %3.0f° | L fwd=%+.2f %3.0f° | рука %s %s" % [
+			sid, clip, delay, len, fr, ar, fl, al,
+			"R" if use_r else "L", "OK" if ok_pose else "FAIL"])
 		if not ok_pose:
-			# Клип вообще не выносит кисть вперёд (Cast_Shoot — кисть статично в
-			# стороне): это выбор КЛИПА, а не сбитый spawn_delay. Такие случаи —
-			# WARN (видно в списке, решение за юзером), FAIL — только когда клип
-			# вынос даёт, но задержка указывает мимо него.
-			var best_ang := _best_angle(ap, lib, clip, skel, ri, li, use_r)
-			if best_ang > MAX_SIDE_DEG:
-				warns.append("%s: клип «%s» НЕ выносит кисть вперёд ни в одной позе (мин. откл %.0f°) — снаряд из боковой кисти; нужен другой клип (решение юзера)" % [
-					sid, clip, best_ang])
+			var best: float = await _best_angle(comp, skel, clip, ci, ri, li, use_r)
+			if best > MAX_SIDE_DEG:
+				warns.append("%s: клип «%s» НЕ выносит кисть вперёд ни в одной позе (мин. откл %.0f°) — нужен другой клип (решение юзера)" % [
+					sid, clip, best])
 			else:
-				fails.append("%s: на spawn_delay=%.2f кисть %s в стороне (z=%.2f < %.2f, откл %.0f° > %.0f°), хотя клип вынос даёт — задержка мимо пика" % [
-					sid, delay, "R" if use_r else "L", p.z, MIN_FWD, ang, MAX_SIDE_DEG])
+				fails.append("%s: на spawn_delay=%.2f кисть %s в стороне (fwd=%+.2f < %.2f, откл %.0f° > %.0f°), хотя клип вынос даёт — задержка мимо пика" % [
+					sid, delay, "R" if use_r else "L", fwd, MIN_FWD, ang, MAX_SIDE_DEG])
 
 		# Инвариант отмены: окно не открывается раньше заряда (+ зазор).
 		# Формулу НЕ дублируем — берём ту же функцию кастера (единственный
 		# источник). Расхождение двух формул уже ловили на _zero_hips_yaw.
-		var len: float = a.length / maxf(1.0, float(sk.cast_speed))
 		var eff_cancel: float = CASTER.cancel_fraction(sk, len)
-		var frac_delay := clampf(delay / len, 0.0, 1.0) if len > 0.0 else 0.0
-		print("      отмена: skill.cancel_at=%.2f, заряд=%.2f (%.0f%% клипа) → окно %.2f (с зазором)" % [
-			clampf(float(sk.cancel_at), 0.0, 1.0), delay, frac_delay * 100.0, eff_cancel])
-		if frac_delay > 1.0 + 0.0001:
-			fails.append("%s: spawn_delay %.2f с БОЛЬШЕ длины клипа %.2f с — заряд не успевает" % [sid, delay, len])
 		var need := clampf((delay + CASTER.SPAWN_GUARD) / len, 0.0, 1.0) if len > 0.0 else 0.0
-		if eff_cancel < need - 0.0001:
+		print("      отмена: cancel_at=%.2f, заряд %.2f с → окно %.2f (нужно ≥%.2f)" % [
+			clampf(float(sk.cancel_at), 0.0, 1.0), delay, eff_cancel, need])
+		if delay > len + 0.0001:
+			fails.append("%s: spawn_delay %.2f с БОЛЬШЕ длины клипа %.2f с — заряд не успевает" % [sid, delay, len])
+		elif eff_cancel < need - 0.0001:
 			fails.append("%s: окно отмены %.2f МЕНЬШЕ заряда+зазор %.2f — спам перезапустит клип до спавна" % [
 				sid, eff_cancel, need])
 
 	print("=== проверено скиллов с зарядом: %d ===" % checked)
 	_finish()
+
+## Минимальное отклонение кисти от «вперёд» за весь клип (через реальный путь):
+## нужно отличить «клип вообще не выносит руку» (WARN) от «задержка мимо пика» (FAIL).
+func _best_angle(comp, skel: Skeleton3D, clip: String, ci: int, ri: int, li: int,
+		use_r: bool) -> float:
+	var best := 180.0
+	comp.play_cast_anim(clip)
+	var len: float = comp.cast_last_len()
+	var t := 0.0
+	while t <= len + 0.0001:
+		await process_frame
+		skel.force_update_all_bone_transforms()
+		var c: Vector3 = skel.global_transform * skel.get_bone_global_pose(ci).origin
+		var p: Vector3 = skel.global_transform * skel.get_bone_global_pose(ri if use_r else li).origin
+		var fwd := -(p - c).z
+		if fwd > 0.0:
+			best = minf(best, rad_to_deg(atan2(absf((p - c).x), fwd)))
+		t += 1.0 / FPS
+	return best
 
 func _finish() -> void:
 	for w in warns:
@@ -122,23 +163,15 @@ func _finish() -> void:
 			print("SPAWN_SYNC FAIL: ", f)
 		quit(1)
 
-## Минимальное отклонение кисти от «вперёд» за весь клип: нужно отличить
-## «клип ВООБЩЕ не выносит руку вперёд» (выбор клипа, WARN) от «задержка
-## указывает мимо пика» (баг данных, FAIL).
-func _best_angle(ap: AnimationPlayer, lib, clip: String, skel: Skeleton3D,
-		ri: int, li: int, use_r: bool) -> float:
-	var a: Animation = lib.get_animation(clip)
-	var best := 180.0
-	var t := 0.0
-	while t <= a.length + 0.0001:
-		ap.play(clip)
-		ap.seek(t, true)
-		skel.force_update_all_bone_transforms()
-		var p: Vector3 = (skel.global_transform * skel.get_bone_global_pose(ri if use_r else li)).origin
-		if p.z > 0.0:
-			best = minf(best, rad_to_deg(atan2(absf(p.x), p.z)))
-		t += 0.05
-	return best
+func _make_floor() -> void:
+	var body := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(200, 1, 200)
+	col.shape = shape
+	body.add_child(col)
+	root.add_child(body)
+	body.global_position = Vector3(0, -0.5, 0)
 
 func _skel(n: Node) -> Skeleton3D:
 	if n is Skeleton3D:
@@ -148,9 +181,3 @@ func _skel(n: Node) -> Skeleton3D:
 		if r != null:
 			return r
 	return null
-
-func _strip(n: Node) -> void:
-	if n.get_script() != null:
-		n.set_script(null)
-	for c in n.get_children():
-		_strip(c)
