@@ -18,6 +18,8 @@ import re
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote
 
+import checklist_api  # маршруты /checklist/api/* (модуль рядом, server.py запускает bat)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_PATH = os.path.join(ROOT, "Data", "skill_branches.json")
 DUMP_PATH = os.path.join(ROOT, "temp", "skills_dump.json")
@@ -390,6 +392,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self.path = "/admin/viewer_hub.html"  # корень = хаб админки (Q51)
+        if checklist_api.handle(self, "GET"):
+            return
         if self.path.rstrip("/") == "/anim/api/list":
             self._send_json(anim_list())
             return
@@ -429,6 +433,8 @@ class Handler(SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
+        if checklist_api.handle(self, "POST"):
+            return
         if self.path.rstrip("/") != "/skills/api/save":
             self._send_json({"ok": False, "error": "нет такого маршрута"}, 404)
             return
@@ -454,7 +460,8 @@ class Handler(SimpleHTTPRequestHandler):
         # Статику не спамим в консоль; API-запросы показываем. Ошибки (404 и
         # пр.) идут через log_error -> log_message без правок — не трогаем.
         try:
-            if "/skills/api/" in str(self.path or "") or "/anim/api/" in str(self.path or ""):
+            if ("/skills/api/" in str(self.path or "") or "/anim/api/" in str(self.path or "")
+                    or "/checklist/api/" in str(self.path or "")):
                 super().log_request(code, size)
         except Exception:
             pass

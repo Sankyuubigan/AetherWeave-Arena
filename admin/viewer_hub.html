@@ -31,6 +31,9 @@
   <h1>Админка проекта</h1>
   <div class="sub">Единая точка входа (Q51): каталоги ассетов + админка скиллов. Один сервер, один порт.</div>
   <div class="grid" id="grid"></div>
+  <div class="note">📋 <b>Проверка:</b> сделанное и ждущее твоего вердикта живёт на странице
+  «✅ Проверка» (список в <code>admin/checklist.json</code>, ССОТ — <code>docs/checklist.md</code>).
+  Отметил «Проверено» — агент уберёт пункт в начале следующей сессии.</div>
   <div class="note">⚙ <b>Скиллы:</b> переименование и перенос по веткам сохраняются в
   <code>Data/skill_branches.json</code> — изменения видны в игре ПОСЛЕ её перезапуска.
   Логика скиллов через админку не меняется (только код).</div>
@@ -39,6 +42,8 @@
 </div>
 <script>
 const CATALOGS = [
+  { icon:"✅", name:"Проверка", desc:"Что сделано и ждёт твоего вердикта: чек-лист с кнопкой «Проверено».",
+    href:"/admin/viewer_checklist.html", api:"/checklist/api/list", cnt:"чек-лист" },
   { icon:"🛠", name:"Скиллы", desc:"Переименование, ветки умений, сохранение в игру.",
     href:"/admin/viewer_skills.html", json:null, fixed:null, cnt:"26 скиллов" },
   { icon:"🗿", name:"3D-объекты", desc:"Пропы арены: камни, деревья, грибы, стол зачарований…",
@@ -61,7 +66,14 @@ for (const c of CATALOGS) {
     <div class="desc">${c.desc}</div><span class="count unknown" id="cnt_${c.name}">…</span>`;
   grid.appendChild(a);
   const el = a.querySelector(".count");
-  if (c.json) {
+  if (c.api) {
+    // Счётчик из API чек-листа: главное число — СКОЛЬКО ЖДЁТ ПРОВЕРКИ.
+    fetch(c.api).then(r=>r.json()).then(js=>{
+      const n = (js && js.counts) ? js.counts.pending : 0;
+      el.textContent = n ? ("к проверке: " + n) : "всё проверено";
+      el.classList.toggle("unknown", n === 0);
+    }).catch(()=>{ el.textContent = "api не отвечает"; });
+  } else if (c.json) {
     fetch(c.json).then(r=>r.json()).then(list=>{
       el.textContent = (Array.isArray(list)?list.length:Object.keys(list).length) + " шт.";
       el.classList.remove("unknown");
