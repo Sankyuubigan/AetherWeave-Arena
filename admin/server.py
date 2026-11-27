@@ -291,9 +291,17 @@ def _skill_row(s: dict, c: dict, manifest: dict, casts: dict, by_file: dict) -> 
 
 
 def _cand_url(c: dict) -> str:
-    """URL кандидата по полю src (glb/raw/mixamo/neuro) — как в старой странице."""
+    """URL кандидата по полю src (glb/raw/mixamo/neuro/lib) — как в старой странице.
+
+    src="lib" — клип СОБРАН в каст-библиотеку, но отдельного файла-превью нет
+    (нейро/UAL-клипы вроде Blade_Swing_A: retarget_ual_anims собрал их из UAL2,
+    исходного .glb/.fbx с таким именем на диске не существует). Пустой URL =
+    «превью нет»: страница показывает честную надпись вместо 404-ошибки.
+    """
     clip = str(c.get("clip", ""))
     src = str(c.get("src", "mixamo"))
+    if src == "lib":
+        return ""
     if src == "glb":
         return "/tools/candidates_models/" + quote(clip + ".glb")
     if src == "raw":

@@ -32,7 +32,7 @@
       {"clip":"Standing_1H_Magic_Attack_02","src":"glb","v":"alt","note":"альтернатива"},
       {"clip":"Standing_1H_Magic_Attack_03","src":"glb","v":"alt","note":"альтернатива"}]},
     {"id":"thunderclap","phase":"Касты","name":"⚡ Громовой раскат","cands":[
-      {"clip":"Standing_2H_Magic_Attack_01","src":"glb","v":"ok","note":"РЕШЕНИЕ ЮЗЕРА 26.11: стоит в игре как Cast_2H_Magic_01, канал 1 с (темп 2.7)"},
+      {"clip":"Standing_2H_Magic_Attack_01","src":"raw","v":"ok","note":"РЕШЕНИЕ ЮЗЕРА 26.11: стоит в игре как Cast_2H_Magic_01, канал 1 с (темп 2.7). src=raw: GLB-двойника нет, файл лежит в raw/mixamo (аудит 27.11.26 — ссылка glb вела в 404)"},
       {"clip":"Two_Hand_Spell_Casting","src":"glb","v":"alt","note":"обе руки вверх, выброс (пик ~0.5–1с), есть прыжок"},
       {"clip":"Standing_2H_Cast_Spell_01","src":"glb","v":"alt","note":"канал: подъём рук → присед → руки над головой"},
       {"clip":"Standing_2H_Magic_Area_Attack_01","src":"glb","v":"alt","note":"AoE-замах"}]},
@@ -44,8 +44,8 @@
       {"clip":"Magic_Heal","src":"glb","v":"ok","note":"стоит в игре как Heal_Cast"},
       {"clip":"Standing_1H_Cast_Spell_01","src":"glb","v":"alt","note":"альтернатива: жест вперёд одной рукой"}]},
     {"id":"energy_blade","phase":"Касты","name":"🗡 Энергетический клинок","cands":[
-      {"clip":"Blade_Swing_A","src":"neuro","v":"ok","note":"РЕШЕНИЕ ЮЗЕРА 26.11: взмах A (наша нейро-сборка, FBX-источника нет — файл .f32)"},
-      {"clip":"Blade_Swing_B","src":"neuro","v":"ok","note":"второй клип очереди A→B→A — НЕ отмена, а очередь (вердикт юзера)"},
+      {"clip":"Blade_Swing_A","src":"lib","v":"ok","note":"РЕШЕНИЕ ЮЗЕРА 26.11: взмах A (собран retarget_ual_anims из UAL2 Sword_Regular_A; отдельного файла-превью нет — src=lib, аудит 27.11.26)"},
+      {"clip":"Blade_Swing_B","src":"lib","v":"ok","note":"второй клип очереди A→B→A — НЕ отмена, а очередь (вердикт юзера). Источник — UAL2 Sword_Regular_B, файла-превью нет"},
       {"clip":"Throw","src":"mixamo","v":"ok","note":"материализация клинка (клинка нет → Throw, хук pick_cast_anim)"},
       {"clip":"Sword_And_Shield_Attack","src":"glb","v":"alt","note":"если понадобится тяжёлый замах мечом"}]},
     {"id":"wings","phase":"Касты","name":"🕊 Крылья ускорения","cands":[
@@ -66,7 +66,7 @@
       {"clip":"Playing_Drums","src":"glb","v":"alt","note":"барабаны, сидя"}]},
     {"id":"bard_groove","phase":"Стойки","name":"🎶 Пульс Битвы","cands":[
       {"clip":"Guitar_Playing_2","src":"glb","v":"ok","note":"РЕШЕНИЕ ЮЗЕРА 26.11: стоит в игре как Bard_Guitar_2 (stance_loop_anim)"},
-      {"clip":"Guitar_Playing1","src":"glb","v":"alt","note":"тот же клип, что у bard_flow (двум стойкам один луп не нужен)"},
+      {"clip":"Guitar_Playing1","src":"raw","v":"alt","note":"тот же клип, что у bard_flow (двум стойкам один луп не нужен). src=raw: GLB Guitar_Playing1 нет, есть raw/mixamo/Guitar_Playing1.fbx (аудит 27.11.26)"},
       {"clip":"Playing_Drums","src":"glb","v":"alt","note":"барабаны, сидя"}]},
     {"id":"portals","phase":"Касты","name":"🌀 Порталы","cands":[
       {"clip":"Standing_2H_Cast_Spell_01","src":"glb","v":"ok","note":"РЕШЕНИЕ ЮЗЕРА 26.11: стоит в игре как Cast_2H_Spell, окно отмены 0.75"},

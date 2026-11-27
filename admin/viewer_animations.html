@@ -542,12 +542,20 @@ function candEl(cd){
   d.innerHTML = '<span class="dot v-' + (cd.v || 'alt') + '"></span>' +
     '<span class="cn">' + cd.clip + '</span>' + badges.join('') +
     '<div class="nt">' + (cd.note || '') + '</div>' +
-    '<div class="src">файл: ' + cd.url + '</div>';
+    '<div class="src">' + (cd.url ? 'файл: ' + cd.url : 'файла-превью нет — клип только в библиотеке') + '</div>';
   d.onclick = (ev) => {
     ev.stopPropagation();
     document.querySelectorAll('.cand').forEach(x => x.classList.remove('sel'));
     d.classList.add('sel');
     const tok = ++loadTok;
+    // Пустой url = клип собран в библиотеку, файла-превью нет (src="lib").
+    // Раньше такая ссылка строилась в несуществующий .f32 и давала 404.
+    if (!cd.url){
+      clearModel();
+      cname.textContent = cd.clip + '  — превью нет (клип собран в библиотеку)';
+      cpath.textContent = 'только в каст-библиотеке';
+      return;
+    }
     const kind = cd.url.endsWith('.glb') ? 'glb' : 'fbx';
     // 1) выбрать пункт слева; 2) загрузить в центр
     const ok = selectLeftByUrl(cd.url);
@@ -593,6 +601,7 @@ Promise.all([
 
 // Фолбэк-построение URL (когда серверный API недоступен).
 function candUrlFallback(c){
+  if (c.src === 'lib') return '';   // клип только в библиотеке, файла-превью нет
   if (c.src === 'glb') return '/tools/candidates_models/' + c.clip + '.glb';
   if (c.src === 'neuro') return '/Graphics/Animations/neuro_soma/' + c.clip + '/' + c.clip + '.f32';
   if (c.src === 'raw') return '/Graphics/Animations/raw/mixamo/' + c.clip + '.fbx';
