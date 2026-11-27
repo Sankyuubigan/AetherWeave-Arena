@@ -20,11 +20,10 @@ extends SceneTree
 
 const PLAYER_SCENE := "res://Scenes/player.tscn"
 const OUT_DIR := "res://_tmp_probe"
-const FPS := 30.0
-## Момент спавна (с) + кадры вокруг. spawn_delay скилла = точка выброса.
+## Кадры — в координатах КЛИПА (темп 2.0: спавн 0.33 с реального = t 0.66).
 const CLIPS := {
-	"Cast_2H_Push": [0.07, 0.20, 0.40],
-	"Spell_Cast": [0.10, 0.85],
+	"Cast_1H_Magic_02": [0.44, 0.66, 0.88],
+	"Cast_1H_Magic_02_L": [0.44, 0.66, 0.88],
 }
 
 func _init() -> void:
@@ -89,13 +88,12 @@ func _run() -> void:
 	}
 	for clip in CLIPS:
 		for t in CLIPS[clip]:
-			# Реальный путь: play_cast_anim (full-body при стоянии) + прокрутка.
+			# Реальный путь: play_cast_anim (full-body при стоянии) + seek.
+			# Время — ТОЛЬКО seek: счётчик 1/FPS в headless не двигает клип
+			# (дельта кадра ≠ 1/30), кадры выходили из начала клипа.
 			comp.play_cast_anim(clip)
 			var len: float = comp.cast_last_len()
-			var elapsed := 0.0
-			while elapsed < float(t):
-				await process_frame
-				elapsed += 1.0 / FPS
+			comp.cast_player.seek(clampf(float(t), 0.0, len), true)
 			skel.force_update_all_bone_transforms()
 			var c: Vector3 = skel.global_transform * skel.get_bone_global_pose(ci).origin
 			var pr: Vector3 = skel.global_transform * skel.get_bone_global_pose(ri).origin

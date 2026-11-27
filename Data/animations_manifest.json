@@ -126,7 +126,8 @@
       "source": "mixamo://Standing_1H_Magic_Attack_02.fbx",
       "layer": "cast",
       "hand_pose": "OPEN_CAST",
-      "status": "present"
+      "status": "present",
+      "mirror": true
     },
     {
       "name": "Cast_1H_Spell",
@@ -183,7 +184,8 @@
       "note": "телепорт (решение юзера 26.11.26): «магическое исчезновение» — взмах кистью наружу; появляние = реверс того же клипа (Dismissing_Gesture_Reversed, ключи перевёрнуты)"
     },
     {
-      "name": "Teleport_Vanish_2",      "source": "mixamo://Dismissing_Gesture_2.fbx",
+      "name": "Teleport_Vanish_2",
+      "source": "mixamo://Dismissing_Gesture_2.fbx",
       "layer": "cast",
       "hand_pose": "OPEN_CAST",
       "status": "present",

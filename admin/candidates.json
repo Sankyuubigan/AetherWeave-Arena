@@ -41,7 +41,9 @@
       {"clip":"Standing_2H_Magic_Area_Attack_02","src":"glb","v":"alt","note":"альтернатива AoE"},
       {"clip":"Two_Hand_Spell_Casting","src":"glb","v":"alt","note":"обе руки вверх (есть прыжок)"}]},
     {"id":"heart_heal","phase":"Касты","name":"💖 Сердечко","cands":[
-      {"clip":"Magic_Heal","src":"glb","v":"ok","note":"стоит в игре как Heal_Cast"},
+      {"clip":"Standing_1H_Magic_Attack_02","src":"raw","v":"ok","note":"ТРЕБОВАНИЕ ЮЗЕРА 27.11.26: ОДНОРУЧНЫЙ жест + ЧЕРЕДОВАНИЕ РУК. Стоит в игре как Cast_1H_Magic_02 (правая) + Cast_1H_Magic_02_L (зеркало, левая), alternate_hands=true, темп 2.0 (1.10 с), спавн 0.33 с. Замер стоя (full-body, seek): t=0.66 → правая кисть вперёд +0.68 м при боке 11°, левая уходит назад; зеркало даёт то же для левой"},
+      {"clip":"Cast_2H_Push","src":"lib","v":"no","note":"ДВУРУЧНЫЙ толчок — поставлен мной 27.11 БЕЗ разрешения юзера, вердикт «РЕГРЕСС, кривая анимация, обе руки вытягивает». Чередование рук при нём выключено. Не возвращать"},
+      {"clip":"Magic_Heal","src":"glb","v":"alt","note":"прежний клип (Heal_Cast), снят 27.11.26: жест не держит кисть впереди — сердце рождалось в стороне"},
       {"clip":"Standing_1H_Cast_Spell_01","src":"glb","v":"alt","note":"альтернатива: жест вперёд одной рукой"}]},
     {"id":"energy_blade","phase":"Касты","name":"🗡 Энергетический клинок","cands":[
       {"clip":"Blade_Swing_A","src":"lib","v":"ok","note":"РЕШЕНИЕ ЮЗЕРА 26.11: взмах A (собран retarget_ual_anims из UAL2 Sword_Regular_A; отдельного файла-превью нет — src=lib, аудит 27.11.26)"},

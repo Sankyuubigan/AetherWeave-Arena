@@ -87,18 +87,23 @@ func _run() -> void:
 			"bard_flow.stance_loop_anim = " + str(skills["bard_flow"].stance_loop_anim))
 	_ck(str(skills["bard_groove"].stance_loop_anim) == "Bard_Guitar_2",
 			"bard_groove.stance_loop_anim = " + str(skills["bard_groove"].stance_loop_anim))
-	# Сердечко: клип толчка + БЕЗ чередования рук (иначе сердце летит то
-	# вправо, то влево — баг, который чинили 27.11.26).
-	_ck(str(skills["heart_heal"].cast_anim) == "Cast_2H_Push"
-			and not bool(skills["heart_heal"].alternate_hands),
+	# Сердечко: ОДНОРУЧНЫЙ клип + ЧЕРЕДОВАНИЕ рук (требование юзера 27.11.26
+	# «чередование рук должно быть»). Двуручный толчок юзер отверг как регресс.
+	_ck(str(skills["heart_heal"].cast_anim) == "Cast_1H_Magic_02"
+			and bool(skills["heart_heal"].alternate_hands),
 			"heart_heal: cast_anim=%s alternate_hands=%s" % [
 					skills["heart_heal"].cast_anim, skills["heart_heal"].alternate_hands])
+	# Зеркало для второй руки обязано быть в библиотеке: иначе чередование
+	# молча играет один и тот же клип (SpellCaster берёт `_L` только если есть).
+	_ck(anim_comp.has_cast_anim(str(skills["heart_heal"].cast_anim) + "_L"),
+			"heart_heal: зеркало «%s_L» есть в каст-слое" % skills["heart_heal"].cast_anim)
 
 	# ── 2) КЛИПЫ СУЩЕСТВУЮТ в библиотеке (иначе каст молча без анимации)
 	print("=== 2) клипы есть в каст-библиотеке ===")
 	for n in ["Cast_2H_Spell", "Teleport_Vanish", "Teleport_Appear", "Wings_Fly",
 			"Cast_2H_Area_01", "Cast_2H_Magic_01", "Blade_Swing_A", "Blade_Swing_B",
-			"Bard_Guitar", "Bard_Guitar_2", "Tether_Hang", "Cast_2H_Push"]:
+			"Bard_Guitar", "Bard_Guitar_2", "Tether_Hang",
+			"Cast_1H_Magic_02", "Cast_1H_Magic_02_L"]:
 		_ck(anim_comp.has_cast_anim(n), "клип в библиотеке: " + str(n))
 
 	# ── 3) РЕАЛЬНЫЕ КАСТЫ: играет ожидаемый клип
